@@ -1,0 +1,37 @@
+{
+  "name": "banyan",
+  "version": "0.1.0",
+  "description": "Workspace manager: tmux + git worktrees + Claude Code, multi-repo per project",
+  "type": "module",
+  "bin": {
+    "banyan": "dist/src/bin/banyan.js",
+    "bn": "dist/src/bin/banyan.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && mkdir -p dist/src/dashboard && cp -R src/dashboard/static dist/src/dashboard/ && chmod +x dist/src/bin/banyan.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "node --test 'dist/test/**/*.test.js'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/express": "^5.0.6",
+    "commander": "^12.1.0",
+    "express": "^5.2.1",
+    "ink": "^7.0.1",
+    "react": "^19.2.5",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "typescript": "^5.5.0"
+  }
+}

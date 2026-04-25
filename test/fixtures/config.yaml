@@ -1,0 +1,7 @@
+version: 1
+projects:
+  - name: demo
+    layoutScript: /tmp/banyan-test-layout.sh
+    repos:
+      - { name: front, path: /tmp/banyan-test-front }
+      - { name: back,  path: /tmp/banyan-test-back }

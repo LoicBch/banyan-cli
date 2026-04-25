@@ -1,93 +1,212 @@
-# Banyan
+# banyan
 
+Tmux + git worktrees + Claude Code, multi-repo per project.
 
+Run `banyan frontend-app start` to drop into a tmux cockpit; run `banyan frontend-app wt login back` to spawn a worktree + tmux window + Claude agent on `feature/login` in your backend repo.
 
-## Getting started
+Multi-repo is the differentiator: one feature can span a front, back, and app repo simultaneously — the same branch name (`feature/login`) is created in each, each gets its own worktree and tmux window, each gets its own agent.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Install (local)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/bouchisseloic/banyan.git
-git branch -M main
-git push -uf origin main
+```bash
+git clone <this-repo> ~/Documents/Dev/banyan
+cd ~/Documents/Dev/banyan
+npm install
+npm run build
+npm link
 ```
 
-## Integrate with your tools
+After `npm link` you have `banyan` and `bn` in your PATH.
 
-* [Set up project integrations](https://gitlab.com/bouchisseloic/banyan/-/settings/integrations)
+## Quick start
 
-## Collaborate with your team
+```bash
+cd ~/my-frontend-repo
+bn init my-project                     # first repo = cwd
+cd ~/my-backend-repo
+bn my-project add-repo back            # add another repo
+bn my-project set-layout ~/scripts/tmux-layout.sh   # optional
+bn ls                                   # see everything
+```
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+Edit `~/.config/banyan/config.yaml` directly if you prefer.
 
-## Test and Deploy
+## Config shape
 
-Use the built-in continuous integration in GitLab.
+```yaml
+version: 1
+projects:
+  - name: frontend-app
+    layoutScript: ~/Documents/Dev/frontend-app-workspace.sh
+    repos:
+      - { name: front, path: ~/Documents/Dev/MyAppFront }
+      - { name: back,  path: ~/IdeaProjects/MyAppBack }
+      - { name: app,   path: ~/AndroidStudioProjects/Study/MyAppMobile }
+```
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+- `layoutScript` (optional) — your existing bash script that sets up the initial tmux panes. banyan does not replace it; `bn <project> start` just execs it.
+- `repos` — each has a short `name` (front/back/app/whatever) and an absolute `path` to the git repo. `~` is expanded.
 
-***
+## Commands
 
-# Editing this README
+### Config management (no project args)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```
+bn ls                                   list all projects and their repos
+bn init <project> [options]             create a new project
+  --repo-name <name>                    name for the first repo (default: basename of cwd)
+  --path <path>                         path of the first repo (default: cwd)
+  --layout <path>                       layout script (optional)
+```
 
-## Suggestions for a good README
+### Per project
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```
+bn <project> info                       show layout + repos
+bn <project> start                      launch the tmux layout script
+bn <project> stop                       kill the tmux session
+bn <project> attach                     attach / switch to the session
+bn <project> detach                     detach all clients
+bn <project> status                     session status + windows
 
-## Name
-Choose a self-explaining name for your project.
+bn <project> wt <feature> <repo>        create worktree + pane + claude in agents window
+bn <project> wt-all <feature> [repos..] same, across all (or listed) repos in one shot
+bn <project> wt-rm <feature> <repo>     remove worktree (keep branch) + close pane
+bn <project> wt-ls                      list worktrees across all repos
+bn <project> rebase <feature> <repo>    fetch + rebase worktree on base branch (--base to override)
+bn <project> merge <feature> <repo>     checkout base + pull --ff-only + merge --no-ff (--base to override)
+bn <project> cleanup <feature> <repo>   remove worktree + delete branch (safe) + close pane
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+bn <project> test <feature> [repos..]   launch run commands in isolated ports (test window)
+bn <project> test-stop <feature>        kill the test window for a feature
+bn <project> test-ls                    list running tests
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+bn <project> add-repo <name> [path]     add a repo to the project (path = cwd by default)
+bn <project> remove-repo <name>         remove a repo from the project
+bn <project> remove                     remove the project from config (repos untouched)
+bn <project> set-layout <path>          set / change the layout script
+bn <project> set-base <repo> <branch>   set base branch for rebase/merge on a repo
+bn <project> set-run <repo> [opts]      set run config for a repo (command/port/portEnv/--clear)
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### Conventions
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+| | Format |
+|---|---|
+| Worktree path | `<repo-path>-<feature>` (sibling directory) |
+| Branch name | `feature/<feature>` |
+| Tmux session | `<project>` |
+| Agents window | `agents-<project>` (shared, one pane per active worktree, tiled) |
+| Pane title | `<repo-name>-<feature>` |
+| Test window | `test-<feature>` (one per feature under test) |
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### Typical flow — single repo feature
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```bash
+bn frontend-app start                       # open the cockpit
+bn frontend-app wt login back               # new tab with an agent in a worktree
+# ...code...
+bn frontend-app rebase login back           # catch up with main
+bn frontend-app merge login back            # local merge
+bn frontend-app cleanup login back          # remove worktree + branch + tab
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Typical flow — fullstack feature across 3 repos
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+bn frontend-app wt login back
+bn frontend-app wt login front
+bn frontend-app wt login app
+# three tabs, three worktrees, three agents, same branch name everywhere
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Testing a feature (isolated ports, no Docker)
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+After creating worktrees, you can launch your dev servers against those worktrees on auto-allocated ports, so multiple features can run in parallel without collision.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### 1. Configure the run command per repo
 
-## License
-For open source projects, say how it is licensed.
+```bash
+bn frontend-app set-run back --command "./gradlew bootRun" --port 8080 --port-env SERVER_PORT
+bn frontend-app set-run front --command "npm run start" --port 3000 --port-env PORT
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Or edit `~/.config/banyan/config.yaml` directly:
+
+```yaml
+repos:
+  - name: back
+    path: ~/IdeaProjects/MyAppBack
+    run:
+      command: ./gradlew bootRun
+      port: 8080
+      portEnv: SERVER_PORT
+```
+
+- `command` — how to start the process (as a shell-ready string)
+- `port` — the "canonical" port; banyan probes upward from `port + 1` to find a free one
+- `portEnv` — the env var your framework reads for the port (`SERVER_PORT` for Spring Boot, `PORT` for most Node servers)
+
+### 2. Launch the test
+
+```bash
+bn frontend-app wt-all login              # create worktrees across all repos
+bn frontend-app test login                # start back + front in tiled panes
+# → tmux window 'test-login' appears with 2 panes running
+# → back:  http://localhost:8081
+# → front: http://localhost:3001
+```
+
+You can run multiple tests in parallel — each gets its own window and its own ports:
+
+```bash
+bn frontend-app test login                # 8081 / 3001
+bn frontend-app test payment              # 8082 / 3002
+```
+
+### 3. Stop
+
+```bash
+bn frontend-app test-stop login           # kills the window
+bn frontend-app test-ls                   # shows what's still running
+```
+
+### Limitation (no Docker = no DB isolation)
+
+banyan only isolates ports. Both test instances share the same database, filesystem, env vars, etc. If your feature changes DB schema or seeds, parallel testing will clash. For full isolation, pair banyan with [worktree-compose](https://www.worktree-compose.com/) (Docker-based) or test one feature at a time.
+
+## Shortcut: project-named commands (optional)
+
+If you'd rather type `frontend-app start` than `bn frontend-app start`, create a symlink. banyan detects the invocation name and routes automatically:
+
+```bash
+ln -s "$(which banyan)" ~/.local/bin/frontend-app
+ln -s "$(which banyan)" ~/.local/bin/myproject
+```
+
+Then `frontend-app status` behaves identically to `bn frontend-app status`.
+
+## Scope (MVP)
+
+**In**: everything above.
+
+**Out (for now)**: TUI, web dashboard, AI-generated branch names, inline YAML layout (replace `layoutScript`), Docker/port isolation, Windows, context-aware project resolution (detect project from cwd).
+
+## Dev
+
+```bash
+npm run dev        # tsc --watch
+npm test           # node --test on dist/
+npm run clean
+```
+
+Tests focus on pure helpers (`naming.ts`) and config parsing / validation / save (`config.ts`). Subprocess layers (`git.ts`, `tmux.ts`) are exercised via real-repo smoke tests documented above.
+
+## Design notes
+
+- `start` execs the bash layout script with `spawn({ stdio: 'inherit' })` so tmux's `attach-session` at the end hands off the terminal properly. banyan does not manage pane layout — the script is authoritative.
+- `attach` picks `tmux switch-client` vs `attach-session` based on `$TMUX` so it works from both inside and outside an existing tmux session.
+- `wt` falls back to `git worktree add <path> <branch>` if `-b <branch>` fails (branch already exists — e.g. when you've already created it for a different repo in the same feature).
+- `cleanup` uses `git branch -d` (safe). If the branch isn't merged, banyan warns instead of forcing — use `git branch -D` manually if you really mean it.
+- Default branch detection: `git symbolic-ref refs/remotes/origin/HEAD` first, then `main`, then `master`, then the literal string `"main"` as last resort.
+- All config mutations (`init`, `add-repo`, etc.) write back to `~/.config/banyan/config.yaml` using `yaml` serialization. Paths are contracted to `~/...` where possible so the file stays portable.
