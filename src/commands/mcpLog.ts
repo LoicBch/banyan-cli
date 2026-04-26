@@ -21,6 +21,8 @@ interface ToolCallEntry {
   status: "ok" | "error";
   durationMs: number;
   errorMsg?: string;
+  /** Equivalent `bn` CLI command — handy to verify behavior by re-running it. */
+  cli?: string;
 }
 
 function color(code: number, s: string): string {
@@ -48,11 +50,18 @@ function formatEntry(e: ToolCallEntry): string {
     e.status === "ok" ? color(32, "✓") : color(31, "✗");
   const tool = color(36, e.tool);
   const dur = color(90, `${e.durationMs}ms`);
-  const argsSummary = summarizeArgs(e.args);
-  const argsPart = argsSummary ? ` ${color(90, argsSummary)}` : "";
   const errPart =
     e.status === "error" && e.errorMsg ? ` ${color(31, "—")} ${e.errorMsg}` : "";
-  return `${color(90, time)} ${status} ${tool}${argsPart} ${dur}${errPart}`;
+  // Header line: timestamp + status + tool name + duration + error
+  const header = `${color(90, time)} ${status} ${tool} ${dur}${errPart}`;
+  // Body line: the CLI equivalent (or args fallback).
+  const cliLine = e.cli
+    ? `    ${color(33, "$")} ${color(0, e.cli)}`
+    : (() => {
+        const argsSummary = summarizeArgs(e.args);
+        return argsSummary ? `    ${color(90, argsSummary)}` : "";
+      })();
+  return cliLine ? `${header}\n${cliLine}` : header;
 }
 
 function readEntries(): ToolCallEntry[] {
