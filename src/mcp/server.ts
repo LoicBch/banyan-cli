@@ -20,7 +20,36 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import * as api from "./api.js";
+
+// --- Tool-call audit log ---------------------------------------------------
+// Every CallTool handled by this server is appended to a shared file. Lets
+// the user (or another agent) see what banyan tools the orchestrator actually
+// invokes via `bn mcp-log` (tail) without parsing claude's session.
+export const MCP_LOG_PATH = path.join(homedir(), ".config", "banyan", "mcp-calls.log");
+
+function logToolCall(entry: {
+  tool: string;
+  args: unknown;
+  status: "ok" | "error";
+  durationMs: number;
+  errorMsg?: string;
+}): void {
+  try {
+    mkdirSync(path.dirname(MCP_LOG_PATH), { recursive: true });
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      pid: process.pid,
+      ...entry,
+    });
+    appendFileSync(MCP_LOG_PATH, line + "\n", "utf8");
+  } catch {
+    // never let logging break the request
+  }
+}
 
 interface ToolDef<T = Record<string, unknown>> {
   spec: Tool;
@@ -341,7 +370,15 @@ export async function runMcpServer(): Promise<void> {
     const name = request.params.name;
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     const tool = tools.find((t) => t.spec.name === name);
+    const start = Date.now();
     if (!tool) {
+      logToolCall({
+        tool: name,
+        args,
+        status: "error",
+        durationMs: 0,
+        errorMsg: "unknown tool",
+      });
       return {
         isError: true,
         content: [{ type: "text", text: `unknown tool: ${name}` }],
@@ -349,11 +386,24 @@ export async function runMcpServer(): Promise<void> {
     }
     try {
       const result = await tool.handler(args);
+      logToolCall({
+        tool: name,
+        args,
+        status: "ok",
+        durationMs: Date.now() - start,
+      });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      logToolCall({
+        tool: name,
+        args,
+        status: "error",
+        durationMs: Date.now() - start,
+        errorMsg: msg,
+      });
       return {
         isError: true,
         content: [{ type: "text", text: msg }],

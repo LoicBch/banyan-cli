@@ -110,6 +110,20 @@ export async function run(argv: string[]): Promise<number> {
       await runMcpServer();
     });
 
+  program
+    .command("mcp-log")
+    .description("show recent banyan MCP tool calls (logged by `banyan mcp-serve`)")
+    .option("-f, --follow", "tail the log live (Ctrl+C to stop)")
+    .option(
+      "-n, --lines <n>",
+      "show the last N entries (default 50)",
+      (v) => parseInt(v, 10),
+    )
+    .action(async (opts: { follow?: boolean; lines?: number }) => {
+      const { mcpLog } = await import("./commands/mcpLog.js");
+      await mcpLog({ follow: opts.follow, n: opts.lines });
+    });
+
   // per-project commands
   for (const project of config.projects) {
     const projectCmd = program
