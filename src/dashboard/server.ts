@@ -44,6 +44,26 @@ export async function startServer(
     res.json({ ok: true, service: "banyan-dashboard" });
   });
 
+  // Conflict-risk pulse — same data as `bn <project> pulse`, served as JSON.
+  app.get(
+    "/api/pulse/:project",
+    async (req: Request<{ project: string }>, res: Response) => {
+      const projectName = req.params.project;
+      const project = config.projects.find((p) => p.name === projectName);
+      if (!project) {
+        res.status(404).json({ error: `unknown project '${projectName}'` });
+        return;
+      }
+      try {
+        const { computePulse } = await import("../commands/pulse.js");
+        const result = await computePulse(project);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
+
   // ── Actions ─────────────────────────────────────────────────────────────
   // All mutating endpoints are POST. Body is JSON { project, feature, repo? }.
 

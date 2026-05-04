@@ -8,7 +8,7 @@ export interface ServeOpts {
 }
 
 export async function serve(config: Config, opts: ServeOpts = {}): Promise<void> {
-  const { port, url } = await startServer(config, {
+  const { url } = await startServer(config, {
     port: opts.port,
     open: opts.open ?? true,
   });

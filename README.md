@@ -1,212 +1,374 @@
 # banyan
 
-Tmux + git worktrees + Claude Code, multi-repo per project.
+[![CI](https://github.com/LoicBch/banyan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/LoicBch/banyan-cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](package.json)
 
-Run `banyan frontend-app start` to drop into a tmux cockpit; run `banyan frontend-app wt login back` to spawn a worktree + tmux window + Claude agent on `feature/login` in your backend repo.
+> tmux + git worktrees + Claude Code, multi-repo per project.
 
-Multi-repo is the differentiator: one feature can span a front, back, and app repo simultaneously — the same branch name (`feature/login`) is created in each, each gets its own worktree and tmux window, each gets its own agent.
+banyan is a CLI that lets you work on N features in parallel across a multi-repo project (front + back + mobile + infra), each in its own isolated git worktree, with its own Claude agent and its own dynamically-allocated dev ports — and a project-wide orchestrator agent that watches over the lot.
 
-## Install (local)
+```
+bn myproject start            ← workspace: orchestrator + free terminal
+bn myproject wt login         ← worktree across every repo + per-feature agent
+bn myproject start login      ← spin up back/front/mobile (isolated ports)
+bn myproject pulse            ← which features touch which files? merge order suggestion
+bn myproject merge login      ← rebase + push + MR + auto-resolve conflicts
+```
+
+## What it does, concretely
+
+- **One feature spans every repo.** `bn <project> wt <feature>` creates a worktree in front, back, app, on the same `feature/<feature>` branch.
+- **One Claude agent per feature**, sees every repo via `--add-dir`. Agents resume conversations across reboots.
+- **A project-wide orchestrator agent** with cross-feature awareness: detects merge conflicts before they happen, recommends merge order, drives merges with a headless conflict resolver.
+- **Isolated dev stacks**: dynamic ports, per-feature compose stacks, env injection (`SERVER_PORT`, `DB_PORT`, `{{back.port}}`), `adb reverse` automation for Android.
+- **Real-time conflict pulse** (CLI + web dashboard) showing the file × feature matrix as you type.
+- **MCP server**: every banyan operation exposed as a tool to Claude Code, Cursor, anything MCP-aware.
+- **Survives reboots**: `bn <project> resume` recreates panes, restarts run processes, resumes Claude conversations.
+
+## Install
 
 ```bash
-git clone <this-repo> ~/Documents/Dev/banyan
-cd ~/Documents/Dev/banyan
+git clone https://github.com/LoicBch/banyan-cli ~/Documents/Dev/banyan-cli
+cd ~/Documents/Dev/banyan-cli
 npm install
 npm run build
 npm link
 ```
 
-After `npm link` you have `banyan` and `bn` in your PATH.
+Requires Node ≥ 20 (uses native test runner + ESM). After `npm link` you have `banyan` and `bn` in `$PATH`.
 
 ## Quick start
 
 ```bash
 cd ~/my-frontend-repo
-bn init my-project                     # first repo = cwd
+bn init my-project                  # cwd = first repo
 cd ~/my-backend-repo
-bn my-project add-repo back            # add another repo
-bn my-project set-layout ~/scripts/tmux-layout.sh   # optional
-bn ls                                   # see everything
+bn my-project add-repo back         # add another
+bn my-project add-repo app ~/AndroidStudioProjects/MyApp
+
+bn ls                               # check the lot
+bn my-project start                 # open the workspace
 ```
 
-Edit `~/.config/banyan/config.yaml` directly if you prefer.
+The workspace is a tmux session with one window:
 
-## Config shape
+```
+┌──────────────────────────────┬─────────────────────────────┐
+│  orchestrator (claude)       │  terminal                   │
+│  --add-dir on every repo     │  free for ad-hoc cmds       │
+│  banyan MCP wired in         │                             │
+│  --continue across restarts  │                             │
+└──────────────────────────────┴─────────────────────────────┘
+```
+
+## Concepts
+
+| Concept | What |
+|---|---|
+| **Project** | A group of repos that ship together (a frontend + backend + mobile, etc.). |
+| **Workspace window** | The tmux window where the orchestrator + free terminal live. |
+| **Feature** | A unit of work that gets a branch, a worktree per repo, and a per-feature Claude agent. |
+| **Agents window** | `agents-<project>` — one pane per active feature, each running its own Claude session. |
+| **Test window** | `test-<feature>` — one pane per repo running its run command (back, front, app). |
+| **Compose stack** | Optional `type: compose` repo (e.g. mysql + phpmyadmin). One stack instance per feature, on dynamic ports. |
+| **Orchestrator** | Cross-feature Claude agent. Sees every worktree, drives merges, predicts conflicts. |
+
+### Layout on disk
+
+Worktrees are grouped under their repo's parent dir:
+
+```
+~/Documents/Dev/MyApp/
+  Front/                       ← main checkout
+  worktree-Front/
+    login/                     ← worktree (branch: feature/login)
+    payment/                   ← worktree (branch: feature/payment)
+  Back/
+  worktree-Back/
+    login/
+    payment/
+```
+
+(Legacy `<repo>-<feature>` sibling layout is auto-detected for backward compat.)
+
+## Commands
+
+### Top-level (no project)
+
+```
+bn ls                          list all projects
+bn whereami                    detect project/repo/feature from cwd
+bn init <project>              create a new project
+bn sidebar                     live tree view (terminal)
+bn serve                       web dashboard (browser)
+bn mcp-serve                   MCP server over stdio (used by claude --mcp-config)
+bn mcp-log [-f] [-n N]         tail recent MCP tool calls
+```
+
+### Per-project lifecycle
+
+```
+bn <project> start                    workspace (orchestrator + terminal)
+bn <project> start <feature>          start/restart back+front+app for the feature
+bn <project> start <feature> <repos>  start/restart only those repos
+bn <project> stop                     kill the project tmux session
+bn <project> stop <feature>           stop a single feature's run processes
+bn <project> attach / detach
+bn <project> status                   tmux session + windows status
+bn <project> resume                   restore everything after reboot
+bn <project> ls-features              list features that have a running test window
+bn <project> ports [feature]          show port allocations (run + compose)
+bn <project> deploy [repo] [args]     run the project's deploy command
+```
+
+### Worktrees + git ops
+
+```
+bn <project> wt <feature> [repos...]    create worktree(s) + agent pane(s)
+bn <project> wt-rm <feature> [repo]     remove worktree (keep branch)
+bn <project> wt-ls                      list worktrees across repos
+bn <project> rebase <feature> [repo]    rebase on origin/<base>
+bn <project> merge <feature> [repo]     push + create MR/PR + merge (auto-resolve)
+bn <project> cleanup <feature> [repo]   remove worktree + delete branch + close pane
+bn <project> sync                       rebase every active feature on its base branch
+bn <project> pulse [--watch <s>]        conflict-risk dashboard (file × feature)
+```
+
+### Orchestrator
+
+```
+bn <project> orchestrator              spawn the project-wide agent in its own window
+bn <project> orchestrator stop         kill the orchestrator window
+bn <project> orchestrator status       is it running?
+```
+
+(The workspace `start` already includes an orchestrator pane. The standalone command opens a separate window if you want a dedicated full-screen view.)
+
+### Compose stacks (env)
+
+```
+bn <project> env ls
+bn <project> env up <feature>
+bn <project> env down <feature>            keeps volumes
+bn <project> env recreate <feature>        wipe volumes + restart
+bn <project> env logs <feature> [service]
+bn <project> env exec <feature> <service> [cmd...]
+```
+
+### Config mutations
+
+```
+bn <project> add-repo <name> [path]
+bn <project> remove-repo <name>
+bn <project> remove
+bn <project> set-base <repo> <branch>
+bn <project> set-run <repo> [opts]
+bn <project> set-layout <path>             (legacy: use a custom bash layout script)
+```
+
+### CWD inference
+
+If you're inside a configured repo or worktree (or its parent dir), you can omit the project:
+
+```bash
+cd ~/Documents/Dev/MyApp
+bn wt login              # ≡ bn myproject wt login
+
+cd ~/Documents/Dev/MyApp/worktree-Front/login
+bn start                 # ≡ bn myproject start login (feature inferred from worktree)
+```
+
+## Configuration
+
+Stored at `~/.config/banyan/config.yaml`:
 
 ```yaml
 version: 1
 projects:
-  - name: frontend-app
-    layoutScript: ~/Documents/Dev/frontend-app-workspace.sh
+  - name: myproject
+    deployCommand: bash ~/Documents/Dev/MyApp/deploy.sh
     repos:
-      - { name: front, path: ~/Documents/Dev/MyAppFront }
-      - { name: back,  path: ~/IdeaProjects/MyAppBack }
-      - { name: app,   path: ~/AndroidStudioProjects/Study/MyAppMobile }
+      - name: front
+        path: ~/Documents/Dev/MyApp/Front
+        baseBranch: develop
+        run:
+          command: npm run dev
+          port: 3000
+          portEnv: PORT
+          setup: npm install
+          env:
+            REACT_APP_API_URL: http://localhost:{{back.port}}
+      - name: back
+        path: ~/Documents/Dev/MyApp/Spring/Back
+        baseBranch: develop
+        run:
+          command: ./gradlew bootRun
+          port: 8080
+          portEnv: SERVER_PORT
+          stopCommand: ./gradlew --stop
+          composePorts:
+            DB_PORT: mysql-dev:3306
+            PMA_PORT: phpmyadmin:80
+      - name: app
+        path: ~/AndroidStudio/Mobile
+        baseBranch: develop
+        run:
+          command: ./gradlew :androidApp:installDebug && adb shell am start -n com.example/.MainActivity
+      - name: infra
+        type: compose
+        path: ~/Documents/Dev/MyApp/Spring/Back
+        composeFile: docker-compose.dev.yml
 ```
 
-- `layoutScript` (optional) — your existing bash script that sets up the initial tmux panes. banyan does not replace it; `bn <project> start` just execs it.
-- `repos` — each has a short `name` (front/back/app/whatever) and an absolute `path` to the git repo. `~` is expanded.
+Edit the file directly or via `bn ... add-repo / set-run / set-base`. Paths are stored as `~/...` for portability.
 
-## Commands
+## Run config explained
 
-### Config management (no project args)
-
-```
-bn ls                                   list all projects and their repos
-bn init <project> [options]             create a new project
-  --repo-name <name>                    name for the first repo (default: basename of cwd)
-  --path <path>                         path of the first repo (default: cwd)
-  --layout <path>                       layout script (optional)
-```
-
-### Per project
-
-```
-bn <project> info                       show layout + repos
-bn <project> start                      launch the tmux layout script
-bn <project> stop                       kill the tmux session
-bn <project> attach                     attach / switch to the session
-bn <project> detach                     detach all clients
-bn <project> status                     session status + windows
-
-bn <project> wt <feature> <repo>        create worktree + pane + claude in agents window
-bn <project> wt-all <feature> [repos..] same, across all (or listed) repos in one shot
-bn <project> wt-rm <feature> <repo>     remove worktree (keep branch) + close pane
-bn <project> wt-ls                      list worktrees across all repos
-bn <project> rebase <feature> <repo>    fetch + rebase worktree on base branch (--base to override)
-bn <project> merge <feature> <repo>     checkout base + pull --ff-only + merge --no-ff (--base to override)
-bn <project> cleanup <feature> <repo>   remove worktree + delete branch (safe) + close pane
-
-bn <project> test <feature> [repos..]   launch run commands in isolated ports (test window)
-bn <project> test-stop <feature>        kill the test window for a feature
-bn <project> test-ls                    list running tests
-
-bn <project> add-repo <name> [path]     add a repo to the project (path = cwd by default)
-bn <project> remove-repo <name>         remove a repo from the project
-bn <project> remove                     remove the project from config (repos untouched)
-bn <project> set-layout <path>          set / change the layout script
-bn <project> set-base <repo> <branch>   set base branch for rebase/merge on a repo
-bn <project> set-run <repo> [opts]      set run config for a repo (command/port/portEnv/--clear)
-```
-
-### Conventions
-
-| | Format |
+| Field | What it does |
 |---|---|
-| Worktree path | `<repo-path>-<feature>` (sibling directory) |
-| Branch name | `feature/<feature>` |
-| Tmux session | `<project>` |
-| Agents window | `agents-<project>` (shared, one pane per active worktree, tiled) |
-| Pane title | `<repo-name>-<feature>` |
-| Test window | `test-<feature>` (one per feature under test) |
+| `command` | The shell command for `bn start <feature>` to spawn this repo's process. |
+| `port` | The repo's *canonical* port. banyan probes from `port + 1` upward to find a free one. |
+| `portEnv` | The env var your framework reads (e.g. `SERVER_PORT`, `PORT`). Injected with the allocated value. |
+| `setup` | Optional one-shot before each run (`npm install`, `bundle install`). |
+| `stopCommand` | Optional clean-shutdown command (e.g. `./gradlew --stop`). Run on `bn stop <feature>` and on `bn start <feature> <repo>` (restart). |
+| `composePorts` | Map of `<env-var>: <service>:<containerPort>` to inject the host port of a compose service (e.g. `DB_PORT: mysql:3306`). |
+| `env` | Extra env vars. Supports `{{<repo>.port}}` templating to refer to a sibling repo's allocated port. |
 
-### Typical flow — single repo feature
+### Auto adb reverse for Android panes
 
-```bash
-bn frontend-app start                       # open the cockpit
-bn frontend-app wt login back               # new tab with an agent in a worktree
-# ...code...
-bn frontend-app rebase login back           # catch up with main
-bn frontend-app merge login back            # local merge
-bn frontend-app cleanup login back          # remove worktree + branch + tab
+If a repo's `command` invokes `adb` (heuristic: any Android install/run), banyan auto-prepends `adb reverse tcp:<canonical> tcp:<allocated>` for every other repo with a port. Your app code can hardcode `http://localhost:8080/api/` (canonical port) and it tunnels to the dynamic backend port via USB. No app-side config needed.
+
+## Hooks
+
+banyan invokes shell scripts at lifecycle points so you can plug custom logic without forking. Lookup order:
+
+1. `<projectMainRepo>/.banyan-hooks/<hook>` (team, versioned)
+2. `<projectMainRepo>/.banyan/hooks/<hook>` (local override, gitignored)
+3. `~/.banyan/hooks/<hook>` (global per user)
+
+Available hooks:
+
+```
+worktree_created       after `git worktree add` succeeds
+before_worktree_remove right before removing a worktree
+worktree_removed       after a worktree is removed
+stack_up / stack_down  before/after compose lifecycle
+pre_merge / post_merge wrap a merge
+pre_test / post_test   wrap a test launch
 ```
 
-### Typical flow — fullstack feature across 3 repos
+Each hook receives `BANYAN_PROJECT`, `BANYAN_FEATURE`, `BANYAN_REPO`, `BANYAN_REPO_PATH`, `BANYAN_WORKTREE_PATH`, `BANYAN_BRANCH`, `BANYAN_BASE_BRANCH` plus the parent process env.
 
-```bash
-bn frontend-app wt login back
-bn frontend-app wt login front
-bn frontend-app wt login app
-# three tabs, three worktrees, three agents, same branch name everywhere
+Useful pattern: a `worktree_created` hook that copies gitignored config files (`.env`, `local.properties`, `application-local.yml`) from the main checkout to the new worktree. See `examples/hooks/worktree_created` (if present in your install).
+
+## MCP integration
+
+Run `bn mcp-serve` to start an MCP server over stdio. Wire it in your Claude Code / Cursor config:
+
+```json
+{
+  "mcpServers": {
+    "banyan": { "command": "banyan", "args": ["mcp-serve"] }
+  }
+}
 ```
 
-## Testing a feature (isolated ports, no Docker)
+Available tools:
 
-After creating worktrees, you can launch your dev servers against those worktrees on auto-allocated ports, so multiple features can run in parallel without collision.
-
-### 1. Configure the run command per repo
-
-```bash
-bn frontend-app set-run back --command "./gradlew bootRun" --port 8080 --port-env SERVER_PORT
-bn frontend-app set-run front --command "npm run start" --port 3000 --port-env PORT
+```
+banyan_list_projects        banyan_create_feature       banyan_rebase_feature
+banyan_project_info         banyan_remove_feature       banyan_merge_feature
+banyan_list_features        banyan_cleanup_feature      banyan_start_test
+banyan_feature_status       banyan_list_stacks          banyan_stop_test
+banyan_get_stack_ports      banyan_stack_logs           banyan_stack_up / down / recreate
 ```
 
-Or edit `~/.config/banyan/config.yaml` directly:
+The orchestrator gets these wired in automatically (`--mcp-config ~/.config/banyan/orchestrator-mcp.json`).
 
-```yaml
-repos:
-  - name: back
-    path: ~/IdeaProjects/MyAppBack
-    run:
-      command: ./gradlew bootRun
-      port: 8080
-      portEnv: SERVER_PORT
+`bn mcp-log -f` tails every tool call, with the equivalent CLI command — useful to learn what the orchestrator actually does.
+
+## Conflict pulse — multi-feature merge planning
+
+`bn <project> pulse` shows a real-time conflict matrix across active features:
+
+```
+── files changed per feature (vs origin/develop) ──
+  alert-zone    front*, back, app   22 files   37 commits ahead
+  itinerary     front*, back, app   25 files   27 commits ahead
+  search-zone   front*, back, app   15 files   22 commits ahead
+
+── overlap (10 files touched by 2+ features) ──
+  🔥 [app]   src/.../MainMapScreen.kt
+       alert-zone, itinerary, search-zone
+  ⚠  [back] src/.../auth/SecurityConfig.kt
+       alert-zone, itinerary
+  …
+
+── merge complexity ──
+  alert-zone    HIGH    (9 overlaps, 22 files, 37 commits)
+  itinerary     HIGH    (9 overlaps, 25 files, 27 commits)
+  search-zone   medium  (3 overlaps, 15 files, 22 commits)
+
+── suggested merge order ──
+  1. search-zone   (3 overlaps)
+  2. alert-zone    (9 overlaps — high merge cost)
+  3. itinerary     (9 overlaps — high merge cost)
 ```
 
-- `command` — how to start the process (as a shell-ready string)
-- `port` — the "canonical" port; banyan probes upward from `port + 1` to find a free one
-- `portEnv` — the env var your framework reads for the port (`SERVER_PORT` for Spring Boot, `PORT` for most Node servers)
+`--watch <s>` refreshes every N seconds. The same data is rendered live in `bn serve` (the web dashboard).
 
-### 2. Launch the test
+## Conflict resolver (cross-feature aware)
+
+Both `bn merge` and `bn sync` use a headless Claude resolver when a rebase produces conflicts. The resolver is launched with:
+
+- `--add-dir` on every repo's parent dir (sees sibling worktrees of OTHER features)
+- `--mcp-config` (banyan tools available)
+- A prompt that explains it can read sibling worktrees and call `banyan_list_features` / `banyan_feature_status`
+
+This lets it produce conflict resolutions consistent with what other features have done on the same files — without polluting the agent's context. Same paradigm as `composePorts`: banyan owns the wiring.
+
+## Resuming after a reboot
 
 ```bash
-bn frontend-app wt-all login              # create worktrees across all repos
-bn frontend-app test login                # start back + front in tiled panes
-# → tmux window 'test-login' appears with 2 panes running
-# → back:  http://localhost:8081
-# → front: http://localhost:3001
+bn <project> resume
 ```
 
-You can run multiple tests in parallel — each gets its own window and its own ports:
+Detects active features (worktrees on disk), recreates their agent panes (with `claude --continue` so each conversation is preserved), restarts run processes for features that had a previous `bn start`, and re-attaches you to the workspace.
+
+You don't lose:
+- worktrees, branches, commits
+- uncommitted work in worktrees (just files on disk)
+- Claude conversations (per-cwd via `--continue`, plus the orchestrator marker)
+- compose volumes (Docker volumes survive reboot)
+- recorded port allocations (`~/.config/banyan/state/`)
+
+You DO lose: running processes (re-spawned by `start`), tmux pane scrollback, in-memory build caches.
+
+## Project-named shortcuts
+
+Symlink `banyan` to your project name to skip the project arg:
 
 ```bash
-bn frontend-app test login                # 8081 / 3001
-bn frontend-app test payment              # 8082 / 3002
-```
-
-### 3. Stop
-
-```bash
-bn frontend-app test-stop login           # kills the window
-bn frontend-app test-ls                   # shows what's still running
-```
-
-### Limitation (no Docker = no DB isolation)
-
-banyan only isolates ports. Both test instances share the same database, filesystem, env vars, etc. If your feature changes DB schema or seeds, parallel testing will clash. For full isolation, pair banyan with [worktree-compose](https://www.worktree-compose.com/) (Docker-based) or test one feature at a time.
-
-## Shortcut: project-named commands (optional)
-
-If you'd rather type `frontend-app start` than `bn frontend-app start`, create a symlink. banyan detects the invocation name and routes automatically:
-
-```bash
-ln -s "$(which banyan)" ~/.local/bin/frontend-app
 ln -s "$(which banyan)" ~/.local/bin/myproject
+myproject start            # ≡ bn myproject start
+myproject wt login         # ≡ bn myproject wt login
 ```
-
-Then `frontend-app status` behaves identically to `bn frontend-app status`.
-
-## Scope (MVP)
-
-**In**: everything above.
-
-**Out (for now)**: TUI, web dashboard, AI-generated branch names, inline YAML layout (replace `layoutScript`), Docker/port isolation, Windows, context-aware project resolution (detect project from cwd).
 
 ## Dev
 
 ```bash
-npm run dev        # tsc --watch
-npm test           # node --test on dist/
+npm run dev      # tsc --watch
+npm test         # node --test on dist/test
 npm run clean
 ```
 
-Tests focus on pure helpers (`naming.ts`) and config parsing / validation / save (`config.ts`). Subprocess layers (`git.ts`, `tmux.ts`) are exercised via real-repo smoke tests documented above.
+71 tests across naming, state, project inference, hooks, claude context, config. CI runs on Ubuntu + macOS, Node 20 + 22.
 
-## Design notes
+## Contributing
 
-- `start` execs the bash layout script with `spawn({ stdio: 'inherit' })` so tmux's `attach-session` at the end hands off the terminal properly. banyan does not manage pane layout — the script is authoritative.
-- `attach` picks `tmux switch-client` vs `attach-session` based on `$TMUX` so it works from both inside and outside an existing tmux session.
-- `wt` falls back to `git worktree add <path> <branch>` if `-b <branch>` fails (branch already exists — e.g. when you've already created it for a different repo in the same feature).
-- `cleanup` uses `git branch -d` (safe). If the branch isn't merged, banyan warns instead of forcing — use `git branch -D` manually if you really mean it.
-- Default branch detection: `git symbolic-ref refs/remotes/origin/HEAD` first, then `main`, then `master`, then the literal string `"main"` as last resort.
-- All config mutations (`init`, `add-repo`, etc.) write back to `~/.config/banyan/config.yaml` using `yaml` serialization. Paths are contracted to `~/...` where possible so the file stays portable.
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome. Keep modules small and tested; mechanical refactors must keep the build green.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

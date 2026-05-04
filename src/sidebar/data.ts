@@ -81,7 +81,7 @@ async function safeListPaneTitles(session: string): Promise<Set<string>> {
 }
 
 async function safeLoadWorktrees(
-  project: ProjectConfig,
+  _project: ProjectConfig,
   repo: RepoConfig,
   livePanes: Set<string>,
 ): Promise<SidebarWorktree[]> {

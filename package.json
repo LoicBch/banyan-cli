@@ -11,6 +11,27 @@
     "dist",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LoicBch/banyan-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LoicBch/banyan-cli/issues"
+  },
+  "homepage": "https://github.com/LoicBch/banyan-cli#readme",
+  "license": "MIT",
+  "author": "Loïc Bouchisse",
+  "keywords": [
+    "tmux",
+    "git-worktree",
+    "claude-code",
+    "mcp",
+    "monorepo",
+    "multi-repo",
+    "developer-tools",
+    "cli",
+    "workflow"
+  ],
   "engines": {
     "node": ">=20"
   },

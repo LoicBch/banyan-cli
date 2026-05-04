@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import type { Context } from "../context.js";
 import * as tmux from "../tmux.js";
 import * as naming from "../naming.js";
@@ -42,8 +41,8 @@ export async function testStop(ctx: Context, feature: string): Promise<void> {
     if (repo.type === "compose") continue;
     const stopCmd = repo.run?.stopCommand;
     if (!stopCmd) continue;
-    const wt = naming.worktreePath(repo.path, feature);
-    if (!existsSync(wt)) continue;
+    const wt = naming.existingWorktreePath(repo.path, feature);
+    if (!wt) continue;
 
     ctx.logger.info(`running stopCommand for ${repo.name}: ${stopCmd}`);
     const r = await run("sh", ["-c", stopCmd], { cwd: wt });

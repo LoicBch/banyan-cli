@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import type { Config } from "../config.js";
 import { getProject, getRepo } from "../config.js";
 import { buildContext } from "../context.js";
@@ -210,9 +209,9 @@ export async function actionMrStatus(
       return { ok: false, branch: "", error: "compose repos have no MR" };
     }
     const branch = naming.branchName(p.feature);
-    const worktreePath = naming.worktreePath(repo.path, p.feature);
-    if (!existsSync(worktreePath)) {
-      return { ok: false, branch, error: `no worktree at ${worktreePath}` };
+    const worktreePath = naming.existingWorktreePath(repo.path, p.feature);
+    if (!worktreePath) {
+      return { ok: false, branch, error: `no worktree found for feature ${p.feature}` };
     }
     const provider = await detectProvider(repo.path);
     if (!provider) {

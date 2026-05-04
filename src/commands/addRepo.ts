@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Config } from "../config.js";
-import { saveConfig, expandHome } from "../config.js";
+import { getProject, saveConfig, expandHome, type Config } from "../config.js";
 import { logger } from "../logger.js";
 import { UsageError, ConfigError } from "../errors.js";
 
@@ -11,10 +10,7 @@ export async function addRepo(
   repoName: string,
   repoPathInput?: string,
 ): Promise<Config> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) {
-    throw new ConfigError(`unknown project "${projectName}"`);
-  }
+  const project = getProject(config, projectName);
   if (project.repos.some((r) => r.name === repoName)) {
     throw new ConfigError(
       `repo "${repoName}" already exists in project "${projectName}"`,

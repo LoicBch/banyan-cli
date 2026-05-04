@@ -270,9 +270,135 @@ function renderRepo(project, repo) {
   ]);
 }
 
+function complexityBadge(level) {
+  const map = {
+    HIGH: { class: "bg-rose-900/60 text-rose-200 ring-rose-700", label: "HIGH" },
+    medium: { class: "bg-yellow-900/60 text-yellow-200 ring-yellow-700", label: "med" },
+    low: { class: "bg-emerald-900/60 text-emerald-200 ring-emerald-700", label: "low" },
+  };
+  const c = map[level] || map.low;
+  return h("span", { class: `inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded ring-1 ${c.class}` }, [c.label]);
+}
+
+function renderPulse(pulse) {
+  if (!pulse || !pulse.features || pulse.features.length === 0) {
+    return h("div", { class: "text-xs text-neutral-600 italic" }, ["no active features for pulse analysis"]);
+  }
+
+  // Per-feature summary cards.
+  const cards = h(
+    "div",
+    { class: "grid gap-2 mb-3", style: `grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));` },
+    pulse.features.map((f) =>
+      h("div", { class: "bg-neutral-950 border border-neutral-800 rounded p-2.5" }, [
+        h("div", { class: "flex items-center justify-between mb-1" }, [
+          h("span", { class: "font-mono text-sm font-medium" }, [f.name]),
+          complexityBadge(f.complexity),
+        ]),
+        h("div", { class: "text-[11px] text-neutral-500 space-y-0.5" }, [
+          h("div", {}, [`${f.totalFiles} files · ${f.totalCommits} commit${f.totalCommits === 1 ? "" : "s"} ahead`]),
+          h("div", {}, [`${f.overlapCount} overlap${f.overlapCount === 1 ? "" : "s"} with other features`]),
+          h("div", { class: "text-neutral-600 truncate" }, [
+            f.repos.map((r) => (r.dirty ? `${r.name}*` : r.name)).join(", "),
+          ]),
+        ]),
+      ]),
+    ),
+  );
+
+  // Overlap list. Per-row: severity dot, [repo] file path, list of features touching it.
+  let overlapBlock;
+  if (pulse.overlaps.length === 0) {
+    overlapBlock = h("div", { class: "text-xs text-emerald-400 px-2 py-1.5" }, [
+      "✓ no overlap — features touch disjoint file sets",
+    ]);
+  } else {
+    const rows = pulse.overlaps.slice(0, 40).map((o) => {
+      const sev =
+        o.features.length >= 3
+          ? h("span", { class: "text-rose-400" }, ["🔥"])
+          : h("span", { class: "text-yellow-400" }, ["⚠"]);
+      return h("div", { class: "flex items-start gap-2 py-1 text-xs border-b border-neutral-900/60 last:border-0" }, [
+        h("span", { class: "shrink-0" }, [sev]),
+        h("div", { class: "flex-1 min-w-0" }, [
+          h("div", { class: "flex items-center gap-2" }, [
+            h("span", { class: "text-neutral-500 text-[10px] uppercase tracking-wider" }, [o.repo]),
+            h("span", { class: "font-mono text-neutral-300 truncate" }, [o.file]),
+          ]),
+          h(
+            "div",
+            { class: "flex flex-wrap gap-1 mt-0.5" },
+            o.features.map((f) =>
+              h("span", { class: "text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400" }, [f]),
+            ),
+          ),
+        ]),
+      ]);
+    });
+    overlapBlock = h(
+      "div",
+      { class: "bg-neutral-950 border border-neutral-800 rounded px-3 py-2 max-h-[400px] overflow-y-auto" },
+      [
+        h("div", { class: "text-[10px] text-neutral-500 uppercase tracking-wider mb-1" }, [
+          `${pulse.overlaps.length} overlap${pulse.overlaps.length === 1 ? "" : "s"}`,
+        ]),
+        ...rows,
+        pulse.overlaps.length > 40
+          ? h("div", { class: "text-[10px] text-neutral-600 mt-1" }, [
+              `... ${pulse.overlaps.length - 40} more`,
+            ])
+          : null,
+      ],
+    );
+  }
+
+  // Suggested merge order.
+  const orderItems = pulse.suggestedOrder.map((name, i) => {
+    const f = pulse.features.find((x) => x.name === name);
+    const reason =
+      !f || f.overlapCount === 0
+        ? "isolated"
+        : f.overlapCount < 3
+          ? `${f.overlapCount} overlap${f.overlapCount === 1 ? "" : "s"}`
+          : `${f.overlapCount} overlaps · high cost`;
+    return h("li", { class: "flex items-center gap-2 text-xs py-0.5" }, [
+      h("span", { class: "text-neutral-600 w-4 text-right" }, [`${i + 1}.`]),
+      h("span", { class: "font-mono text-neutral-200" }, [name]),
+      h("span", { class: "text-neutral-500" }, [`(${reason})`]),
+    ]);
+  });
+
+  return h("div", { class: "space-y-3" }, [
+    cards,
+    h("div", { class: "grid grid-cols-1 lg:grid-cols-3 gap-3" }, [
+      h("div", { class: "lg:col-span-2 space-y-1" }, [
+        h("div", { class: "text-[10px] text-neutral-500 uppercase tracking-wider px-1" }, [
+          "conflict surface (file × feature)",
+        ]),
+        overlapBlock,
+      ]),
+      h("div", { class: "space-y-1" }, [
+        h("div", { class: "text-[10px] text-neutral-500 uppercase tracking-wider px-1" }, [
+          "suggested merge order",
+        ]),
+        h("ol", { class: "bg-neutral-950 border border-neutral-800 rounded px-3 py-2 space-y-0" }, orderItems),
+      ]),
+    ]),
+  ]);
+}
+
 function renderProject(project) {
   const activeCount = project.repos.reduce((s, r) => s + r.worktrees.length, 0);
   const runningStacks = project.repos.flatMap((r) => r.stacks).filter((s) => s.running).length;
+
+  const pulseSection = project.pulse
+    ? h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
+        h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
+          `🌡 pulse — conflict surface across active features (vs origin/${project.pulse.base})`,
+        ]),
+        renderPulse(project.pulse),
+      ])
+    : null;
 
   return h("section", { class: "bg-neutral-900 border border-neutral-800 rounded-lg p-5" }, [
     h("div", { class: "flex items-center justify-between mb-4" }, [
@@ -288,6 +414,7 @@ function renderProject(project) {
       ]),
     ]),
     h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
+    pulseSection,
   ]);
 }
 
@@ -318,6 +445,16 @@ function render(state) {
 let pollTimer = null;
 let consecutiveErrors = 0;
 
+async function fetchPulse(projectName) {
+  try {
+    const r = await fetch(`/api/pulse/${encodeURIComponent(projectName)}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 async function loop() {
   const state = await fetchState();
   if (state.error) {
@@ -328,6 +465,17 @@ async function loop() {
   } else {
     consecutiveErrors = 0;
     statusEl.innerHTML = `<span class="pulse-dot bg-emerald-400"></span><span>live</span>`;
+
+    // Pulse data per project — best-effort, parallel. Slower than /api/state
+    // (it shells out to git diff per worktree) so we fan out instead of
+    // serialising. Failures don't break the rest of the dashboard.
+    if (Array.isArray(state.projects)) {
+      await Promise.all(
+        state.projects.map(async (p) => {
+          p.pulse = await fetchPulse(p.name);
+        }),
+      );
+    }
   }
   render(state);
   pollTimer = setTimeout(loop, REFRESH_MS);

@@ -11,7 +11,11 @@
  */
 
 import { existsSync } from "node:fs";
-import { loadConfig, type Config, type ProjectConfig } from "../config.js";
+import {
+  getProject,
+  loadConfig,
+  type Config,
+} from "../config.js";
 import * as git from "../git.js";
 import * as docker from "../docker.js";
 import * as naming from "../naming.js";
@@ -25,16 +29,10 @@ import { test as testCmd } from "../commands/test.js";
 import { testStop as testStopCmd } from "../commands/testStop.js";
 import { envUp, envDown, envRecreate } from "../commands/env.js";
 import { buildContext } from "../context.js";
-import { ConfigError, UsageError } from "../errors.js";
+import { UsageError } from "../errors.js";
 
 async function getConfig(): Promise<Config> {
   return loadConfig();
-}
-
-function getProject(config: Config, name: string): ProjectConfig {
-  const p = config.projects.find((p) => p.name === name);
-  if (!p) throw new ConfigError(`unknown project "${name}"`);
-  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,17 +113,15 @@ export async function listFeatures(projectName: string): Promise<{
     for (const wt of worktrees) {
       // Main checkout's path matches the repo path; skip it.
       if (wt.path === repo.path) continue;
-      const base = wt.path.startsWith(`${repo.path}-`)
-        ? wt.path.slice(repo.path.length + 1)
-        : null;
-      if (!base) continue;
-      const list = featureMap.get(base) ?? [];
+      const parsed = naming.parseWorktreePath(wt.path, repo.path);
+      if (!parsed) continue;
+      const list = featureMap.get(parsed.feature) ?? [];
       list.push({
         name: repo.name,
         worktreePath: wt.path,
         branch: wt.branch ?? "(detached)",
       });
-      featureMap.set(base, list);
+      featureMap.set(parsed.feature, list);
     }
   }
   return {
@@ -169,7 +165,8 @@ export async function featureStatus(
       repos.push({ name: r.name, type: "compose", exists: true });
       continue;
     }
-    const wt = naming.worktreePath(r.path, feature);
+    const wt = naming.existingWorktreePath(r.path, feature)
+      ?? naming.worktreePath(r.path, feature);
     const exists = existsSync(wt);
     if (!exists) {
       repos.push({ name: r.name, type: "git", worktreePath: wt, exists: false });

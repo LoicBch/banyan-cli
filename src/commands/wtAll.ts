@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import { getProject, type Config } from "../config.js";
 import * as git from "../git.js";
 import * as tmux from "../tmux.js";
 import * as claude from "../claude.js";
@@ -27,8 +27,7 @@ export async function wtAll(
   feature: string,
   opts: { only?: string[] } = {},
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new UsageError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
 
   if (opts.only) {
     const unknown = opts.only.filter(
@@ -68,7 +67,12 @@ export async function wtAll(
   // mainRepo for hook lookup: first git repo's main path
   const mainRepoPath = gitRepos[0]?.path ?? project.repos[0]!.path;
   for (const r of gitRepos) {
-    const wtPath = naming.worktreePath(r.path, feature);
+    // Reuse an existing worktree (new or legacy layout) before creating one.
+    // Avoids "branch already checked out" failures when bn was previously
+    // run with the old layout convention.
+    const wtPath =
+      naming.existingWorktreePath(r.path, feature)
+      ?? naming.worktreePath(r.path, feature);
     logger.info("");
     logger.info(`--- ${r.name} ---`);
     await git.worktreeAdd(r.path, wtPath, branch);

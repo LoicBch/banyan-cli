@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { run, runOrThrow } from "./exec.js";
 import { GitError } from "./errors.js";
 
@@ -37,6 +37,10 @@ export async function worktreeAdd(
   if (existsSync(wtPath)) {
     return;
   }
+  // Ensure the parent directory exists. `git worktree add` does NOT create
+  // intermediate directories itself, and our new layout puts worktrees inside
+  // a `worktree-<repo>` subdir that may not exist yet.
+  mkdirSync(dirname(wtPath), { recursive: true });
   const withNew = await run("git", ["worktree", "add", wtPath, "-b", branch], { cwd: repo });
   if (withNew.code === 0) return;
 

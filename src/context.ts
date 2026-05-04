@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import {
   getProject,
   getRepo,
@@ -45,7 +44,7 @@ export function resolveRepos(
     return [repoName];
   }
   const withWorktree = project.repos
-    .filter((r) => existsSync(naming.worktreePath(r.path, feature)))
+    .filter((r) => naming.existingWorktreePath(r.path, feature) !== undefined)
     .map((r) => r.name);
   if (withWorktree.length === 0) {
     throw new UsageError(
@@ -73,7 +72,10 @@ export function buildContext(
     naming: {
       session: naming.sessionName(project.name),
       worktreePath:
-        repo && feature ? naming.worktreePath(repo.path, feature) : undefined,
+        repo && feature
+          ? (naming.existingWorktreePath(repo.path, feature)
+              ?? naming.worktreePath(repo.path, feature))
+          : undefined,
       branchName: feature ? naming.branchName(feature) : undefined,
       windowName:
         repo && feature ? naming.windowName(repo.name, feature) : undefined,

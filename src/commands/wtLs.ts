@@ -1,7 +1,6 @@
 import path from "node:path";
 import type { Context } from "../context.js";
 import * as git from "../git.js";
-import * as docker from "../docker.js";
 
 export async function wtLs(ctx: Context): Promise<void> {
   for (const repo of ctx.project.repos) {

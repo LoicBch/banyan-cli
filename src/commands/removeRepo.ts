@@ -1,5 +1,4 @@
-import type { Config } from "../config.js";
-import { saveConfig } from "../config.js";
+import { getProject, saveConfig, type Config } from "../config.js";
 import { logger } from "../logger.js";
 import { ConfigError } from "../errors.js";
 
@@ -8,10 +7,7 @@ export async function removeRepo(
   projectName: string,
   repoName: string,
 ): Promise<Config> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) {
-    throw new ConfigError(`unknown project "${projectName}"`);
-  }
+  const project = getProject(config, projectName);
   if (!project.repos.some((r) => r.name === repoName)) {
     throw new ConfigError(
       `unknown repo "${repoName}" in project "${projectName}"`,

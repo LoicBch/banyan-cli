@@ -1,7 +1,12 @@
-import type { Config, ProjectConfig, RepoConfig } from "../config.js";
+import {
+  getProject,
+  type Config,
+  type ProjectConfig,
+  type RepoConfig,
+} from "../config.js";
 import { logger } from "../logger.js";
 import * as docker from "../docker.js";
-import { ConfigError, UsageError } from "../errors.js";
+import { UsageError } from "../errors.js";
 import { run } from "../exec.js";
 
 /** Find all compose-type repos in a project. Errors if none defined. */
@@ -20,8 +25,7 @@ function composeRepos(project: ProjectConfig): RepoConfig[] {
  * with their running state. Groups by feature.
  */
 export async function envLs(config: Config, projectName: string): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   composeRepos(project);
 
   const r = await run("docker", ["compose", "ls", "--all", "--format", "json"]);
@@ -55,8 +59,7 @@ export async function envLogs(
   feature: string,
   service?: string,
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repos = composeRepos(project);
   // If multiple compose repos exist, tail logs from the first one by default.
   const repo = repos[0]!;
@@ -70,8 +73,7 @@ export async function envExec(
   service: string,
   cmd: string[],
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repos = composeRepos(project);
   const repo = repos[0]!;
   await docker.exec(repo, project, feature, service, cmd.length > 0 ? cmd : ["sh"]);
@@ -82,8 +84,7 @@ export async function envRecreate(
   projectName: string,
   feature: string,
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repos = composeRepos(project);
   for (const repo of repos) {
     logger.info(`recreating stack for ${repo.name}…`);
@@ -102,8 +103,7 @@ export async function envUp(
   projectName: string,
   feature: string,
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repos = composeRepos(project);
   for (const repo of repos) {
     logger.info(`starting compose stack for ${repo.name} (${feature})…`);
@@ -121,8 +121,7 @@ export async function envDown(
   projectName: string,
   feature: string,
 ): Promise<void> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repos = composeRepos(project);
   for (const repo of repos) {
     logger.info(`stopping compose stack for ${repo.name} (${feature})…`);

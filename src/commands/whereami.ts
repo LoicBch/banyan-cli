@@ -1,6 +1,8 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
 import type { Config, ProjectConfig, RepoConfig } from "../config.js";
+import * as naming from "../naming.js";
+import { shellEscapeSingleQuoted } from "../shell.js";
 
 export interface LocationContext {
   project: ProjectConfig;
@@ -22,44 +24,59 @@ export interface LocationContext {
 export function resolveLocation(cfg: Config, cwd: string): LocationContext | undefined {
   const resolved = canonical(cwd);
 
-  let best: { project: ProjectConfig; repo?: RepoConfig; match: "main" | "worktree" | null; repoPath?: string } | undefined;
+  let best:
+    | {
+        project: ProjectConfig;
+        repo: RepoConfig;
+        match: "main" | "worktree";
+        repoPath: string;
+        feature?: string;
+      }
+    | undefined;
 
   for (const project of cfg.projects) {
     for (const repo of project.repos) {
       const repoPath = canonical(repo.path);
-      let match: "main" | "worktree" | null = null;
+      // Main checkout?
       if (resolved === repoPath || resolved.startsWith(repoPath + path.sep)) {
-        match = "main";
-      } else if (resolved.startsWith(repoPath + "-")) {
-        match = "worktree";
+        if (!best || repoPath.length > best.repoPath.length) {
+          best = { project, repo, match: "main", repoPath };
+        }
+        continue;
       }
-      if (match) {
-        if (!best || repoPath.length > (best.repoPath?.length ?? 0)) {
-          best = { project, repo, match, repoPath };
+      // Worktree (new layout: <parent>/worktree-<basename>/<feature>,
+      //          legacy layout: <repoPath>-<feature>) — handled by naming
+      const parsed = naming.parseWorktreePath(resolved, repoPath);
+      if (parsed) {
+        if (!best || repoPath.length > best.repoPath.length) {
+          best = {
+            project,
+            repo,
+            match: "worktree",
+            repoPath,
+            feature: parsed.feature,
+          };
         }
       }
     }
   }
 
-  // If we found a specific repo match, return it with full context.
-  if (best?.repo && best.match) {
-    if (best.match === "main") {
-      return { project: best.project, repo: best.repo, inMainRepo: true };
-    }
-    // worktree: extract feature from "<repoPath>-<feature>[/rest]"
-    const afterDash = resolved.slice((best.repoPath?.length ?? 0) + 1);
-    const feature = afterDash.split(path.sep)[0];
-    const worktreePath = `${best.repoPath}-${feature}`;
-    return {
-      project: best.project,
-      repo: best.repo,
-      feature,
-      worktreePath,
-      inMainRepo: false,
-    };
-  }
+  if (!best) return undefined;
 
-  return undefined;
+  if (best.match === "main") {
+    return { project: best.project, repo: best.repo, inMainRepo: true };
+  }
+  // worktree
+  const feature = best.feature!;
+  const wtPath = naming.existingWorktreePath(best.repoPath, feature)
+    ?? naming.worktreePath(best.repoPath, feature);
+  return {
+    project: best.project,
+    repo: best.repo,
+    feature,
+    worktreePath: wtPath,
+    inMainRepo: false,
+  };
 }
 
 /** Resolve path and follow symlinks (e.g. /tmp → /private/tmp on macOS). */
@@ -92,7 +109,5 @@ export async function whereami(config: Config): Promise<void> {
   process.stdout.write(lines.join("\n") + "\n");
 }
 
-function shellEscape(s: string): string {
-  // single-quoted strings in shell: replace ' with '\''
-  return s.replace(/'/g, `'\\''`);
-}
+// alias kept for clarity at the call site (`key='${shellEscape(...)}'`)
+const shellEscape = shellEscapeSingleQuoted;

@@ -20,6 +20,17 @@ export interface ResolveOpts {
   auto?: boolean;
   /** Max seconds to wait for the agent to finish resolving. */
   timeoutSec?: number;
+  /**
+   * Extra `--add-dir` paths so the resolver can read sibling worktrees of
+   * OTHER features (cross-feature awareness). Typically the parent dirs of
+   * every repo in the project — same scope as the orchestrator.
+   */
+  addDirs?: string[];
+  /**
+   * Path to a Claude `--mcp-config` json giving the resolver access to the
+   * banyan MCP tools (banyan_list_features, banyan_feature_status, ...).
+   */
+  mcpConfig?: string;
 }
 
 async function confirmResolve(): Promise<boolean> {
@@ -45,6 +56,22 @@ function prettyPrintConflicts(info: ConflictInfo, logger: Logger): void {
 
 function buildPrompt(opts: ResolveOpts, info: ConflictInfo): string {
   const fileList = info.files.map((f) => `  - ${f.path}`).join("\n");
+  const crossFeatureSection = opts.mcpConfig
+    ? [
+        ``,
+        `Cross-feature context (banyan project "${opts.projectName}"):`,
+        `- You also have read access (via --add-dir) to the parent directory of`,
+        `  every repo in this project, so you can inspect SIBLING worktrees of`,
+        `  other in-flight features. They live as '<repo-path>-<other-feature>'.`,
+        `- The banyan MCP server is wired in. You can call:`,
+        `    banyan_list_features("${opts.projectName}")        — see all active features`,
+        `    banyan_feature_status("${opts.projectName}", name) — git state per repo`,
+        `- Use this BEFORE editing if a conflict's origin is unclear: another`,
+        `  feature merged recently may explain the incoming hunk. Reading the`,
+        `  sibling worktree's diff is often the fastest way to understand intent.`,
+        `- Don't modify sibling worktrees. Read-only.`,
+      ].join("\n")
+    : "";
   return [
     `A 'git rebase ${opts.baseRef}' is in progress in this worktree and has produced conflicts.`,
     `cwd: ${opts.worktreePath}`,
@@ -61,6 +88,7 @@ function buildPrompt(opts: ResolveOpts, info: ConflictInfo): string {
     `  4. Edit each conflicting file to preserve BOTH intents. Remove all conflict markers.`,
     `  5. 'git add -A && GIT_EDITOR=true git rebase --continue' until the rebase completes.`,
     `  6. If you hit another conflict after continue, repeat 4-5.`,
+    crossFeatureSection,
     ``,
     `End state: 'git status' shows a clean working tree and no rebase in progress.`,
     `Do NOT push, do NOT create a branch, do NOT touch git remote. banyan handles those.`,
@@ -81,13 +109,16 @@ function runHeadlessClaude(
   cwd: string,
   timeoutSec: number,
   logger: Logger,
+  extras: { addDirs?: string[]; mcpConfig?: string } = {},
 ): Promise<number> {
   return new Promise((resolve, reject) => {
-    const args = [
-      "-p",
-      prompt,
-      "--dangerously-skip-permissions",
-    ];
+    const args: string[] = ["-p", prompt, "--dangerously-skip-permissions"];
+    if (extras.addDirs && extras.addDirs.length > 0) {
+      args.push("--add-dir", ...extras.addDirs);
+    }
+    if (extras.mcpConfig) {
+      args.push("--mcp-config", extras.mcpConfig);
+    }
     const child = spawn("claude", args, {
       cwd,
       stdio: ["ignore", "inherit", "inherit"],
@@ -123,11 +154,22 @@ export async function resolveConflictsInteractive(
 
   const prompt = buildPrompt(opts, info);
   const timeout = opts.timeoutSec ?? 600;
-  opts.logger.info(`launching headless claude resolver (cwd=${opts.worktreePath}, timeout=${timeout}s)…`);
+  const ctxBits: string[] = [];
+  if (opts.addDirs && opts.addDirs.length > 0) {
+    ctxBits.push(`+${opts.addDirs.length} --add-dir`);
+  }
+  if (opts.mcpConfig) ctxBits.push("banyan MCP");
+  const ctxSuffix = ctxBits.length > 0 ? ` [${ctxBits.join(", ")}]` : "";
+  opts.logger.info(
+    `launching headless claude resolver (cwd=${opts.worktreePath}, timeout=${timeout}s)${ctxSuffix}…`,
+  );
   opts.logger.info(`  claude output follows:`);
   opts.logger.info(`  ${"─".repeat(60)}`);
 
-  const exitCode = await runHeadlessClaude(prompt, opts.worktreePath, timeout, opts.logger);
+  const exitCode = await runHeadlessClaude(prompt, opts.worktreePath, timeout, opts.logger, {
+    addDirs: opts.addDirs,
+    mcpConfig: opts.mcpConfig,
+  });
 
   opts.logger.info(`  ${"─".repeat(60)}`);
   if (exitCode !== 0) {

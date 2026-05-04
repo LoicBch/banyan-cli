@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import { getProject, type Config } from "../config.js";
 import { runInherit } from "../exec.js";
 import { logger } from "../logger.js";
 import { UsageError, ConfigError } from "../errors.js";
@@ -9,8 +9,7 @@ export async function deploy(
   repoName: string | undefined,
   extraArgs: string[],
 ): Promise<number> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
 
   let command: string;
   let scope: string;

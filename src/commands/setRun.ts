@@ -1,5 +1,10 @@
-import type { Config, RepoConfig, RunConfig } from "../config.js";
-import { saveConfig } from "../config.js";
+import {
+  getProject,
+  saveConfig,
+  type Config,
+  type RepoConfig,
+  type RunConfig,
+} from "../config.js";
 import { logger } from "../logger.js";
 import { ConfigError } from "../errors.js";
 
@@ -17,8 +22,7 @@ export async function setRun(
   repoName: string,
   opts: SetRunOpts,
 ): Promise<Config> {
-  const project = config.projects.find((p) => p.name === projectName);
-  if (!project) throw new ConfigError(`unknown project "${projectName}"`);
+  const project = getProject(config, projectName);
   const repo = project.repos.find((r) => r.name === repoName);
   if (!repo) throw new ConfigError(`unknown repo "${repoName}" in project "${projectName}"`);
 
