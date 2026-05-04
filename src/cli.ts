@@ -3,6 +3,7 @@ import { loadConfig, type Config } from "./config.js";
 import { BanyanError } from "./errors.js";
 import { logger } from "./logger.js";
 import { inferProjectFromCwd } from "./projectInference.js";
+import { printBanner } from "./banner.js";
 
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
@@ -13,6 +14,12 @@ import { serve } from "./commands/serve.js";
 import { registerProjectCommands } from "./cli/project.js";
 
 export async function run(argv: string[]): Promise<number> {
+  // No-args banner: greet the user with the banyan splash before deferring
+  // to commander's help. Skipped when stdout is piped (don't pollute scripts).
+  if (argv.length === 0 && process.stdout.isTTY) {
+    printBanner();
+  }
+
   let config: Config;
   try {
     config = await loadConfig();
