@@ -149,17 +149,26 @@ export async function buildOrchestratorClaudeCommand(
   const parentDirs = projectParentDirs(project);
   const mcpConfig = ensureBanyanMcpConfig();
   const systemPrompt = await buildSystemPrompt(project);
-  const resumeArg = hasOrchestratorMarker(project.name) ? "--continue " : "";
 
   const addDirArgs = parentDirs.map(shellQuote).join(" ");
-  const command =
-    `claude ${resumeArg}` +
+  const argsTail =
     `--mcp-config ${shellQuote(mcpConfig)} ` +
     `--add-dir ${addDirArgs} ` +
     `--append-system-prompt ${shellQuote(systemPrompt)}`;
 
-  // Mark this run so the NEXT one picks --continue. Existence of the file is
-  // enough — claude generates the actual session id on its own.
+  // Try to resume a prior orchestrator session via `--continue`; if no
+  // session exists for this cwd (e.g. fresh project, marker stale, or user
+  // deleted ~/.claude), fall back to a fresh session via the shell `||`
+  // chain. The marker is still useful as a signal for `bn orchestrator
+  // status`, but we no longer rely on it as the sole gate.
+  const resumeAttempt = hasOrchestratorMarker(project.name)
+    ? `claude --continue ${argsTail} 2>/dev/null || `
+    : "";
+  const command = `${resumeAttempt}claude ${argsTail}`;
+
+  // Mark this run so the next call sees the marker and tries --continue.
+  // The shell fallback above means a stale/missing session no longer breaks
+  // the launch — the user just gets a fresh conversation.
   recordOrchestratorMarker(project.name);
 
   return { command, parentDirs, mcpConfig };
