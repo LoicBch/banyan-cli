@@ -50,17 +50,53 @@ bn myproject merge login      ← rebase + push + MR + auto-resolve conflicts
 - **MCP server**: every banyan operation exposed as a tool to Claude Code, Cursor, anything MCP-aware.
 - **Survives reboots**: `bn <project> resume` recreates panes, restarts run processes, resumes Claude conversations.
 
+## Prerequisites
+
+Banyan runs on **macOS and Linux**. Windows isn't supported — use WSL2.
+
+**Required** (must be on your `PATH`):
+
+| | Why |
+|---|---|
+| **Node.js ≥ 20** | runtime; native test runner + ESM |
+| **git ≥ 2.5** | `git worktree`, `git symbolic-ref`, `git rebase` |
+| **tmux ≥ 3.0** | the entire workspace concept (panes, popups, `set-option -p`) |
+| **bash** | every helper script under `tmux/` |
+| **[Claude Code CLI](https://docs.claude.com/claude-code)** (`claude`) | per-feature agents, orchestrator, headless conflict resolver |
+
+**Optional** (only needed for specific features):
+
+| | Needed for |
+|---|---|
+| **Docker** + Compose v2 | repos with `type: compose` |
+| **gh** ([GitHub CLI](https://cli.github.com)) | `bn merge` against GitHub remotes |
+| **glab** ([GitLab CLI](https://gitlab.com/gitlab-org/cli)) | `bn merge` against GitLab remotes |
+| **fzf** | tmux feature pickers (Alt+M/C/R/T) — falls back to a prompt without it |
+| **less** | tmux popup viewers (Alt+L/S/I/?) |
+
+One-liner installs:
+
+```bash
+# macOS
+brew install node tmux git fzf gh
+# Debian / Ubuntu
+sudo apt install -y nodejs npm tmux git fzf less
+```
+
+Then install the Claude Code CLI from <https://docs.claude.com/claude-code>.
+
 ## Install
 
 ```bash
-git clone https://github.com/LoicBch/banyan-cli ~/Documents/Dev/banyan-cli
-cd ~/Documents/Dev/banyan-cli
+git clone https://github.com/LoicBch/banyan-cli
+cd banyan-cli
 npm install
 npm run build
-npm link
+npm link              # exposes `banyan` and `bn` on $PATH
+bn install-tmux       # renders ~/.config/banyan/banyan.tmux.conf
 ```
 
-Requires Node ≥ 20 (uses native test runner + ESM). After `npm link` you have `banyan` and `bn` in `$PATH`.
+Then add the printed line to your `~/.tmux.conf` (`source-file ~/.config/banyan/banyan.tmux.conf`) and reload tmux.
 
 ## Quick start
 
@@ -126,6 +162,7 @@ bn whereami                    detect project/repo/feature from cwd
 bn init <project>              create a new project
 bn sidebar                     live tree view (terminal)
 bn serve                       web dashboard (browser)
+bn install-tmux [-f]           render the tmux config to ~/.config/banyan/
 bn mcp-serve                   MCP server over stdio (used by claude --mcp-config)
 bn mcp-log [-f] [-n N]         tail recent MCP tool calls
 ```

@@ -4,12 +4,14 @@ import { BanyanError } from "./errors.js";
 import { logger } from "./logger.js";
 import { inferProjectFromCwd } from "./projectInference.js";
 import { printBanner } from "./banner.js";
+import { packageVersion } from "./version.js";
 
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
 import { sidebar } from "./commands/sidebar.js";
 import { whereami } from "./commands/whereami.js";
 import { serve } from "./commands/serve.js";
+import { installTmux } from "./commands/installTmux.js";
 
 import { registerProjectCommands } from "./cli/project.js";
 
@@ -48,6 +50,7 @@ export async function run(argv: string[]): Promise<number> {
     "whereami",
     "init",
     "serve",
+    "install-tmux",
     "mcp-serve",
     "mcp-log",
     "help",
@@ -72,7 +75,7 @@ export async function run(argv: string[]): Promise<number> {
   program
     .name("banyan")
     .description("tmux + git worktrees + Claude Code, multi-repo per project")
-    .version("0.2.0")
+    .version(packageVersion())
     .exitOverride();
 
   // ── top-level commands (no project) ──────────────────────────────────────
@@ -114,6 +117,14 @@ export async function run(argv: string[]): Promise<number> {
     .option("-l, --layout <path>", "layout script path (optional)")
     .action(async (project: string, opts: { repoName?: string; path?: string; layout?: string }) => {
       await init(config, project, opts);
+    });
+
+  program
+    .command("install-tmux")
+    .description("render the banyan tmux config to ~/.config/banyan/banyan.tmux.conf")
+    .option("-f, --force", "overwrite an existing rendered config")
+    .action(async (opts: { force?: boolean }) => {
+      await installTmux({ force: opts.force });
     });
 
   program

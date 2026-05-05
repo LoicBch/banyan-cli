@@ -12,6 +12,7 @@ const TOPLEVEL_CMDS = new Set([
   "sidebar",
   "whereami",
   "serve",
+  "install-tmux",
   "help",
   "-h",
   "--help",

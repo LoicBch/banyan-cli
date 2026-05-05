@@ -41,8 +41,8 @@ describe("naming — basic", () => {
 describe("naming — worktreePath (new layout)", () => {
   it("groups feature worktrees under <parent>/worktree-<basename>", () => {
     assert.equal(
-      worktreePath("/home/u/IdeaProjects/Server", "login"),
-      "/home/u/IdeaProjects/worktree-Server/login",
+      worktreePath("/repos/IdeaProjects/Server", "login"),
+      "/repos/IdeaProjects/worktree-Server/login",
     );
   });
 
@@ -61,53 +61,53 @@ describe("naming — worktreePath (new layout)", () => {
 describe("naming — legacyWorktreePath", () => {
   it("returns the old sibling-dash format", () => {
     assert.equal(
-      legacyWorktreePath("/home/u/IdeaProjects/Server", "login"),
-      "/home/u/IdeaProjects/Server-login",
+      legacyWorktreePath("/repos/IdeaProjects/Server", "login"),
+      "/repos/IdeaProjects/Server-login",
     );
   });
 });
 
 describe("naming — parseWorktreePath", () => {
-  const repoPath = "/home/u/Dev/Server";
+  const repoPath = "/repos/Dev/Server";
 
   it("detects new layout root", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/worktree-Server/login", repoPath),
+      parseWorktreePath("/repos/Dev/worktree-Server/login", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects new layout subdir", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/worktree-Server/login/src/main", repoPath),
+      parseWorktreePath("/repos/Dev/worktree-Server/login/src/main", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects legacy layout root", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-login", repoPath),
+      parseWorktreePath("/repos/Dev/Server-login", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects legacy layout subdir", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-login/src/main", repoPath),
+      parseWorktreePath("/repos/Dev/Server-login/src/main", repoPath),
       { feature: "login" },
     );
   });
 
   it("handles features with dashes in legacy layout", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-add-login-form", repoPath),
+      parseWorktreePath("/repos/Dev/Server-add-login-form", repoPath),
       { feature: "add-login-form" },
     );
   });
 
   it("returns undefined for unrelated paths", () => {
     assert.equal(parseWorktreePath("/tmp/foo", repoPath), undefined);
-    assert.equal(parseWorktreePath("/home/u/Dev/Other", repoPath), undefined);
+    assert.equal(parseWorktreePath("/repos/Dev/Other", repoPath), undefined);
   });
 
   it("does not match the main repo path itself", () => {

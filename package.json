@@ -36,7 +36,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/src/dashboard && cp -R src/dashboard/static dist/src/dashboard/ && chmod +x dist/src/bin/banyan.js",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/src/dashboard dist/tmux && cp -R src/dashboard/static dist/src/dashboard/ && cp -R tmux/. dist/tmux/ && chmod +x dist/src/bin/banyan.js",
+    "prepare": "npm run build",
     "dev": "tsc -p tsconfig.json --watch",
     "test": "node --test 'dist/test/**/*.test.js'",
     "clean": "rm -rf dist"
