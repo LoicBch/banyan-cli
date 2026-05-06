@@ -156,17 +156,27 @@ export function register(
     )
     .option("--since <iso>", "only reports submitted at-or-after this ISO timestamp")
     .option("--latest", "one entry per feature (the latest)")
-    .option("--json", "emit raw JSON instead of formatted output")
+    .option("--json", "emit raw JSON (one record per line in --watch mode)")
+    .option("-w, --watch", "tail new reports as they arrive (Ctrl+C to stop)")
+    .option("--no-notify", "in --watch mode, suppress the macOS notification")
     .action(
       async (
         feature: string | undefined,
-        opts: { since?: string; latest?: boolean; json?: boolean },
+        opts: {
+          since?: string;
+          latest?: boolean;
+          json?: boolean;
+          watch?: boolean;
+          notify?: boolean;
+        },
       ) => {
         await reportsLs(project.name, {
           feature,
           since: opts.since,
           latestOnly: opts.latest,
           json: opts.json,
+          watch: opts.watch,
+          notify: opts.notify,
         });
       },
     );

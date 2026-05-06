@@ -387,6 +387,84 @@ function renderPulse(pulse) {
   ]);
 }
 
+function statusBadge(status) {
+  switch (status) {
+    case "done":
+      return pill("done", "green");
+    case "blocked":
+      return pill("blocked", "red");
+    case "needs_review":
+      return pill("needs review", "yellow");
+    default:
+      return pill(status, "neutral");
+  }
+}
+
+function renderReportList(label, items) {
+  if (!items || items.length === 0) return null;
+  return h("div", { class: "mt-2" }, [
+    h("div", { class: "text-xs text-neutral-500 mb-1" }, [label]),
+    h(
+      "ul",
+      { class: "list-disc list-inside text-sm text-neutral-300 space-y-0.5" },
+      items.map((s) => h("li", {}, [s])),
+    ),
+  ]);
+}
+
+function renderReport(r) {
+  const ts = new Date(r.ts).toLocaleString();
+  return h("details", { class: "border border-neutral-800 rounded p-3 bg-neutral-950" }, [
+    h("summary", { class: "cursor-pointer text-sm flex items-center gap-2 select-none" }, [
+      statusBadge(r.status),
+      h("span", { class: "font-medium" }, [r.feature]),
+      h("span", { class: "text-neutral-500 text-xs ml-auto" }, [ts]),
+    ]),
+    h("div", { class: "mt-3 space-y-1" }, [
+      h("p", { class: "text-sm text-neutral-200 whitespace-pre-wrap" }, [r.summary]),
+      h("div", { class: "mt-2" }, [
+        h("div", { class: "text-xs text-neutral-500 mb-1" }, ["how to test"]),
+        h("pre", { class: "text-xs font-mono whitespace-pre-wrap text-neutral-300 bg-neutral-900 rounded p-2" }, [
+          r.testInstructions,
+        ]),
+      ]),
+      renderReportList("hesitations", r.hesitations),
+      renderReportList("open questions", r.openQuestions),
+      renderReportList("risks", r.risks),
+      r.filesChanged && r.filesChanged.length > 0
+        ? h("div", { class: "mt-2" }, [
+            h("div", { class: "text-xs text-neutral-500 mb-1" }, [`files (${r.filesChanged.length})`]),
+            h("pre", { class: "text-xs font-mono whitespace-pre-wrap text-neutral-300" }, [
+              r.filesChanged.join("\n"),
+            ]),
+          ])
+        : null,
+      r.commits && r.commits.length > 0
+        ? h("div", { class: "mt-2" }, [
+            h("div", { class: "text-xs text-neutral-500 mb-1" }, ["commits"]),
+            h(
+              "ul",
+              { class: "text-xs font-mono text-neutral-300 space-y-0.5" },
+              r.commits.map((c) => h("li", {}, [`${c.sha.slice(0, 8)}  ${c.message}`])),
+            ),
+          ])
+        : null,
+    ]),
+  ]);
+}
+
+function renderReportsSection(reports) {
+  if (!reports || reports.length === 0) return null;
+  // Most recent first in the UI.
+  const ordered = [...reports].reverse();
+  return h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
+    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
+      `📝 reports — ${reports.length} entr${reports.length > 1 ? "ies" : "y"}`,
+    ]),
+    h("div", { class: "space-y-2" }, ordered.map(renderReport)),
+  ]);
+}
+
 function renderProject(project) {
   const activeCount = project.repos.reduce((s, r) => s + r.worktrees.length, 0);
   const runningStacks = project.repos.flatMap((r) => r.stacks).filter((s) => s.running).length;
@@ -399,6 +477,8 @@ function renderProject(project) {
         renderPulse(project.pulse),
       ])
     : null;
+
+  const reportsSection = renderReportsSection(project.reports);
 
   return h("section", { class: "bg-neutral-900 border border-neutral-800 rounded-lg p-5" }, [
     h("div", { class: "flex items-center justify-between mb-4" }, [
@@ -415,6 +495,7 @@ function renderProject(project) {
     ]),
     h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
     pulseSection,
+    reportsSection,
   ]);
 }
 
@@ -455,6 +536,68 @@ async function fetchPulse(projectName) {
   }
 }
 
+async function fetchReports(projectName) {
+  try {
+    const r = await fetch(`/api/reports/${encodeURIComponent(projectName)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data.reports) ? data.reports : [];
+  } catch {
+    return [];
+  }
+}
+
+// ── notifications ──────────────────────────────────────────────────────────
+// Fire a browser notification when a never-seen-before report.ts shows up.
+// Per-project last-seen ts is stashed in localStorage so reloading doesn't
+// re-fire old entries.
+async function maybeRequestNotificationPermission() {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch { /* ignore */ }
+  }
+}
+
+function lastSeenKey(projectName) {
+  return `banyan.reports.lastSeen.${projectName}`;
+}
+
+function notifyNewReports(projectName, reports) {
+  if (!Array.isArray(reports) || reports.length === 0) return;
+  const key = lastSeenKey(projectName);
+  const lastSeen = localStorage.getItem(key) ?? "";
+  // Reports are returned in submission order — the last one is newest.
+  const newest = reports[reports.length - 1].ts;
+  if (newest <= lastSeen) return;
+
+  const fresh = reports.filter((r) => r.ts > lastSeen);
+  localStorage.setItem(key, newest);
+
+  // Don't notify on first-ever load (when nothing was seen before): we'd
+  // spam the user with the entire history. Set the bookmark silently.
+  if (lastSeen === "") return;
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    for (const r of fresh) {
+      const tag = `${projectName}/${r.feature}/${r.ts}`;
+      try {
+        new Notification(`${projectName} — ${r.feature}`, {
+          body: `[${r.status}] ${r.summary}`,
+          tag,
+        });
+      } catch { /* ignore */ }
+    }
+  }
+
+  // In-page toast as a fallback (and a redundant cue for users who missed
+  // the OS notification).
+  toast(
+    "info",
+    `${fresh.length} new report${fresh.length > 1 ? "s" : ""} — ${projectName}`,
+    fresh.map((r) => `[${r.status}] ${r.feature}: ${r.summary}`),
+  );
+}
+
 async function loop() {
   const state = await fetchState();
   if (state.error) {
@@ -472,7 +615,11 @@ async function loop() {
     if (Array.isArray(state.projects)) {
       await Promise.all(
         state.projects.map(async (p) => {
-          p.pulse = await fetchPulse(p.name);
+          [p.pulse, p.reports] = await Promise.all([
+            fetchPulse(p.name),
+            fetchReports(p.name),
+          ]);
+          notifyNewReports(p.name, p.reports);
         }),
       );
     }
@@ -486,4 +633,6 @@ function scheduleRefresh(immediate = false) {
   pollTimer = setTimeout(loop, immediate ? 200 : REFRESH_MS);
 }
 
+// Ask once on first load — non-blocking.
+maybeRequestNotificationPermission();
 loop();

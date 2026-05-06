@@ -13,6 +13,7 @@ import {
   actionEnvRecreate,
   actionMrStatus,
 } from "./actions.js";
+import { readReports } from "../reports.js";
 
 export interface ServerOptions {
   port?: number;         // default: first free port starting from 4242
@@ -58,6 +59,29 @@ export async function startServer(
         const { computePulse } = await import("../commands/pulse.js");
         const result = await computePulse(project);
         res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
+
+  // Reports timeline — append-only end-of-task reports per project.
+  app.get(
+    "/api/reports/:project",
+    async (req: Request<{ project: string }>, res: Response) => {
+      const projectName = req.params.project;
+      if (!config.projects.some((p) => p.name === projectName)) {
+        res.status(404).json({ error: `unknown project '${projectName}'` });
+        return;
+      }
+      const q = req.query as Record<string, string | undefined>;
+      try {
+        const reports = readReports(projectName, {
+          feature: q.feature || undefined,
+          since: q.since || undefined,
+          latestOnly: q.latestOnly === "true" || q.latestOnly === "1",
+        });
+        res.json({ reports });
       } catch (err) {
         res.status(500).json({ error: (err as Error).message });
       }
