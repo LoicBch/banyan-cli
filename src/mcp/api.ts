@@ -29,6 +29,12 @@ import { test as testCmd } from "../commands/test.js";
 import { testStop as testStopCmd } from "../commands/testStop.js";
 import { envUp, envDown, envRecreate } from "../commands/env.js";
 import { assignTask as assignTaskCmd } from "../commands/assignTask.js";
+import {
+  appendReport,
+  readReports,
+  type ReportInput,
+  type FeatureReport,
+} from "../reports.js";
 import { buildContext } from "../context.js";
 import { UsageError } from "../errors.js";
 
@@ -325,6 +331,41 @@ export async function assignTask(
   const config = await getConfig();
   const { paneId } = await assignTaskCmd(config, projectName, feature, prompt, opts);
   return { ok: true, paneId };
+}
+
+/**
+ * Submit an end-of-task report for a feature. Validates the project exists,
+ * then appends to the project's timeline. Multiple reports per feature are
+ * allowed (status updates, v1 / v2 of "done") — the timeline keeps history.
+ */
+export async function reportDone(
+  projectName: string,
+  feature: string,
+  input: ReportInput,
+): Promise<{ ok: true; ts: string }> {
+  const config = await getConfig();
+  getProject(config, projectName); // validates project exists, throws otherwise
+  if (!input.summary || !input.summary.trim()) {
+    throw new UsageError("summary is required");
+  }
+  if (!input.testInstructions || !input.testInstructions.trim()) {
+    throw new UsageError("testInstructions is required");
+  }
+  const record = appendReport(projectName, feature, input);
+  return { ok: true, ts: record.ts };
+}
+
+/**
+ * Read reports from a project's timeline. Optional filters: by feature,
+ * by date (ISO timestamp), and `latestOnly` to collapse to one per feature.
+ */
+export async function listReports(
+  projectName: string,
+  opts: { feature?: string; since?: string; latestOnly?: boolean } = {},
+): Promise<{ reports: FeatureReport[] }> {
+  const config = await getConfig();
+  getProject(config, projectName);
+  return { reports: readReports(projectName, opts) };
 }
 
 export async function removeFeature(

@@ -21,6 +21,7 @@ import { resume as resumeCmd } from "../commands/resume.js";
 import { sync as syncCmd } from "../commands/sync.js";
 import { pulse as pulseCmd } from "../commands/pulse.js";
 import { deploy } from "../commands/deploy.js";
+import { reportsLs } from "../commands/reportsLs.js";
 
 export function register(
   projectCmd: Command,
@@ -146,6 +147,29 @@ export function register(
     .action(async (feature: string | undefined) => {
       await portsCmd(config, project.name, feature);
     });
+
+  projectCmd
+    .command("reports [feature]")
+    .description(
+      "show end-of-task reports submitted by per-feature agents (timeline). " +
+        "no feature: all reports. with <feature>: just that feature's history.",
+    )
+    .option("--since <iso>", "only reports submitted at-or-after this ISO timestamp")
+    .option("--latest", "one entry per feature (the latest)")
+    .option("--json", "emit raw JSON instead of formatted output")
+    .action(
+      async (
+        feature: string | undefined,
+        opts: { since?: string; latest?: boolean; json?: boolean },
+      ) => {
+        await reportsLs(project.name, {
+          feature,
+          since: opts.since,
+          latestOnly: opts.latest,
+          json: opts.json,
+        });
+      },
+    );
 
   projectCmd
     .command("deploy [repo] [args...]")
