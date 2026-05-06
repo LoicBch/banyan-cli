@@ -25,8 +25,10 @@ export async function wtAll(
   config: Config,
   projectName: string,
   feature: string,
-  opts: { only?: string[]; initialPrompt?: string } = {},
+  opts: { only?: string[]; initialPrompt?: string; prefix?: string } = {},
 ): Promise<void> {
+  naming.assertValidFeature(feature);
+
   const project = getProject(config, projectName);
 
   if (opts.only) {
@@ -63,7 +65,7 @@ export async function wtAll(
   // Phase 2 — git worktrees + post-create hook per repo.
   const gitRepos = repos.filter((r) => r.type !== "compose");
   const worktreePaths: string[] = [];
-  const branch = naming.branchName(feature);
+  const branch = naming.formatBranchName(feature, opts.prefix);
   // mainRepo for hook lookup: first git repo's main path
   const mainRepoPath = gitRepos[0]?.path ?? project.repos[0]!.path;
   for (const r of gitRepos) {

@@ -117,7 +117,7 @@ async function syncOne(args: {
   mcpConfig: string;
 }): Promise<RepoOutcome> {
   const { project, repo, feature, worktreePath, opts, addDirs, mcpConfig } = args;
-  const branch = naming.branchName(feature);
+  const branch = await naming.resolveBranchName(repo.path, feature);
   const tag = `${repo.name}`;
 
   // 1. Skip dirty worktrees (don't silently auto-commit user's WIP).

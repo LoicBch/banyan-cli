@@ -1,5 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
+import * as git from "./git.js";
+import { UsageError } from "./errors.js";
 
 /**
  * Canonical path for a new worktree.
@@ -75,8 +77,74 @@ export function parseWorktreePath(
   return undefined;
 }
 
+/**
+ * Validate a feature identifier. The feature name is used as a tmux window
+ * suffix, a state file path component, a pane title, and a worktree subdir.
+ * `/` breaks all of those (invalid in tmux window names, creates nested dirs
+ * in state.ts, and parseWorktreePath only takes the first segment). Branches
+ * with prefixes belong on the `--prefix` flag, not in the feature ID.
+ */
+export function assertValidFeature(feature: string): void {
+  if (feature.includes("/")) {
+    const last = feature.split("/").pop()!;
+    const prefix = feature.slice(0, feature.length - last.length - 1);
+    throw new UsageError(
+      `feature names can't contain '/'. use --prefix to set a branch prefix:\n` +
+        `  bn <project> wt ${last} --prefix ${prefix}\n` +
+        `→ branch: ${prefix}/${last}, feature id: ${last}`,
+    );
+  }
+  if (feature.length === 0) {
+    throw new UsageError("feature name cannot be empty");
+  }
+}
+
+/**
+ * Default convention: `feature/<feature>`. Kept as the fallback when no
+ * existing worktree is found, and as the format used by `formatBranchName`
+ * when no custom prefix is provided.
+ */
 export function branchName(feature: string): string {
   return `feature/${feature}`;
+}
+
+/**
+ * Build a branch name at creation time, with optional custom prefix.
+ *  - prefix omitted        → `feature/<feature>` (default convention)
+ *  - prefix === ""         → `<feature>` (no prefix)
+ *  - prefix === "fix"      → `fix/<feature>`
+ *  - prefix === "release/v1" → `release/v1/<feature>` (multi-segment ok)
+ */
+export function formatBranchName(feature: string, prefix?: string): string {
+  if (prefix === undefined) return branchName(feature);
+  if (prefix === "") return feature;
+  return `${prefix.replace(/\/+$/, "")}/${feature}`;
+}
+
+/**
+ * Find the actual branch of a feature's worktree by asking git directly.
+ * Git is the source of truth — the worktree may have been created with a
+ * non-default prefix (`--prefix`), so recomputing from convention is
+ * unsafe. Falls back to the default `feature/<feature>` if no matching
+ * worktree exists (e.g., context built before the worktree is created).
+ */
+export async function resolveBranchName(
+  repoPath: string,
+  feature: string,
+): Promise<string> {
+  try {
+    const wts = await git.worktreeList(repoPath);
+    for (const wt of wts) {
+      if (wt.path === repoPath) continue;
+      const parsed = parseWorktreePath(wt.path, repoPath);
+      if (parsed?.feature === feature && wt.branch) {
+        return wt.branch;
+      }
+    }
+  } catch {
+    // fall through to default
+  }
+  return branchName(feature);
 }
 
 export function windowName(targetName: string, feature: string): string {

@@ -305,11 +305,13 @@ export async function createFeature(
   feature: string,
   repos?: string[],
   initialPrompt?: string,
+  prefix?: string,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
   await wtAll(config, projectName, feature, {
     ...(repos && repos.length > 0 ? { only: repos } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),
+    ...(prefix !== undefined ? { prefix } : {}),
   });
   return { ok: true, feature };
 }
@@ -334,7 +336,7 @@ export async function removeFeature(
   const project = getProject(config, projectName);
   const targets = repo ? [repo] : project.repos.map((r) => r.name);
   for (const r of targets) {
-    await wtRm(buildContext(config, projectName, { feature, repoName: r }));
+    await wtRm(await buildContext(config, projectName, { feature, repoName: r }));
   }
   return { ok: true };
 }
@@ -348,7 +350,7 @@ export async function cleanupFeature(
   const project = getProject(config, projectName);
   const targets = repo ? [repo] : project.repos.map((r) => r.name);
   for (const r of targets) {
-    await cleanup(buildContext(config, projectName, { feature, repoName: r }));
+    await cleanup(await buildContext(config, projectName, { feature, repoName: r }));
   }
   return { ok: true };
 }
@@ -368,7 +370,7 @@ export async function stopTest(
   feature: string,
 ): Promise<{ ok: true }> {
   const config = await getConfig();
-  await testStopCmd(buildContext(config, projectName, { feature }), feature);
+  await testStopCmd(await buildContext(config, projectName, { feature }), feature);
   return { ok: true };
 }
 
@@ -412,7 +414,7 @@ export async function rebaseFeature(
     return r.type !== "compose";
   });
   for (const r of targets) {
-    await rebaseCmd(buildContext(config, projectName, { feature, repoName: r }), { base });
+    await rebaseCmd(await buildContext(config, projectName, { feature, repoName: r }), { base });
   }
   return { ok: true };
 }
@@ -430,7 +432,7 @@ export async function mergeFeature(
     return r.type !== "compose";
   });
   for (const r of targets) {
-    await mergeCmd(buildContext(config, projectName, { feature, repoName: r }), {
+    await mergeCmd(await buildContext(config, projectName, { feature, repoName: r }), {
       autoResolve: opts.autoResolve ?? true, // default to auto in MCP
       strategy: opts.strategy,
       local: opts.local,

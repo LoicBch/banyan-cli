@@ -58,6 +58,8 @@ export async function test(
   feature: string,
   onlyRepos?: string[],
 ): Promise<void> {
+  naming.assertValidFeature(feature);
+
   const project = getProject(config, projectName);
 
   const selected =

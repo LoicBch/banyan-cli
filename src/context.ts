@@ -55,14 +55,24 @@ export function resolveRepos(
   return withWorktree;
 }
 
-export function buildContext(
+export async function buildContext(
   config: Config,
   projectName: string,
   opts: BuildContextOpts = {},
-): Context {
+): Promise<Context> {
   const project = getProject(config, projectName);
   const repo = opts.repoName ? getRepo(project, opts.repoName) : undefined;
   const feature = opts.feature;
+
+  // Resolve the actual branch from git when we have a (repo, feature) pair —
+  // the worktree may have been created with a non-default `--prefix`. Fall
+  // back to the convention name for "no repo" or "no worktree yet" cases.
+  const branchName =
+    repo && feature
+      ? await naming.resolveBranchName(repo.path, feature)
+      : feature
+        ? naming.branchName(feature)
+        : undefined;
 
   return {
     config,
@@ -76,7 +86,7 @@ export function buildContext(
           ? (naming.existingWorktreePath(repo.path, feature)
               ?? naming.worktreePath(repo.path, feature))
           : undefined,
-      branchName: feature ? naming.branchName(feature) : undefined,
+      branchName,
       windowName:
         repo && feature ? naming.windowName(repo.name, feature) : undefined,
     },

@@ -90,6 +90,6 @@ export async function resume(config: Config, projectName: string): Promise<void>
   // ── Step 5: Launch the workspace (will attach if running interactively) ─
   logger.info("");
   logger.info(`── launching workspace ──`);
-  const code = await start(buildContext(config, projectName));
+  const code = await start(await buildContext(config, projectName));
   if (code !== 0) process.exit(code);
 }

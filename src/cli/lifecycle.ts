@@ -31,7 +31,7 @@ export function register(
     .command("info")
     .description("show project details (layout, repos)")
     .action(async () => {
-      await info(buildContext(config, project.name));
+      await info(await buildContext(config, project.name));
     });
 
   projectCmd
@@ -50,7 +50,7 @@ export function register(
           await testCmd(config, project.name, loc.feature, undefined);
           return;
         }
-        const code = await start(buildContext(config, project.name));
+        const code = await start(await buildContext(config, project.name));
         process.exit(code);
       }
       await testCmd(config, project.name, feature, repos.length > 0 ? repos : undefined);
@@ -64,9 +64,9 @@ export function register(
     )
     .action(async (feature: string | undefined) => {
       if (feature) {
-        await testStop(buildContext(config, project.name), feature);
+        await testStop(await buildContext(config, project.name), feature);
       } else {
-        await stop(buildContext(config, project.name));
+        await stop(await buildContext(config, project.name));
       }
     });
 
@@ -74,7 +74,7 @@ export function register(
     .command("attach")
     .description("attach to the tmux session")
     .action(async () => {
-      const code = await attach(buildContext(config, project.name));
+      const code = await attach(await buildContext(config, project.name));
       process.exit(code);
     });
 
@@ -82,14 +82,14 @@ export function register(
     .command("detach")
     .description("detach clients from the tmux session")
     .action(async () => {
-      await detach(buildContext(config, project.name));
+      await detach(await buildContext(config, project.name));
     });
 
   projectCmd
     .command("status")
     .description("show session status and windows")
     .action(async () => {
-      await status(buildContext(config, project.name));
+      await status(await buildContext(config, project.name));
     });
 
   projectCmd
@@ -105,7 +105,7 @@ export function register(
     .command("ls-features")
     .description("list features that currently have a running test window")
     .action(async () => {
-      await testLs(buildContext(config, project.name));
+      await testLs(await buildContext(config, project.name));
     });
 
   projectCmd

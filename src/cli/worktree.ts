@@ -26,12 +26,23 @@ export function register(
       "-p, --prompt <prompt>",
       "first message sent to the per-feature claude agent (only on a fresh session)",
     )
-    .action(async (feature: string, repos: string[], opts: { prompt?: string }) => {
-      await wtAll(config, project.name, feature, {
-        ...(repos.length > 0 ? { only: repos } : {}),
-        ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
-      });
-    });
+    .option(
+      "--prefix <prefix>",
+      "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<feature>). pass '' for no prefix.",
+    )
+    .action(
+      async (
+        feature: string,
+        repos: string[],
+        opts: { prompt?: string; prefix?: string },
+      ) => {
+        await wtAll(config, project.name, feature, {
+          ...(repos.length > 0 ? { only: repos } : {}),
+          ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
+          ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+        });
+      },
+    );
 
   projectCmd
     .command("task <feature> <prompt>")
@@ -51,7 +62,7 @@ export function register(
       const repos = resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
-        await wtRm(buildContext(config, project.name, { feature, repoName: r }));
+        await wtRm(await buildContext(config, project.name, { feature, repoName: r }));
       }
     });
 
@@ -59,7 +70,7 @@ export function register(
     .command("wt-ls")
     .description("list worktrees across all repos")
     .action(async () => {
-      await wtLs(buildContext(config, project.name));
+      await wtLs(await buildContext(config, project.name));
     });
 
   projectCmd
@@ -71,7 +82,7 @@ export function register(
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await rebase(
-          buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature, repoName: r }),
           { base: opts.base },
         );
       }
@@ -117,7 +128,7 @@ export function register(
         for (const r of repos) {
           if (repos.length > 1) logger.info(`=== ${r} ===`);
           await merge(
-            buildContext(config, project.name, { feature, repoName: r }),
+            await buildContext(config, project.name, { feature, repoName: r }),
             {
               base: opts.base,
               local: opts.local,
@@ -145,7 +156,7 @@ export function register(
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await cleanup(
-          buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature, repoName: r }),
           { force: opts.force },
         );
       }

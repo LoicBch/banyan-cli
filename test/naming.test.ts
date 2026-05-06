@@ -9,6 +9,8 @@ import {
   existingWorktreePath,
   parseWorktreePath,
   branchName,
+  formatBranchName,
+  assertValidFeature,
   windowName,
   sessionName,
   agentsWindowName,
@@ -18,6 +20,39 @@ import {
 describe("naming — basic", () => {
   it("branchName prepends feature/ prefix", () => {
     assert.equal(branchName("login"), "feature/login");
+  });
+
+  it("formatBranchName uses default 'feature' prefix when none given", () => {
+    assert.equal(formatBranchName("login"), "feature/login");
+  });
+
+  it("formatBranchName uses a custom prefix", () => {
+    assert.equal(formatBranchName("oauth", "fix"), "fix/oauth");
+  });
+
+  it("formatBranchName with empty prefix returns the bare feature", () => {
+    assert.equal(formatBranchName("v2.1", ""), "v2.1");
+  });
+
+  it("formatBranchName supports multi-segment prefixes", () => {
+    assert.equal(formatBranchName("hotfix", "release/v1"), "release/v1/hotfix");
+  });
+
+  it("formatBranchName trims trailing slashes from the prefix", () => {
+    assert.equal(formatBranchName("foo", "fix/"), "fix/foo");
+    assert.equal(formatBranchName("foo", "fix//"), "fix/foo");
+  });
+
+  it("assertValidFeature rejects names with '/' and points to --prefix", () => {
+    assert.throws(() => assertValidFeature("fix/oauth"), /--prefix/);
+  });
+
+  it("assertValidFeature rejects empty names", () => {
+    assert.throws(() => assertValidFeature(""), /empty/);
+  });
+
+  it("assertValidFeature accepts a plain name", () => {
+    assert.doesNotThrow(() => assertValidFeature("login"));
   });
 
   it("windowName joins target and feature with dash", () => {

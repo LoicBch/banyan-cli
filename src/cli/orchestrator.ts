@@ -17,7 +17,7 @@ export function register(
       "spawn a project-wide claude agent with --add-dir on every repo's parent dir + banyan MCP wired in. coexists with per-feature panes.",
     )
     .action(async () => {
-      const code = await orchestrator.start(buildContext(config, project.name));
+      const code = await orchestrator.start(await buildContext(config, project.name));
       process.exit(code);
     });
 
@@ -25,7 +25,7 @@ export function register(
     .command("start")
     .description("start (or attach if running) the orchestrator")
     .action(async () => {
-      const code = await orchestrator.start(buildContext(config, project.name));
+      const code = await orchestrator.start(await buildContext(config, project.name));
       process.exit(code);
     });
 
@@ -33,13 +33,13 @@ export function register(
     .command("stop")
     .description("kill the orchestrator window (drops --continue marker)")
     .action(async () => {
-      await orchestrator.stop(buildContext(config, project.name));
+      await orchestrator.stop(await buildContext(config, project.name));
     });
 
   orchCmd
     .command("status")
     .description("report whether the orchestrator window is up")
     .action(async () => {
-      await orchestrator.status(buildContext(config, project.name));
+      await orchestrator.status(await buildContext(config, project.name));
     });
 }

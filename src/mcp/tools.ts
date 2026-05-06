@@ -134,13 +134,18 @@ export const tools: ToolDef[] = [
             description:
               "first message sent to the per-feature Claude agent (e.g. the task description). Use this to dispatch a task at creation time without a follow-up call.",
           },
+          prefix: {
+            type: "string",
+            description:
+              "branch prefix instead of the default 'feature' (e.g. 'fix' → fix/<feature>). Pass empty string for no prefix.",
+          },
         },
         required: ["project", "feature"],
         additionalProperties: false,
       },
     },
     handler: async (args: any) =>
-      api.createFeature(args.project, args.feature, args.repos, args.initialPrompt),
+      api.createFeature(args.project, args.feature, args.repos, args.initialPrompt, args.prefix),
   },
   {
     spec: {

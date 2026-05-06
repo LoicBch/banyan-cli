@@ -99,7 +99,7 @@ export function actionTestStop(
 ): Promise<ActionResult> {
   return serialize(() =>
     captureAction(async () => {
-      await testStop(buildContext(config, p.project), p.feature);
+      await testStop(await buildContext(config, p.project), p.feature);
     }),
   );
 }
@@ -117,7 +117,7 @@ export function actionCleanup(
   return serialize(() =>
     captureAction(async () => {
       await cleanup(
-        buildContext(config, p.project, { feature: p.feature, repoName: p.repo }),
+        await buildContext(config, p.project, { feature: p.feature, repoName: p.repo }),
       );
     }),
   );
