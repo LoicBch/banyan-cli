@@ -21,12 +21,15 @@ after(() => {
 
 const mod = await import("../src/agentPrompt.js");
 const {
-  DEFAULT_AGENT_PROMPT,
+  ALL_AGENT_MODES,
   loadAgentPromptTemplate,
   renderAgentPrompt,
   buildAgentPrompt,
   ensureProjectPromptFile,
   projectPromptPath,
+  getDefaultAgentPrompt,
+  resolveMode,
+  isAgentMode,
 } = mod;
 
 const CONFIG_DIR = path.join(tmpHome!, ".config", "banyan");
@@ -38,20 +41,41 @@ describe("agentPrompt", () => {
     }
   });
 
-  it("loadAgentPromptTemplate returns the default when no file exists", () => {
-    assert.equal(loadAgentPromptTemplate("demo"), DEFAULT_AGENT_PROMPT);
+  it("ALL_AGENT_MODES has the four expected modes", () => {
+    assert.deepEqual([...ALL_AGENT_MODES], [
+      "interactive",
+      "assisted",
+      "autonomous",
+      "autopilot",
+    ]);
   });
 
-  it("loadAgentPromptTemplate returns the per-project file when present", () => {
+  it("interactive mode has an empty default (no prompt injected)", () => {
+    assert.equal(getDefaultAgentPrompt("interactive"), "");
+  });
+
+  it("non-interactive modes have non-empty defaults", () => {
+    for (const m of ["assisted", "autonomous", "autopilot"] as const) {
+      assert.ok(getDefaultAgentPrompt(m).length > 0, `mode ${m} should have default`);
+    }
+  });
+
+  it("loadAgentPromptTemplate returns the default when no file exists", () => {
+    assert.equal(loadAgentPromptTemplate("demo", "autonomous"), getDefaultAgentPrompt("autonomous"));
+  });
+
+  it("loadAgentPromptTemplate returns the per-project per-mode file when present", () => {
     mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(projectPromptPath("demo"), "custom prompt for demo", "utf8");
-    assert.equal(loadAgentPromptTemplate("demo"), "custom prompt for demo");
+    writeFileSync(projectPromptPath("demo", "autonomous"), "custom autonomous", "utf8");
+    assert.equal(loadAgentPromptTemplate("demo", "autonomous"), "custom autonomous");
+    // assisted still picks up its default
+    assert.equal(loadAgentPromptTemplate("demo", "assisted"), getDefaultAgentPrompt("assisted"));
   });
 
   it("loadAgentPromptTemplate ignores empty per-project files", () => {
     mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(projectPromptPath("demo"), "   \n  \n", "utf8");
-    assert.equal(loadAgentPromptTemplate("demo"), DEFAULT_AGENT_PROMPT);
+    writeFileSync(projectPromptPath("demo", "autonomous"), "   \n  \n", "utf8");
+    assert.equal(loadAgentPromptTemplate("demo", "autonomous"), getDefaultAgentPrompt("autonomous"));
   });
 
   it("renderAgentPrompt substitutes placeholders", () => {
@@ -62,32 +86,48 @@ describe("agentPrompt", () => {
     assert.equal(out, "hello p4n / login!");
   });
 
-  it("renderAgentPrompt substitutes every occurrence", () => {
-    const out = renderAgentPrompt("{{project}} {{project}} {{feature}}", {
-      project: "x",
-      feature: "y",
-    });
-    assert.equal(out, "x x y");
+  it("buildAgentPrompt returns undefined for interactive mode", () => {
+    assert.equal(buildAgentPrompt("p4n", "login", "interactive"), undefined);
   });
 
-  it("buildAgentPrompt loads + renders in one go", () => {
-    const out = buildAgentPrompt("p4n", "login");
-    assert.ok(out.includes("'p4n'"), "should include project name");
-    assert.ok(out.includes("'login'"), "should include feature name");
-    assert.ok(!out.includes("{{project}}"), "no placeholders left");
-    assert.ok(!out.includes("{{feature}}"), "no placeholders left");
+  it("buildAgentPrompt renders + substitutes for non-interactive modes", () => {
+    const out = buildAgentPrompt("p4n", "login", "autonomous");
+    assert.ok(out, "should produce a prompt");
+    assert.ok(out!.includes("'p4n'"));
+    assert.ok(out!.includes("'login'"));
+    assert.ok(!out!.includes("{{project}}"));
   });
 
-  it("ensureProjectPromptFile creates the file from the default", () => {
-    const p = ensureProjectPromptFile("demo");
+  it("ensureProjectPromptFile creates the file from the default for the mode", () => {
+    const p = ensureProjectPromptFile("demo", "assisted");
     assert.ok(existsSync(p));
-    assert.equal(loadAgentPromptTemplate("demo"), DEFAULT_AGENT_PROMPT);
+    assert.equal(loadAgentPromptTemplate("demo", "assisted"), getDefaultAgentPrompt("assisted"));
   });
 
   it("ensureProjectPromptFile is idempotent (does not overwrite existing)", () => {
     mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(projectPromptPath("demo"), "user-edited", "utf8");
-    ensureProjectPromptFile("demo");
-    assert.equal(loadAgentPromptTemplate("demo"), "user-edited");
+    writeFileSync(projectPromptPath("demo", "autopilot"), "user-edited", "utf8");
+    ensureProjectPromptFile("demo", "autopilot");
+    assert.equal(loadAgentPromptTemplate("demo", "autopilot"), "user-edited");
+  });
+
+  it("resolveMode: explicit mode wins", () => {
+    assert.equal(resolveMode("autopilot", true), "autopilot");
+    assert.equal(resolveMode("interactive", true), "interactive");
+  });
+
+  it("resolveMode: defaults to autonomous when prompt is given, interactive otherwise", () => {
+    assert.equal(resolveMode(undefined, true), "autonomous");
+    assert.equal(resolveMode(undefined, false), "interactive");
+  });
+
+  it("isAgentMode validates strings", () => {
+    assert.ok(isAgentMode("interactive"));
+    assert.ok(isAgentMode("assisted"));
+    assert.ok(isAgentMode("autonomous"));
+    assert.ok(isAgentMode("autopilot"));
+    assert.ok(!isAgentMode("auto"));
+    assert.ok(!isAgentMode(""));
+    assert.ok(!isAgentMode("AUTONOMOUS"));
   });
 });

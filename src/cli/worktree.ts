@@ -13,6 +13,8 @@ import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
 import { assignTask } from "../commands/assignTask.js";
+import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
+import { UsageError } from "../errors.js";
 
 export function register(
   projectCmd: Command,
@@ -23,24 +25,21 @@ export function register(
     .command("wt <feature> [repos...]")
     .description(
       "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
-        "agent mode is `auto` when --prompt is given (convention injected, agent will report via banyan_report_done), " +
-        "`manual` otherwise (no convention, plain interactive claude). use --auto / --no-auto to override.",
+        "agent mode controls autonomy: interactive (plain claude, you drive), assisted (asks on big decisions), " +
+        "autonomous (decides everything, documents hesitations), autopilot (autonomous + works through TODO list, " +
+        "loops until banyan_report_done).",
     )
     .option(
       "-p, --prompt <prompt>",
-      "first message sent to the per-feature claude agent (only on a fresh session). implies --auto unless --no-auto.",
+      "first message sent to the per-feature claude agent (only on a fresh session). implies --mode autonomous unless overridden.",
     )
     .option(
       "--prefix <prefix>",
       "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<feature>). pass '' for no prefix.",
     )
     .option(
-      "-a, --auto",
-      "force agent mode 'auto': inject the banyan convention (agent will call banyan_report_done at task end). default when --prompt is given.",
-    )
-    .option(
-      "--no-auto",
-      "force agent mode 'manual': plain claude, no convention injected. default when --prompt is not given.",
+      "-m, --mode <mode>",
+      `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
     )
     .action(
       async (
@@ -49,14 +48,23 @@ export function register(
         opts: {
           prompt?: string;
           prefix?: string;
-          auto?: boolean;
+          mode?: string;
         },
       ) => {
+        let mode: AgentMode | undefined;
+        if (opts.mode !== undefined) {
+          if (!isAgentMode(opts.mode)) {
+            throw new UsageError(
+              `unknown mode '${opts.mode}'. valid: ${ALL_AGENT_MODES.join(", ")}`,
+            );
+          }
+          mode = opts.mode;
+        }
         await wtAll(config, project.name, feature, {
           ...(repos.length > 0 ? { only: repos } : {}),
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
-          ...(opts.auto !== undefined ? { auto: opts.auto } : {}),
+          ...(mode !== undefined ? { mode } : {}),
         });
       },
     );

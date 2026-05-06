@@ -2,29 +2,43 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { logger } from "../logger.js";
 import {
-  DEFAULT_AGENT_PROMPT,
+  ALL_AGENT_MODES,
   ensureProjectPromptFile,
+  getDefaultAgentPrompt,
+  isAgentMode,
   loadAgentPromptTemplate,
   projectPromptPath,
   renderAgentPrompt,
+  type AgentMode,
 } from "../agentPrompt.js";
+import { UsageError } from "../errors.js";
 
 export interface AgentPromptOpts {
-  /** Open the per-project file in $EDITOR (creating from default if needed). */
+  /** Which mode's prompt to view/edit. Default: autonomous (the most
+   *  commonly tweaked one for MCP-driven workflows). */
+  mode?: string;
+  /** Open the per-project per-mode file in $EDITOR (creates from default). */
   edit?: boolean;
-  /** Print the default template instead of the per-project effective one. */
+  /** Print the baked-in default instead of the per-project file. */
   default?: boolean;
   /** Render with placeholders substituted (uses <feature> as a stand-in). */
   rendered?: boolean;
 }
 
-/** View or edit the per-feature agent system prompt for a project. */
 export async function agentPrompt(
   projectName: string,
   opts: AgentPromptOpts = {},
 ): Promise<void> {
+  const mode = resolveModeFromOpt(opts.mode);
+
   if (opts.edit) {
-    const p = ensureProjectPromptFile(projectName);
+    if (mode === "interactive") {
+      throw new UsageError(
+        "interactive mode has no system prompt to edit (it injects nothing). " +
+          "edit one of: assisted, autonomous, autopilot",
+      );
+    }
+    const p = ensureProjectPromptFile(projectName, mode);
     const editor = process.env.EDITOR || process.env.VISUAL || "vi";
     logger.info(`opening ${p} in ${editor}…`);
     await new Promise<void>((resolve, reject) => {
@@ -39,19 +53,35 @@ export async function agentPrompt(
     return;
   }
 
-  const template = opts.default ? DEFAULT_AGENT_PROMPT : loadAgentPromptTemplate(projectName);
+  const template = opts.default
+    ? getDefaultAgentPrompt(mode)
+    : loadAgentPromptTemplate(projectName, mode);
   const text = opts.rendered
     ? renderAgentPrompt(template, { project: projectName, feature: "<feature>" })
     : template;
 
-  const path = projectPromptPath(projectName);
+  const path = projectPromptPath(projectName, mode);
   const sourceLabel = opts.default
-    ? "(showing baked-in default)"
+    ? `(showing baked-in default for mode '${mode}')`
     : existsSync(path)
       ? `(${path})`
-      : `(no per-project file — using default. create with: bn ${projectName} agent-prompt --edit)`;
+      : `(no per-project file for mode '${mode}' — using default. create with: bn ${projectName} agent-prompt --mode ${mode} --edit)`;
   logger.info(sourceLabel);
   logger.info("");
+  if (mode === "interactive" && text.trim().length === 0) {
+    logger.info("(interactive mode: no system prompt is injected — plain claude)");
+    return;
+  }
   process.stdout.write(text);
   if (!text.endsWith("\n")) process.stdout.write("\n");
+}
+
+function resolveModeFromOpt(modeOpt: string | undefined): AgentMode {
+  const m = modeOpt ?? "autonomous";
+  if (!isAgentMode(m)) {
+    throw new UsageError(
+      `unknown mode '${m}'. valid: ${ALL_AGENT_MODES.join(", ")}`,
+    );
+  }
+  return m;
 }

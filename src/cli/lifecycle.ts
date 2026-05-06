@@ -215,16 +215,28 @@ export function register(
   projectCmd
     .command("agent-prompt")
     .description(
-      "view or edit the per-feature agent system prompt. " +
-        "this text is appended to claude --system-prompt for every agent in this project " +
-        "(stored at ~/.config/banyan/<project>.agentprompt.md, falls back to a baked-in default).",
+      "view or edit the per-mode agent system prompt for this project. " +
+        "stored at ~/.config/banyan/<project>.agentprompt.<mode>.md (per-mode override), " +
+        "falls back to the baked-in default for that mode. " +
+        "interactive mode has no prompt (banyan injects nothing).",
     )
-    .option("-e, --edit", "open the per-project file in $EDITOR (creates from default if missing)")
+    .option(
+      "-m, --mode <mode>",
+      "which mode's prompt: assisted | autonomous | autopilot (default: autonomous)",
+    )
+    .option("-e, --edit", "open the per-project per-mode file in $EDITOR")
     .option("--default", "print the baked-in default instead of the per-project file")
     .option("--rendered", "substitute {{project}}/{{feature}} placeholders for preview")
-    .action(async (opts: { edit?: boolean; default?: boolean; rendered?: boolean }) => {
-      await agentPrompt(project.name, opts);
-    });
+    .action(
+      async (opts: {
+        mode?: string;
+        edit?: boolean;
+        default?: boolean;
+        rendered?: boolean;
+      }) => {
+        await agentPrompt(project.name, opts);
+      },
+    );
 
   projectCmd
     .command("deploy [repo] [args...]")

@@ -321,18 +321,18 @@ export async function createFeature(
   repos?: string[],
   initialPrompt?: string,
   prefix?: string,
-  auto?: boolean,
+  mode?: import("../agentPrompt.js").AgentMode,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
-  // Orchestrator-driven creation defaults to auto (the orchestrator is by
-  // construction delegating). Caller can pass auto=false explicitly to
-  // create a manual-mode feature via MCP.
-  const effectiveAuto = auto ?? true;
+  // MCP-driven creation defaults to `autonomous` (the orchestrator is by
+  // construction delegating). Caller can pass mode="interactive" for a
+  // hands-on session, "autopilot" for full TODO-list autopilot, etc.
+  const effectiveMode = mode ?? "autonomous";
   await wtAll(config, projectName, feature, {
     ...(repos && repos.length > 0 ? { only: repos } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),
     ...(prefix !== undefined ? { prefix } : {}),
-    auto: effectiveAuto,
+    mode: effectiveMode,
   });
   return { ok: true, feature };
 }

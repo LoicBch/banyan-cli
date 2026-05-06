@@ -7,7 +7,7 @@ import * as naming from "../naming.js";
 import { logger } from "../logger.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
-import { buildAgentPrompt } from "../agentPrompt.js";
+import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -30,17 +30,16 @@ export async function wtAll(
     only?: string[];
     initialPrompt?: string;
     prefix?: string;
-    /** Inject the banyan agent convention (system prompt asking the agent
-     *  to call banyan_report_done at task end). When undefined, defaults to
-     *  `true` iff `initialPrompt` is provided — passing a task = delegating
-     *  = convention should apply. Pass `false` to force manual mode. */
-    auto?: boolean;
+    /** Agent autonomy level. When undefined, defaults to `autonomous` if an
+     *  `initialPrompt` is given (delegating a task), `interactive` otherwise
+     *  (sitting next to plain claude). */
+    mode?: AgentMode;
   } = {},
 ): Promise<void> {
   naming.assertValidFeature(feature);
 
   const project = getProject(config, projectName);
-  const autoMode = opts.auto ?? !!opts.initialPrompt;
+  const mode = resolveMode(opts.mode, !!opts.initialPrompt);
 
   if (opts.only) {
     const unknown = opts.only.filter(
@@ -165,7 +164,7 @@ export async function wtAll(
   await claude.launchClaude(paneId, {
     additionalDirs,
     initialPrompt: opts.initialPrompt,
-    systemPrompt: autoMode ? buildAgentPrompt(projectName, feature) : undefined,
+    systemPrompt: buildAgentPrompt(projectName, feature, mode),
   });
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);
@@ -174,7 +173,7 @@ export async function wtAll(
     additionalDirs.length > 0
       ? ` (+${additionalDirs.length} --add-dir)`
       : "";
-  const modeSuffix = autoMode ? " · agent: auto (will report)" : " · agent: manual";
+  const modeSuffix = ` · agent: ${mode}`;
   logger.info("");
   logger.ok(
     `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}${modeSuffix}`,

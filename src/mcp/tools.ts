@@ -139,10 +139,11 @@ export const tools: ToolDef[] = [
             description:
               "branch prefix instead of the default 'feature' (e.g. 'fix' → fix/<feature>). Pass empty string for no prefix.",
           },
-          auto: {
-            type: "boolean",
+          mode: {
+            type: "string",
+            enum: ["interactive", "assisted", "autonomous", "autopilot"],
             description:
-              "agent mode. `true` (default for MCP-driven creation): inject the banyan convention so the agent will call `banyan_report_done` at task end. `false`: manual mode, no convention — plain claude. Use `false` when you want a hands-on session not driven by an autonomous report cycle.",
+              "agent autonomy level. interactive: plain claude, no convention. assisted: agent decides minor things, asks on big decisions. autonomous (default for MCP-driven creation): agent decides everything, documents hesitations in the report. autopilot: autonomous + works through a TODO list, loops until banyan_report_done is called.",
           },
         },
         required: ["project", "feature"],
@@ -156,7 +157,7 @@ export const tools: ToolDef[] = [
         args.repos,
         args.initialPrompt,
         args.prefix,
-        args.auto,
+        args.mode,
       ),
   },
   {
