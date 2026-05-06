@@ -139,13 +139,25 @@ export const tools: ToolDef[] = [
             description:
               "branch prefix instead of the default 'feature' (e.g. 'fix' → fix/<feature>). Pass empty string for no prefix.",
           },
+          auto: {
+            type: "boolean",
+            description:
+              "agent mode. `true` (default for MCP-driven creation): inject the banyan convention so the agent will call `banyan_report_done` at task end. `false`: manual mode, no convention — plain claude. Use `false` when you want a hands-on session not driven by an autonomous report cycle.",
+          },
         },
         required: ["project", "feature"],
         additionalProperties: false,
       },
     },
     handler: async (args: any) =>
-      api.createFeature(args.project, args.feature, args.repos, args.initialPrompt, args.prefix),
+      api.createFeature(
+        args.project,
+        args.feature,
+        args.repos,
+        args.initialPrompt,
+        args.prefix,
+        args.auto,
+      ),
   },
   {
     spec: {

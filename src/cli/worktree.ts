@@ -21,25 +21,42 @@ export function register(
 ): void {
   projectCmd
     .command("wt <feature> [repos...]")
-    .description("spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those.")
+    .description(
+      "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
+        "agent mode is `auto` when --prompt is given (convention injected, agent will report via banyan_report_done), " +
+        "`manual` otherwise (no convention, plain interactive claude). use --auto / --no-auto to override.",
+    )
     .option(
       "-p, --prompt <prompt>",
-      "first message sent to the per-feature claude agent (only on a fresh session)",
+      "first message sent to the per-feature claude agent (only on a fresh session). implies --auto unless --no-auto.",
     )
     .option(
       "--prefix <prefix>",
       "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<feature>). pass '' for no prefix.",
     )
+    .option(
+      "-a, --auto",
+      "force agent mode 'auto': inject the banyan convention (agent will call banyan_report_done at task end). default when --prompt is given.",
+    )
+    .option(
+      "--no-auto",
+      "force agent mode 'manual': plain claude, no convention injected. default when --prompt is not given.",
+    )
     .action(
       async (
         feature: string,
         repos: string[],
-        opts: { prompt?: string; prefix?: string },
+        opts: {
+          prompt?: string;
+          prefix?: string;
+          auto?: boolean;
+        },
       ) => {
         await wtAll(config, project.name, feature, {
           ...(repos.length > 0 ? { only: repos } : {}),
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+          ...(opts.auto !== undefined ? { auto: opts.auto } : {}),
         });
       },
     );

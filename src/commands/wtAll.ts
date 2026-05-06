@@ -26,11 +26,21 @@ export async function wtAll(
   config: Config,
   projectName: string,
   feature: string,
-  opts: { only?: string[]; initialPrompt?: string; prefix?: string } = {},
+  opts: {
+    only?: string[];
+    initialPrompt?: string;
+    prefix?: string;
+    /** Inject the banyan agent convention (system prompt asking the agent
+     *  to call banyan_report_done at task end). When undefined, defaults to
+     *  `true` iff `initialPrompt` is provided — passing a task = delegating
+     *  = convention should apply. Pass `false` to force manual mode. */
+    auto?: boolean;
+  } = {},
 ): Promise<void> {
   naming.assertValidFeature(feature);
 
   const project = getProject(config, projectName);
+  const autoMode = opts.auto ?? !!opts.initialPrompt;
 
   if (opts.only) {
     const unknown = opts.only.filter(
@@ -155,7 +165,7 @@ export async function wtAll(
   await claude.launchClaude(paneId, {
     additionalDirs,
     initialPrompt: opts.initialPrompt,
-    systemPrompt: buildAgentPrompt(projectName, feature),
+    systemPrompt: autoMode ? buildAgentPrompt(projectName, feature) : undefined,
   });
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);
@@ -164,9 +174,10 @@ export async function wtAll(
     additionalDirs.length > 0
       ? ` (+${additionalDirs.length} --add-dir)`
       : "";
+  const modeSuffix = autoMode ? " · agent: auto (will report)" : " · agent: manual";
   logger.info("");
   logger.ok(
-    `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}`,
+    `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}${modeSuffix}`,
   );
   logger.info(`attach with: bn ${projectName} attach`);
 }

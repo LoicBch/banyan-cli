@@ -312,12 +312,18 @@ export async function createFeature(
   repos?: string[],
   initialPrompt?: string,
   prefix?: string,
+  auto?: boolean,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
+  // Orchestrator-driven creation defaults to auto (the orchestrator is by
+  // construction delegating). Caller can pass auto=false explicitly to
+  // create a manual-mode feature via MCP.
+  const effectiveAuto = auto ?? true;
   await wtAll(config, projectName, feature, {
     ...(repos && repos.length > 0 ? { only: repos } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),
     ...(prefix !== undefined ? { prefix } : {}),
+    auto: effectiveAuto,
   });
   return { ok: true, feature };
 }
