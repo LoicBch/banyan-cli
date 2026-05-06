@@ -74,12 +74,19 @@ export function register(
 
   projectCmd
     .command("wt-rm <feature> [repo]")
-    .description("remove worktree (keep branch) and close pane. omit repo to act on all worktrees of this feature")
-    .action(async (feature: string, repo: string | undefined) => {
+    .description("remove worktree (keep branch local + remote) and close pane. omit repo to act on all worktrees of this feature")
+    .option(
+      "-f, --force",
+      "remove worktree even with uncommitted changes (branch is still kept)",
+    )
+    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
       const repos = resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
-        await wtRm(await buildContext(config, project.name, { feature, repoName: r }));
+        await wtRm(
+          await buildContext(config, project.name, { feature, repoName: r }),
+          { force: opts.force },
+        );
       }
     });
 

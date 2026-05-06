@@ -296,19 +296,25 @@ export const tools: ToolDef[] = [
   {
     spec: {
       name: "banyan_remove_feature",
-      description: "Remove worktrees of a feature (keeps branches and stack volumes). Light teardown.",
+      description:
+        "Remove worktrees of a feature (keeps branches local AND remote, keeps stack volumes). Light teardown — use this when you want to drop the working dir but keep the branch around (not ready to merge yet, want to revisit later, etc.).",
       inputSchema: {
         type: "object",
         properties: {
           project: { type: "string" },
           feature: { type: "string" },
           repo: { type: "string", description: "single repo (optional; default: all)" },
+          force: {
+            type: "boolean",
+            description: "remove the worktree even if it has uncommitted/untracked changes (the branch is still kept)",
+          },
         },
         required: ["project", "feature"],
         additionalProperties: false,
       },
     },
-    handler: async (args: any) => api.removeFeature(args.project, args.feature, args.repo),
+    handler: async (args: any) =>
+      api.removeFeature(args.project, args.feature, args.repo, args.force),
   },
   {
     spec: {

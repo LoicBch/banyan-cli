@@ -378,12 +378,16 @@ export async function removeFeature(
   projectName: string,
   feature: string,
   repo?: string,
+  force?: boolean,
 ): Promise<{ ok: true }> {
   const config = await getConfig();
   const project = getProject(config, projectName);
   const targets = repo ? [repo] : project.repos.map((r) => r.name);
   for (const r of targets) {
-    await wtRm(await buildContext(config, projectName, { feature, repoName: r }));
+    await wtRm(
+      await buildContext(config, projectName, { feature, repoName: r }),
+      { force },
+    );
   }
   return { ok: true };
 }

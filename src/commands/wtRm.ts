@@ -5,7 +5,14 @@ import * as docker from "../docker.js";
 import * as naming from "../naming.js";
 import { UsageError } from "../errors.js";
 
-export async function wtRm(ctx: Context): Promise<void> {
+export interface WtRmOpts {
+  /** Force-remove the worktree even if it has modified or untracked files.
+   *  The branch is still kept (this option does not propagate to branch
+   *  deletion — `wt-rm` never deletes branches). */
+  force?: boolean;
+}
+
+export async function wtRm(ctx: Context, opts: WtRmOpts = {}): Promise<void> {
   if (!ctx.repo || !ctx.feature) {
     throw new UsageError(`usage: bn ${ctx.project.name} wt-rm <feature> <repo>`);
   }
@@ -24,8 +31,12 @@ export async function wtRm(ctx: Context): Promise<void> {
     throw new UsageError(`usage: bn ${ctx.project.name} wt-rm <feature> <repo>`);
   }
 
-  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath);
-  ctx.logger.ok(`worktree removed: ${ctx.naming.worktreePath}`);
+  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath, {
+    force: opts.force,
+  });
+  ctx.logger.ok(
+    `worktree removed: ${ctx.naming.worktreePath}${opts.force ? " (forced)" : ""}`,
+  );
 
   const session = ctx.naming.session;
   const agentsWin = naming.agentsWindowName(ctx.project.name);
