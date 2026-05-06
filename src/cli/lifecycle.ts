@@ -22,6 +22,7 @@ import { sync as syncCmd } from "../commands/sync.js";
 import { pulse as pulseCmd } from "../commands/pulse.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
+import { agentPrompt } from "../commands/agentPrompt.js";
 
 export function register(
   projectCmd: Command,
@@ -180,6 +181,20 @@ export function register(
         });
       },
     );
+
+  projectCmd
+    .command("agent-prompt")
+    .description(
+      "view or edit the per-feature agent system prompt. " +
+        "this text is appended to claude --system-prompt for every agent in this project " +
+        "(stored at ~/.config/banyan/<project>.agentprompt.md, falls back to a baked-in default).",
+    )
+    .option("-e, --edit", "open the per-project file in $EDITOR (creates from default if missing)")
+    .option("--default", "print the baked-in default instead of the per-project file")
+    .option("--rendered", "substitute {{project}}/{{feature}} placeholders for preview")
+    .action(async (opts: { edit?: boolean; default?: boolean; rendered?: boolean }) => {
+      await agentPrompt(project.name, opts);
+    });
 
   projectCmd
     .command("deploy [repo] [args...]")

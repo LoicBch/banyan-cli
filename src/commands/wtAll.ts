@@ -7,6 +7,7 @@ import * as naming from "../naming.js";
 import { logger } from "../logger.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
+import { buildAgentPrompt } from "../agentPrompt.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -151,7 +152,11 @@ export async function wtAll(
   // Use main-horizontal so the ops pane stays small at the bottom while the
   // claude pane(s) take the majority of the window.
   await tmux.applyLayout(session, agentsWin, "main-horizontal");
-  await claude.launchClaude(paneId, additionalDirs, opts.initialPrompt);
+  await claude.launchClaude(paneId, {
+    additionalDirs,
+    initialPrompt: opts.initialPrompt,
+    systemPrompt: buildAgentPrompt(projectName, feature),
+  });
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);
 

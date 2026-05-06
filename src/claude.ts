@@ -5,36 +5,50 @@ function quote(arg: string): string {
   return `'${shellEscapeSingleQuoted(arg)}'`;
 }
 
+export interface LaunchClaudeOpts {
+  /** Extra `--add-dir <path>` entries (sibling worktrees). */
+  additionalDirs?: string[];
+  /** First message sent to the agent on a fresh session (positional arg).
+   *  Ignored on the `--continue` path so existing conversations aren't
+   *  overwritten. */
+  initialPrompt?: string;
+  /** Text appended to claude's default system prompt via
+   *  `--append-system-prompt`. Applied on both fresh and `--continue`
+   *  sessions, on every turn. */
+  systemPrompt?: string;
+}
+
 /**
  * Launch `claude` in the given tmux pane.
  *
- * When `additionalDirs` is non-empty, they are passed as `--add-dir` so a single
- * Claude agent can reach across every worktree of the feature.
- *
- * Tries to resume the prior conversation for this cwd via `--continue`; if no
- * prior session exists (Claude Code exits with "No conversation found"),
- * falls back to a fresh session. The `||` chain in the shell handles this
- * transparently — no error message is shown to the user thanks to stderr
- * suppression on the first attempt.
- *
- * `initialPrompt`, when provided, is passed as a positional argument to
- * `claude` *only on the fresh-session fallback*. On `--continue` (resuming a
- * prior conversation), it is ignored — the existing conversation is preserved
- * and the orchestrator should use a follow-up `assignTask` to send a new
- * message instead.
+ *   - `additionalDirs`: passed as `--add-dir` so a single Claude agent can
+ *     reach across every worktree of the feature.
+ *   - `systemPrompt`: appended via `--append-system-prompt`. This is how
+ *     banyan installs its standing conventions (e.g. "call
+ *     banyan_report_done when done") on every agent.
+ *   - Resume: tries `claude --continue` first; on failure (no prior
+ *     conversation for this cwd), falls back to a fresh session. The `||`
+ *     in the shell handles this transparently — no error is shown thanks
+ *     to stderr suppression on the first attempt.
+ *   - `initialPrompt`: passed as a positional argument *only on the
+ *     fresh-session fallback*. Ignored on `--continue`.
  */
 export async function launchClaude(
   paneId: string,
-  additionalDirs: string[] = [],
-  initialPrompt?: string,
+  opts: LaunchClaudeOpts = {},
 ): Promise<void> {
-  const argsTail =
-    additionalDirs.length > 0
-      ? ` --add-dir ${additionalDirs.map(quote).join(" ")}`
-      : "";
-  const freshArgs = initialPrompt
-    ? `${argsTail} ${quote(initialPrompt)}`
-    : argsTail;
-  const cmd = `claude --continue${argsTail} 2>/dev/null || claude${freshArgs}`;
+  const dirs = opts.additionalDirs ?? [];
+  const dirsTail =
+    dirs.length > 0 ? ` --add-dir ${dirs.map(quote).join(" ")}` : "";
+  const sysTail = opts.systemPrompt
+    ? ` --append-system-prompt ${quote(opts.systemPrompt)}`
+    : "";
+
+  const sharedArgs = `${dirsTail}${sysTail}`;
+  const freshArgs = opts.initialPrompt
+    ? `${sharedArgs} ${quote(opts.initialPrompt)}`
+    : sharedArgs;
+
+  const cmd = `claude --continue${sharedArgs} 2>/dev/null || claude${freshArgs}`;
   await tmux.sendKeys(paneId, cmd, { enter: true });
 }
