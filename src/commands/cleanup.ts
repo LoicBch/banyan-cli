@@ -5,6 +5,7 @@ import * as docker from "../docker.js";
 import * as naming from "../naming.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
+import { removeAutopilotSettings } from "../autopilot.js";
 
 export interface CleanupOpts {
   /** Force-remove the worktree even if it has modified or untracked files,
@@ -98,4 +99,8 @@ export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<voi
     // Silent when not found: this is normal on subsequent iterations
     // when multiple repos of the same feature share one pane.
   }
+
+  // Drop the autopilot settings file if one was generated. Idempotent —
+  // no-op if the feature wasn't run in autopilot mode.
+  removeAutopilotSettings(ctx.project.name, ctx.feature);
 }

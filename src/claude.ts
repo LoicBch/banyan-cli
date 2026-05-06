@@ -16,6 +16,10 @@ export interface LaunchClaudeOpts {
    *  `--append-system-prompt`. Applied on both fresh and `--continue`
    *  sessions, on every turn. */
   systemPrompt?: string;
+  /** Path to a JSON file passed via `claude --settings <path>`. Used by
+   *  the autopilot driver to register a Stop hook that re-prompts the
+   *  agent until the TODO list is done and a report has been submitted. */
+  settingsPath?: string;
 }
 
 /**
@@ -43,8 +47,11 @@ export async function launchClaude(
   const sysTail = opts.systemPrompt
     ? ` --append-system-prompt ${quote(opts.systemPrompt)}`
     : "";
+  const settingsTail = opts.settingsPath
+    ? ` --settings ${quote(opts.settingsPath)}`
+    : "";
 
-  const sharedArgs = `${dirsTail}${sysTail}`;
+  const sharedArgs = `${dirsTail}${sysTail}${settingsTail}`;
   const freshArgs = opts.initialPrompt
     ? `${sharedArgs} ${quote(opts.initialPrompt)}`
     : sharedArgs;

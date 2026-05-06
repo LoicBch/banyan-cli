@@ -13,6 +13,7 @@ const TOPLEVEL_CMDS = new Set([
   "whereami",
   "serve",
   "install-tmux",
+  "_autopilot-tick",
   "help",
   "-h",
   "--help",

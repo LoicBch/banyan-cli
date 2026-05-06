@@ -8,6 +8,7 @@ import { logger } from "../logger.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js";
+import { generateAutopilotSettings } from "../autopilot.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -161,10 +162,13 @@ export async function wtAll(
   // Use main-horizontal so the ops pane stays small at the bottom while the
   // claude pane(s) take the majority of the window.
   await tmux.applyLayout(session, agentsWin, "main-horizontal");
+  const settingsPath =
+    mode === "autopilot" ? generateAutopilotSettings(projectName, feature) : undefined;
   await claude.launchClaude(paneId, {
     additionalDirs,
     initialPrompt: opts.initialPrompt,
     systemPrompt: buildAgentPrompt(projectName, feature, mode),
+    settingsPath,
   });
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);

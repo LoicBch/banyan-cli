@@ -12,6 +12,7 @@ import { sidebar } from "./commands/sidebar.js";
 import { whereami } from "./commands/whereami.js";
 import { serve } from "./commands/serve.js";
 import { installTmux } from "./commands/installTmux.js";
+import { autopilotTick } from "./autopilot.js";
 
 import { registerProjectCommands } from "./cli/project.js";
 
@@ -51,6 +52,7 @@ export async function run(argv: string[]): Promise<number> {
     "init",
     "serve",
     "install-tmux",
+    "_autopilot-tick",
     "mcp-serve",
     "mcp-log",
     "help",
@@ -125,6 +127,18 @@ export async function run(argv: string[]): Promise<number> {
     .option("-f, --force", "overwrite an existing rendered config")
     .action(async (opts: { force?: boolean }) => {
       await installTmux({ force: opts.force });
+    });
+
+  // Hidden internal command — invoked by claude as a Stop hook for features
+  // launched in autopilot mode. Reads stdin (claude hook payload), checks
+  // TODO + reports state, and either exits 0 (allow stop) or emits a block
+  // directive to keep the agent looping.
+  program
+    .command("_autopilot-tick <project> <feature>")
+    .description("[internal] Stop hook for autopilot mode")
+    .action(async (proj: string, feat: string) => {
+      const code = await autopilotTick(proj, feat);
+      process.exit(code);
     });
 
   program
