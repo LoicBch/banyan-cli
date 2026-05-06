@@ -6,7 +6,13 @@ import * as naming from "../naming.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 
-export async function cleanup(ctx: Context): Promise<void> {
+export interface CleanupOpts {
+  /** Force-remove the worktree even if it has modified or untracked files,
+   *  and force-delete the branch even if it has unmerged commits. */
+  force?: boolean;
+}
+
+export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<void> {
   if (!ctx.repo || !ctx.feature) {
     throw new UsageError(`usage: bn ${ctx.project.name} cleanup <feature> <repo>`);
   }
@@ -38,8 +44,12 @@ export async function cleanup(ctx: Context): Promise<void> {
     }),
   );
 
-  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath);
-  ctx.logger.ok(`worktree removed: ${ctx.naming.worktreePath}`);
+  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath, {
+    force: opts.force,
+  });
+  ctx.logger.ok(
+    `worktree removed: ${ctx.naming.worktreePath}${opts.force ? " (forced)" : ""}`,
+  );
 
   await runHook(
     ctx.repo.path,
@@ -53,13 +63,13 @@ export async function cleanup(ctx: Context): Promise<void> {
   );
 
   const base = await git.defaultBranch(ctx.repo.path, ctx.repo.baseBranch);
-  const res = await git.safeDeleteBranch(
-    ctx.repo.path,
-    ctx.naming.branchName,
-    base,
-  );
+  const res = opts.force
+    ? await git.forceDeleteBranch(ctx.repo.path, ctx.naming.branchName)
+    : await git.safeDeleteBranch(ctx.repo.path, ctx.naming.branchName, base);
   if (res.deleted) {
-    ctx.logger.ok(`branch deleted: ${ctx.naming.branchName}`);
+    ctx.logger.ok(
+      `branch deleted: ${ctx.naming.branchName}${opts.force ? " (forced)" : ""}`,
+    );
   } else if (res.message) {
     ctx.logger.warn(res.message);
   }

@@ -122,11 +122,18 @@ export function register(
   projectCmd
     .command("cleanup <feature> [repo]")
     .description("remove worktree + delete branch (safe) + close pane. omit repo to cleanup all worktrees of this feature")
-    .action(async (feature: string, repo: string | undefined) => {
+    .option(
+      "-f, --force",
+      "remove worktree even with uncommitted changes; force-delete branch even with unmerged commits",
+    )
+    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
       const repos = resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
-        await cleanup(buildContext(config, project.name, { feature, repoName: r }));
+        await cleanup(
+          buildContext(config, project.name, { feature, repoName: r }),
+          { force: opts.force },
+        );
       }
     });
 }

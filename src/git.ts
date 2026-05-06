@@ -52,9 +52,16 @@ export async function worktreeAdd(
   );
 }
 
-export async function worktreeRemove(repo: string, wtPath: string): Promise<void> {
+export async function worktreeRemove(
+  repo: string,
+  wtPath: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
   if (!existsSync(wtPath)) return;
-  const r = await run("git", ["worktree", "remove", wtPath], { cwd: repo });
+  const args = ["worktree", "remove"];
+  if (opts.force) args.push("--force");
+  args.push(wtPath);
+  const r = await run("git", args, { cwd: repo });
   if (r.code !== 0) {
     throw new GitError(`worktree remove failed: ${r.stderr.trim() || r.stdout.trim()}`);
   }
@@ -173,7 +180,7 @@ export async function safeDeleteBranch(
     { cwd: repo },
   );
   if (ancestor.code === 0) {
-    return forceDelete(repo, branch);
+    return forceDeleteBranch(repo, branch);
   }
 
   // 2. Squash-merge fallback: ask origin for a fresh state, then check via
@@ -199,7 +206,7 @@ export async function safeDeleteBranch(
         const anyUnmerged = lines.some((l) => l.startsWith("+"));
         if (lines.length === 0 || !anyUnmerged) {
           // All patches are already in origin/<base> → safe to force-delete.
-          return forceDelete(repo, branch);
+          return forceDeleteBranch(repo, branch);
         }
       }
     }
@@ -214,7 +221,7 @@ export async function safeDeleteBranch(
   };
 }
 
-async function forceDelete(
+export async function forceDeleteBranch(
   repo: string,
   branch: string,
 ): Promise<{ deleted: boolean; message?: string }> {
