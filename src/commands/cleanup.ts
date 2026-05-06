@@ -6,6 +6,7 @@ import * as naming from "../naming.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 import { removeAutopilotSettings } from "../autopilot.js";
+import { deleteApproval } from "../approval.js";
 
 export interface CleanupOpts {
   /** Force-remove the worktree even if it has modified or untracked files,
@@ -103,4 +104,6 @@ export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<voi
   // Drop the autopilot settings file if one was generated. Idempotent —
   // no-op if the feature wasn't run in autopilot mode.
   removeAutopilotSettings(ctx.project.name, ctx.feature);
+  // Drop the plan-approval state file. Idempotent.
+  deleteApproval(ctx.project.name, ctx.feature);
 }

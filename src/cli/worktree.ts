@@ -41,6 +41,10 @@ export function register(
       "-m, --mode <mode>",
       `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
     )
+    .option(
+      "--review-plan",
+      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <feature>`. orthogonal to --mode (combine with autonomous or autopilot).",
+    )
     .action(
       async (
         feature: string,
@@ -49,6 +53,7 @@ export function register(
           prompt?: string;
           prefix?: string;
           mode?: string;
+          reviewPlan?: boolean;
         },
       ) => {
         let mode: AgentMode | undefined;
@@ -65,6 +70,7 @@ export function register(
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
+          ...(opts.reviewPlan ? { requireApproval: true } : {}),
         });
       },
     );

@@ -15,6 +15,9 @@ import {
 } from "./actions.js";
 import { readReports } from "../reports.js";
 import { listTodoFeatures } from "../todo.js";
+import { approvalStatus, approvePlan, getApproval, rejectPlan } from "../approval.js";
+import { readdirSync, existsSync as fsExists } from "node:fs";
+import { homedir } from "node:os";
 
 export interface ServerOptions {
   port?: number;         // default: first free port starting from 4242
@@ -88,6 +91,52 @@ export async function startServer(
       }
     },
   );
+
+  // Approval states per project (all features that have one).
+  app.get(
+    "/api/approvals/:project",
+    (req: Request<{ project: string }>, res: Response) => {
+      const projectName = req.params.project;
+      if (!config.projects.some((p) => p.name === projectName)) {
+        res.status(404).json({ error: `unknown project '${projectName}'` });
+        return;
+      }
+      const stateDir = `${homedir()}/.config/banyan/state`;
+      if (!fsExists(stateDir)) {
+        res.json({ approvals: [] });
+        return;
+      }
+      const prefix = `${projectName}.`;
+      const suffix = ".approval.json";
+      const out: unknown[] = [];
+      for (const f of readdirSync(stateDir)) {
+        if (!f.startsWith(prefix) || !f.endsWith(suffix)) continue;
+        const feature = f.slice(prefix.length, -suffix.length);
+        const state = getApproval(projectName, feature);
+        if (!state) continue;
+        out.push({ ...state, status: approvalStatus(state) });
+      }
+      res.json({ approvals: out });
+    },
+  );
+
+  app.post("/api/actions/approve", (req, res) => {
+    if (!requireFields(req, res, ["project", "feature"])) return;
+    const { project, feature, reject, note } = req.body as {
+      project: string;
+      feature: string;
+      reject?: boolean;
+      note?: string;
+    };
+    try {
+      const state = reject
+        ? rejectPlan(project, feature, note)
+        : approvePlan(project, feature);
+      res.json({ ok: true, state, status: approvalStatus(state) });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
+  });
 
   // TODO lists per project (all features).
   app.get(

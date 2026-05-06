@@ -28,6 +28,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { getTodo, isTodoComplete } from "./todo.js";
 import { readReports } from "./reports.js";
+import { approvalStatus, getApproval } from "./approval.js";
+import type { AgentMode } from "./agentPrompt.js";
 
 const STATE_DIR = path.join(homedir(), ".config", "banyan", "state");
 
@@ -48,7 +50,11 @@ function banyanBinPath(): string {
 }
 
 /** Materialize a settings.json file for `claude --settings` that registers
- *  the autopilot Stop hook for this (project, feature). Returns the path. */
+ *  the supervisor Stop hook for this (project, feature). The hook gates on:
+ *   - approval (if requireApproval was set)
+ *   - TODO completion (if mode === autopilot)
+ *   - report submission (if mode === autopilot OR requireApproval)
+ *  Returns the path. */
 export function generateAutopilotSettings(
   project: string,
   feature: string,
@@ -76,6 +82,18 @@ export function generateAutopilotSettings(
   return settingsPath;
 }
 
+/** Decide whether a feature needs the supervisor Stop hook installed.
+ *  True when either:
+ *   - mode is autopilot (TODO/report enforcement)
+ *   - requireApproval is set (approval gate)
+ *  Used by wtAll to know when to call generateAutopilotSettings. */
+export function needsSupervisorHook(opts: {
+  mode: AgentMode;
+  requireApproval?: boolean;
+}): boolean {
+  return opts.mode === "autopilot" || !!opts.requireApproval;
+}
+
 export function removeAutopilotSettings(project: string, feature: string): void {
   const p = autopilotSettingsPath(project, feature);
   if (existsSync(p)) {
@@ -91,19 +109,40 @@ function shellEscape(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Decide whether the agent's task is genuinely complete.
+/** Decide whether the supervisor should let the agent stop.
  *
- *  Conditions for "complete" (both must hold):
- *   - the TODO list exists and every item is marked done
- *   - at least one `banyan_report_done` has been submitted for this feature
+ *  Order of gates:
+ *   1. Approval gate (if relevant): if a plan was rejected, block until
+ *      the agent submits a new one. If a plan is pending approval, block
+ *      until the user approves.
+ *   2. TODO/report gates: see below.
  *
- *  If the list is missing entirely we don't block — the agent might be in
- *  autopilot but legitimately unable to scope a TODO yet (e.g. needs to
- *  read code first). But we DO require a report at the end regardless. */
+ *  An "approval-pending" feature might still legitimately need the agent
+ *  to wait quietly — we surface that with a specific reason so the agent
+ *  doesn't burn turns trying to "make progress" while waiting. */
 export function isAutopilotComplete(project: string, feature: string): {
   complete: boolean;
   reason: string;
 } {
+  const approval = getApproval(project, feature);
+  const status = approvalStatus(approval);
+  if (status === "rejected") {
+    const note = approval?.rejectionNote ?? "(no reason given)";
+    return {
+      complete: false,
+      reason: `Your plan was rejected by the user. Reason: ${note}\nRevise the TODO list (banyan_set_todo / banyan_update_todo) and call banyan_request_plan_approval again.`,
+    };
+  }
+  if (status === "pending") {
+    return {
+      complete: false,
+      reason: `Your plan is awaiting user approval. Do not start working on TODO items yet. Wait quietly for the user to approve (or reject) — this loop will release you when that happens.`,
+    };
+  }
+  // status === "approved" or "no-plan-yet" — fall through to the
+  // existing TODO + report logic. (no-plan-yet means the agent is still
+  // free to plan; the TODO/report gate handles the rest.)
+
   const reports = readReports(project, { feature });
   if (reports.length === 0) {
     return {

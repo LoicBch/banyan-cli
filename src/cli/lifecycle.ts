@@ -24,6 +24,7 @@ import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
 import { agentPrompt } from "../commands/agentPrompt.js";
 import { todoCmd } from "../commands/todo.js";
+import { approveCmd } from "../commands/approve.js";
 
 export function register(
   projectCmd: Command,
@@ -180,6 +181,24 @@ export function register(
           watch: opts.watch,
           notify: opts.notify,
         });
+      },
+    );
+
+  projectCmd
+    .command("approve <feature>")
+    .description(
+      "approve (or reject) the agent's plan for a feature created with --review-plan. " +
+        "without flags: approve. with --reject: reject the plan; the agent revises on next turn. " +
+        "with --show: read the current plan + approval state, no mutation.",
+    )
+    .option("--reject [reason]", "reject the plan instead of approving (optional reason)")
+    .option("--show", "show plan + approval state without mutating")
+    .action(
+      async (
+        feature: string,
+        opts: { reject?: string | boolean; show?: boolean },
+      ) => {
+        await approveCmd(project.name, feature, opts);
       },
     );
 

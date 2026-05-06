@@ -8,7 +8,7 @@ import { logger } from "../logger.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js";
-import { generateAutopilotSettings } from "../autopilot.js";
+import { generateAutopilotSettings, needsSupervisorHook } from "../autopilot.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -35,6 +35,10 @@ export async function wtAll(
      *  `initialPrompt` is given (delegating a task), `interactive` otherwise
      *  (sitting next to plain claude). */
     mode?: AgentMode;
+    /** Plan-review gate: require explicit approval (`banyan_approve_plan`
+     *  / `bn approve`) before the agent starts working. Orthogonal to
+     *  mode. Ignored for mode=interactive. */
+    requireApproval?: boolean;
   } = {},
 ): Promise<void> {
   naming.assertValidFeature(feature);
@@ -162,8 +166,11 @@ export async function wtAll(
   // Use main-horizontal so the ops pane stays small at the bottom while the
   // claude pane(s) take the majority of the window.
   await tmux.applyLayout(session, agentsWin, "main-horizontal");
-  const settingsPath =
-    mode === "autopilot" ? generateAutopilotSettings(projectName, feature) : undefined;
+  // requireApproval is meaningless for interactive mode (user is right there).
+  const requireApproval = mode === "interactive" ? false : !!opts.requireApproval;
+  const settingsPath = needsSupervisorHook({ mode, requireApproval })
+    ? generateAutopilotSettings(projectName, feature)
+    : undefined;
   await claude.launchClaude(paneId, {
     additionalDirs,
     initialPrompt: opts.initialPrompt,
@@ -177,7 +184,7 @@ export async function wtAll(
     additionalDirs.length > 0
       ? ` (+${additionalDirs.length} --add-dir)`
       : "";
-  const modeSuffix = ` · agent: ${mode}`;
+  const modeSuffix = ` · agent: ${mode}${requireApproval ? " (plan review required)" : ""}`;
   logger.info("");
   logger.ok(
     `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}${modeSuffix}`,

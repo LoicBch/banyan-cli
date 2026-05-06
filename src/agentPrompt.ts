@@ -34,6 +34,13 @@ export const ALL_AGENT_MODES: readonly AgentMode[] = [
 
 const CONFIG_DIR = path.join(homedir(), ".config", "banyan");
 
+const PLAN_REVIEW_BLOCK = `If this feature was launched with plan review (the supervisor will tell you so), you must:
+  1. Set up a TODO list with banyan_set_todo describing the steps you intend to take.
+  2. Call banyan_request_plan_approval to signal you're ready for review.
+  3. Wait. Don't start working on items until the supervisor releases you.
+  4. If the user rejects, you'll receive their note via the supervisor — revise the TODO and call banyan_request_plan_approval again.
+You'll know the supervisor is active because Stop attempts will be intercepted with a directive. If your first Stop hook directive is "no banyan_report_done has been submitted", review-plan was NOT enabled and you can proceed normally.`;
+
 const REPORT_BLOCK = `When you believe the task is complete, blocked, or needs human review, call \`banyan_report_done\` with:
   project: "{{project}}"
   feature: "{{feature}}"
@@ -87,6 +94,8 @@ If you hit something you genuinely cannot decide (truly ambiguous spec, contradi
 
 Don't stop the session until you've called \`banyan_report_done\`.
 
+${PLAN_REVIEW_BLOCK}
+
 ${REPORT_BLOCK}
 
 Be honest. The user trusts you to make calls; the price of that trust is honest hesitations in the report.
@@ -101,6 +110,8 @@ You have a TODO list managed by banyan. Read it now with:
 
 If no list exists yet, create one that breaks down your task into concrete steps:
   banyan_set_todo({ project: "{{project}}", feature: "{{feature}}", items: [...] })
+
+${PLAN_REVIEW_BLOCK}
 
 Then work through every item. After completing each, mark it done:
   banyan_update_todo({ project: "{{project}}", feature: "{{feature}}", done: ["<id>"] })

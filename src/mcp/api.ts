@@ -44,6 +44,15 @@ import {
   getTodo,
   type FeatureTodo,
 } from "../todo.js";
+import {
+  requestApproval,
+  approvePlan,
+  rejectPlan,
+  getApproval,
+  approvalStatus,
+  type ApprovalState,
+  type ApprovalStatus,
+} from "../approval.js";
 import { buildContext } from "../context.js";
 import { UsageError } from "../errors.js";
 
@@ -322,6 +331,7 @@ export async function createFeature(
   initialPrompt?: string,
   prefix?: string,
   mode?: import("../agentPrompt.js").AgentMode,
+  requireApproval?: boolean,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
   // MCP-driven creation defaults to `autonomous` (the orchestrator is by
@@ -333,6 +343,7 @@ export async function createFeature(
     ...(initialPrompt ? { initialPrompt } : {}),
     ...(prefix !== undefined ? { prefix } : {}),
     mode: effectiveMode,
+    ...(requireApproval ? { requireApproval } : {}),
   });
   return { ok: true, feature };
 }
@@ -408,6 +419,47 @@ export async function getFeatureTodo(
 ): Promise<{ todo: FeatureTodo | null }> {
   await validateProject(projectName);
   return { todo: getTodo(projectName, feature) ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// Plan approval gate
+// ---------------------------------------------------------------------------
+
+export async function requestPlanApproval(
+  projectName: string,
+  feature: string,
+): Promise<{ ok: true; state: ApprovalState }> {
+  await validateProject(projectName);
+  const state = requestApproval(projectName, feature);
+  return { ok: true, state };
+}
+
+export async function approveFeaturePlan(
+  projectName: string,
+  feature: string,
+): Promise<{ ok: true; state: ApprovalState }> {
+  await validateProject(projectName);
+  const state = approvePlan(projectName, feature);
+  return { ok: true, state };
+}
+
+export async function rejectFeaturePlan(
+  projectName: string,
+  feature: string,
+  note?: string,
+): Promise<{ ok: true; state: ApprovalState }> {
+  await validateProject(projectName);
+  const state = rejectPlan(projectName, feature, note);
+  return { ok: true, state };
+}
+
+export async function getFeatureApproval(
+  projectName: string,
+  feature: string,
+): Promise<{ state: ApprovalState | null; status: ApprovalStatus }> {
+  await validateProject(projectName);
+  const state = getApproval(projectName, feature);
+  return { state: state ?? null, status: approvalStatus(state) };
 }
 
 export async function updateFeatureTodo(

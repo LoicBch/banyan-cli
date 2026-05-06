@@ -453,6 +453,93 @@ function renderReport(r) {
   ]);
 }
 
+function approvalStatusBadge(status) {
+  switch (status) {
+    case "pending":
+      return pill("plan pending review", "yellow");
+    case "approved":
+      return pill("approved", "green");
+    case "rejected":
+      return pill("rejected — agent revising", "red");
+    default:
+      return null;
+  }
+}
+
+function renderApproval(project, approval) {
+  const status = approval.status;
+  const ts = approval.planSubmittedAt
+    ? `submitted ${new Date(approval.planSubmittedAt).toLocaleString()}`
+    : approval.approvedAt
+      ? `approved ${new Date(approval.approvedAt).toLocaleString()}`
+      : "";
+
+  const actions = [];
+  if (status === "pending") {
+    actions.push(
+      btn("approve", {
+        variant: "success",
+        title: "approve the plan; agent will start working on its next turn",
+        onClick: () => runAction("/api/actions/approve", {
+          project: project.name,
+          feature: approval.feature,
+        }, `approve ${approval.feature}`),
+      }),
+      btn("reject", {
+        variant: "danger",
+        title: "reject the plan; agent will revise on its next turn",
+        onClick: () => {
+          const note = window.prompt(`reject reason for ${approval.feature}? (optional)`);
+          if (note === null) return; // cancelled
+          runAction("/api/actions/approve", {
+            project: project.name,
+            feature: approval.feature,
+            reject: true,
+            note: note || undefined,
+          }, `reject ${approval.feature}`);
+        },
+      }),
+    );
+  }
+
+  return h("div", { class: "border border-neutral-800 rounded p-3 bg-neutral-950 space-y-2" }, [
+    h("div", { class: "flex items-center gap-2" }, [
+      approvalStatusBadge(status),
+      h("span", { class: "font-medium text-sm" }, [approval.feature]),
+      h("span", { class: "text-xs text-neutral-500 ml-auto" }, [ts]),
+    ]),
+    approval.rejectionNote
+      ? h("p", { class: "text-xs text-rose-300" }, [`rejection note: ${approval.rejectionNote}`])
+      : null,
+    actions.length > 0
+      ? h("div", { class: "flex gap-2" }, actions)
+      : null,
+  ]);
+}
+
+function renderApprovalsSection(project) {
+  const approvals = project.approvals;
+  if (!approvals || approvals.length === 0) return null;
+  // Sort: pending first (the actionable ones), then rejected, then approved.
+  const order = { pending: 0, rejected: 1, approved: 2, "no-plan-yet": 3 };
+  const ordered = [...approvals].sort(
+    (a, b) => (order[a.status] ?? 99) - (order[b.status] ?? 99),
+  );
+  const pendingCount = ordered.filter((a) => a.status === "pending").length;
+  return h("details", {
+    class: "border-t border-neutral-800 pt-3 mt-2",
+    open: pendingCount > 0 ? "" : null,
+  }, [
+    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
+      `🛂 plan approvals — ${approvals.length} feature${approvals.length > 1 ? "s" : ""}`,
+      pendingCount > 0
+        ? h("span", { class: "ml-2 text-yellow-400" }, [`(${pendingCount} pending)`])
+        : null,
+    ]),
+    h("div", { class: "space-y-2" }, ordered.map((a) => renderApproval(project, a))),
+  ]);
+}
+
 function renderTodo(todo) {
   const total = todo.items.length;
   const done = todo.items.filter((it) => it.done).length;
@@ -532,6 +619,7 @@ function renderProject(project) {
       ])
     : null;
 
+  const approvalsSection = renderApprovalsSection(project);
   const todosSection = renderTodosSection(project.todos);
   const reportsSection = renderReportsSection(project.reports);
 
@@ -550,6 +638,7 @@ function renderProject(project) {
     ]),
     h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
     pulseSection,
+    approvalsSection,
     todosSection,
     reportsSection,
   ]);
@@ -609,6 +698,17 @@ async function fetchTodos(projectName) {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data.todos) ? data.todos : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchApprovals(projectName) {
+  try {
+    const r = await fetch(`/api/approvals/${encodeURIComponent(projectName)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data.approvals) ? data.approvals : [];
   } catch {
     return [];
   }
@@ -682,10 +782,11 @@ async function loop() {
     if (Array.isArray(state.projects)) {
       await Promise.all(
         state.projects.map(async (p) => {
-          [p.pulse, p.reports, p.todos] = await Promise.all([
+          [p.pulse, p.reports, p.todos, p.approvals] = await Promise.all([
             fetchPulse(p.name),
             fetchReports(p.name),
             fetchTodos(p.name),
+            fetchApprovals(p.name),
           ]);
           notifyNewReports(p.name, p.reports);
         }),
