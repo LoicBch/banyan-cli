@@ -28,6 +28,7 @@ import { rebase as rebaseCmd } from "../commands/rebase.js";
 import { test as testCmd } from "../commands/test.js";
 import { testStop as testStopCmd } from "../commands/testStop.js";
 import { envUp, envDown, envRecreate } from "../commands/env.js";
+import { assignTask as assignTaskCmd } from "../commands/assignTask.js";
 import { buildContext } from "../context.js";
 import { UsageError } from "../errors.js";
 
@@ -303,10 +304,25 @@ export async function createFeature(
   projectName: string,
   feature: string,
   repos?: string[],
+  initialPrompt?: string,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
-  await wtAll(config, projectName, feature, repos && repos.length > 0 ? { only: repos } : {});
+  await wtAll(config, projectName, feature, {
+    ...(repos && repos.length > 0 ? { only: repos } : {}),
+    ...(initialPrompt ? { initialPrompt } : {}),
+  });
   return { ok: true, feature };
+}
+
+export async function assignTask(
+  projectName: string,
+  feature: string,
+  prompt: string,
+  opts: { force?: boolean } = {},
+): Promise<{ ok: true; paneId: string }> {
+  const config = await getConfig();
+  const { paneId } = await assignTaskCmd(config, projectName, feature, prompt, opts);
+  return { ok: true, paneId };
 }
 
 export async function removeFeature(

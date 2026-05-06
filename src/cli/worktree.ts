@@ -12,6 +12,7 @@ import { wtLs } from "../commands/wtLs.js";
 import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
+import { assignTask } from "../commands/assignTask.js";
 
 export function register(
   projectCmd: Command,
@@ -21,13 +22,26 @@ export function register(
   projectCmd
     .command("wt <feature> [repos...]")
     .description("spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those.")
-    .action(async (feature: string, repos: string[]) => {
-      await wtAll(
-        config,
-        project.name,
-        feature,
-        repos.length > 0 ? { only: repos } : {},
-      );
+    .option(
+      "-p, --prompt <prompt>",
+      "first message sent to the per-feature claude agent (only on a fresh session)",
+    )
+    .action(async (feature: string, repos: string[], opts: { prompt?: string }) => {
+      await wtAll(config, project.name, feature, {
+        ...(repos.length > 0 ? { only: repos } : {}),
+        ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
+      });
+    });
+
+  projectCmd
+    .command("task <feature> <prompt>")
+    .description("send a prompt to the per-feature claude agent (paste-and-submit into the existing pane)")
+    .option("-f, --force", "send even if claude isn't detected as running in the pane")
+    .action(async (feature: string, prompt: string, opts: { force?: boolean }) => {
+      const { paneId } = await assignTask(config, project.name, feature, prompt, {
+        force: opts.force,
+      });
+      logger.ok(`prompt sent to ${feature} (${paneId})`);
     });
 
   projectCmd

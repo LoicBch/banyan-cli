@@ -25,7 +25,7 @@ export async function wtAll(
   config: Config,
   projectName: string,
   feature: string,
-  opts: { only?: string[] } = {},
+  opts: { only?: string[]; initialPrompt?: string } = {},
 ): Promise<void> {
   const project = getProject(config, projectName);
 
@@ -149,7 +149,7 @@ export async function wtAll(
   // Use main-horizontal so the ops pane stays small at the bottom while the
   // claude pane(s) take the majority of the window.
   await tmux.applyLayout(session, agentsWin, "main-horizontal");
-  await claude.launchClaude(paneId, additionalDirs);
+  await claude.launchClaude(paneId, additionalDirs, opts.initialPrompt);
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);
 

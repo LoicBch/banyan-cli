@@ -118,7 +118,7 @@ export const tools: ToolDef[] = [
     spec: {
       name: "banyan_create_feature",
       description:
-        "Create worktrees + start compose stacks + launch a Claude pane for a new feature. Optionally restrict to specific repos.",
+        "Create worktrees + start compose stacks + launch a Claude pane for a new feature. Optionally restrict to specific repos. If `initialPrompt` is given, the per-feature Claude agent starts with that prompt as its first message (only on a fresh session — ignored if a prior conversation is being resumed).",
       inputSchema: {
         type: "object",
         properties: {
@@ -129,12 +129,45 @@ export const tools: ToolDef[] = [
             items: { type: "string" },
             description: "optional subset of repo names; default: all configured repos",
           },
+          initialPrompt: {
+            type: "string",
+            description:
+              "first message sent to the per-feature Claude agent (e.g. the task description). Use this to dispatch a task at creation time without a follow-up call.",
+          },
         },
         required: ["project", "feature"],
         additionalProperties: false,
       },
     },
-    handler: async (args: any) => api.createFeature(args.project, args.feature, args.repos),
+    handler: async (args: any) =>
+      api.createFeature(args.project, args.feature, args.repos, args.initialPrompt),
+  },
+  {
+    spec: {
+      name: "banyan_assign_task",
+      description:
+        "Send a prompt to the Claude agent of an existing feature (paste-and-submit into the feature pane). Use this to dispatch follow-up tasks after `banyan_create_feature`, or to assign work to features that were created without an `initialPrompt`. The feature pane must exist and Claude must be running in it (unless `force` is true).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "string" },
+          feature: { type: "string" },
+          prompt: {
+            type: "string",
+            description: "the message to send to the per-feature agent",
+          },
+          force: {
+            type: "boolean",
+            description:
+              "send even if Claude isn't detected as running in the pane (default: false). Use only when you know the pane is ready.",
+          },
+        },
+        required: ["project", "feature", "prompt"],
+        additionalProperties: false,
+      },
+    },
+    handler: async (args: any) =>
+      api.assignTask(args.project, args.feature, args.prompt, { force: args.force }),
   },
   {
     spec: {
