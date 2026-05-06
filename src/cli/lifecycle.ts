@@ -23,6 +23,7 @@ import { pulse as pulseCmd } from "../commands/pulse.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
 import { agentPrompt } from "../commands/agentPrompt.js";
+import { todoCmd } from "../commands/todo.js";
 
 export function register(
   projectCmd: Command,
@@ -179,6 +180,35 @@ export function register(
           watch: opts.watch,
           notify: opts.notify,
         });
+      },
+    );
+
+  projectCmd
+    .command("todo <feature>")
+    .description(
+      "view or edit the TODO list for a feature. " +
+        "no flags = show. --set replaces the list, --add appends, --done/--undone toggles by id, --rm deletes. " +
+        "ids are auto-assigned (1..N) and never reused.",
+    )
+    .option("--set <items...>", "replace the entire list with these items")
+    .option("--add <items...>", "append these items to the list")
+    .option("--done <ids...>", "mark these item ids as done")
+    .option("--undone <ids...>", "mark these item ids as not done")
+    .option("--rm <ids...>", "delete these item ids")
+    .option("--json", "emit raw JSON")
+    .action(
+      async (
+        feature: string,
+        opts: {
+          set?: string[];
+          add?: string[];
+          done?: string[];
+          undone?: string[];
+          rm?: string[];
+          json?: boolean;
+        },
+      ) => {
+        await todoCmd(project.name, feature, opts);
       },
     );
 

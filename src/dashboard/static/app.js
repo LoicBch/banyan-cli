@@ -453,6 +453,60 @@ function renderReport(r) {
   ]);
 }
 
+function renderTodo(todo) {
+  const total = todo.items.length;
+  const done = todo.items.filter((it) => it.done).length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const allDone = total > 0 && done === total;
+
+  const bar = h("div", { class: "h-1.5 bg-neutral-800 rounded overflow-hidden" }, [
+    h("div", {
+      class: `h-full ${allDone ? "bg-emerald-400" : "bg-sky-400"} transition-all`,
+      style: `width: ${pct}%`,
+    }),
+  ]);
+
+  return h("details", { class: "border border-neutral-800 rounded p-3 bg-neutral-950" }, [
+    h("summary", { class: "cursor-pointer flex items-center gap-3 select-none" }, [
+      h("span", { class: "font-medium text-sm" }, [todo.feature]),
+      h("span", { class: "text-xs text-neutral-500" }, [`${done}/${total}`]),
+      h("div", { class: "flex-1" }, [bar]),
+      allDone ? pill("complete", "green") : null,
+    ]),
+    h(
+      "ul",
+      { class: "mt-3 space-y-1 text-sm" },
+      todo.items.map((it) =>
+        h("li", { class: "flex items-start gap-2" }, [
+          h("span", {
+            class: `inline-block w-4 text-center ${it.done ? "text-emerald-400" : "text-neutral-600"}`,
+          }, [it.done ? "✓" : "·"]),
+          h("span", { class: it.done ? "line-through text-neutral-500" : "text-neutral-200" }, [
+            `${it.id}. ${it.text}`,
+          ]),
+        ]),
+      ),
+    ),
+  ]);
+}
+
+function renderTodosSection(todos) {
+  if (!todos || todos.length === 0) return null;
+  // Sort: in-progress first (any incomplete items), then completed.
+  const ordered = [...todos].sort((a, b) => {
+    const aDone = a.items.length > 0 && a.items.every((it) => it.done);
+    const bDone = b.items.length > 0 && b.items.every((it) => it.done);
+    if (aDone === bDone) return 0;
+    return aDone ? 1 : -1;
+  });
+  return h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
+    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
+      `📋 todos — ${todos.length} feature${todos.length > 1 ? "s" : ""}`,
+    ]),
+    h("div", { class: "space-y-2" }, ordered.map(renderTodo)),
+  ]);
+}
+
 function renderReportsSection(reports) {
   if (!reports || reports.length === 0) return null;
   // Most recent first in the UI.
@@ -478,6 +532,7 @@ function renderProject(project) {
       ])
     : null;
 
+  const todosSection = renderTodosSection(project.todos);
   const reportsSection = renderReportsSection(project.reports);
 
   return h("section", { class: "bg-neutral-900 border border-neutral-800 rounded-lg p-5" }, [
@@ -495,6 +550,7 @@ function renderProject(project) {
     ]),
     h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
     pulseSection,
+    todosSection,
     reportsSection,
   ]);
 }
@@ -542,6 +598,17 @@ async function fetchReports(projectName) {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data.reports) ? data.reports : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchTodos(projectName) {
+  try {
+    const r = await fetch(`/api/todos/${encodeURIComponent(projectName)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data.todos) ? data.todos : [];
   } catch {
     return [];
   }
@@ -615,9 +682,10 @@ async function loop() {
     if (Array.isArray(state.projects)) {
       await Promise.all(
         state.projects.map(async (p) => {
-          [p.pulse, p.reports] = await Promise.all([
+          [p.pulse, p.reports, p.todos] = await Promise.all([
             fetchPulse(p.name),
             fetchReports(p.name),
+            fetchTodos(p.name),
           ]);
           notifyNewReports(p.name, p.reports);
         }),

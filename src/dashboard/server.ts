@@ -14,6 +14,7 @@ import {
   actionMrStatus,
 } from "./actions.js";
 import { readReports } from "../reports.js";
+import { listTodoFeatures } from "../todo.js";
 
 export interface ServerOptions {
   port?: number;         // default: first free port starting from 4242
@@ -82,6 +83,23 @@ export async function startServer(
           latestOnly: q.latestOnly === "true" || q.latestOnly === "1",
         });
         res.json({ reports });
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
+
+  // TODO lists per project (all features).
+  app.get(
+    "/api/todos/:project",
+    (req: Request<{ project: string }>, res: Response) => {
+      const projectName = req.params.project;
+      if (!config.projects.some((p) => p.name === projectName)) {
+        res.status(404).json({ error: `unknown project '${projectName}'` });
+        return;
+      }
+      try {
+        res.json({ todos: listTodoFeatures(projectName) });
       } catch (err) {
         res.status(500).json({ error: (err as Error).message });
       }
