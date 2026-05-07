@@ -47,8 +47,8 @@ export async function resume(config: Config, projectName: string): Promise<void>
   );
 
   // ── Step 2: Launch the workspace (orchestrator + terminal) ──────────────
-  // start() runs the layoutScript or default layout. Idempotent — if the
-  // workspace window already exists it will just attach.
+  // start() builds the native workspace. Idempotent — if the workspace
+  // window already exists it just attaches.
   // Note: start() returns an exit code and may attach to tmux. To avoid that
   // here we skip the actual workspace start when there's nothing to resume,
   // but otherwise we must defer to the user — running start() inline would

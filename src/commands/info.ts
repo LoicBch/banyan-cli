@@ -3,13 +3,6 @@ import { contractHome } from "../config.js";
 
 export async function info(ctx: Context): Promise<void> {
   ctx.logger.info(`project: ${ctx.project.name}`);
-  if (ctx.project.layoutScript) {
-    ctx.logger.info(`layout:  ${contractHome(ctx.project.layoutScript)}`);
-  } else {
-    ctx.logger.info(
-      `layout:  (none — set with: bn ${ctx.project.name} set-layout <path>)`,
-    );
-  }
   if (ctx.project.deployCommand) {
     ctx.logger.info(`deploy:  ${ctx.project.deployCommand}`);
   }

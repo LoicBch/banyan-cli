@@ -1,13 +1,12 @@
 /**
  * Per-project config-mutation commands: add-repo, remove-repo, remove,
- * set-layout, set-base, set-run.
+ * set-base, set-run.
  */
 import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
 import { addRepo } from "../commands/addRepo.js";
 import { removeRepo } from "../commands/removeRepo.js";
 import { removeProject } from "../commands/removeProject.js";
-import { setLayout } from "../commands/setLayout.js";
 import { setBase } from "../commands/setBase.js";
 import { setRun } from "../commands/setRun.js";
 
@@ -35,13 +34,6 @@ export function register(
     .description("remove this project from config (repos untouched)")
     .action(async () => {
       await removeProject(config, project.name);
-    });
-
-  projectCmd
-    .command("set-layout <path>")
-    .description("set or change the layout script path")
-    .action(async (layoutPath: string) => {
-      await setLayout(config, project.name, layoutPath);
     });
 
   projectCmd

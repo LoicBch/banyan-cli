@@ -65,14 +65,13 @@ async function getConfig(): Promise<Config> {
 // ---------------------------------------------------------------------------
 
 export async function listProjects(): Promise<{
-  projects: Array<{ name: string; repos: string[]; layoutScript?: string }>;
+  projects: Array<{ name: string; repos: string[] }>;
 }> {
   const config = await getConfig();
   return {
     projects: config.projects.map((p) => ({
       name: p.name,
       repos: p.repos.map((r) => r.name),
-      layoutScript: p.layoutScript,
     })),
   };
 }
@@ -81,7 +80,6 @@ export async function projectInfo(
   projectName: string,
 ): Promise<{
   name: string;
-  layoutScript?: string;
   deployCommand?: string;
   repos: Array<{
     name: string;
@@ -105,7 +103,6 @@ export async function projectInfo(
   const project = getProject(config, projectName);
   return {
     name: project.name,
-    layoutScript: project.layoutScript,
     deployCommand: project.deployCommand,
     repos: project.repos.map((r) => ({
       name: r.name,

@@ -65,7 +65,6 @@ export interface RepoConfig {
 
 export interface ProjectConfig {
   name: string;
-  layoutScript?: string;
   deployCommand?: string;
   repos: RepoConfig[];
 }
@@ -127,7 +126,6 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
     version: cfg.version,
     projects: cfg.projects.map((p) => ({
       name: p.name,
-      ...(p.layoutScript ? { layoutScript: contractHome(p.layoutScript) } : {}),
       ...(p.deployCommand ? { deployCommand: p.deployCommand } : {}),
       repos: p.repos.map((r) => ({
         name: r.name,
@@ -185,16 +183,6 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
       throw new ConfigError(`${sourcePath}: duplicate project name "${name}"`);
     }
     seenProjects.add(name);
-
-    let layoutScript: string | undefined;
-    if (p.layoutScript !== undefined && p.layoutScript !== null && p.layoutScript !== "") {
-      if (typeof p.layoutScript !== "string") {
-        throw new ConfigError(
-          `${sourcePath}: projects[${i}].layoutScript must be a string`,
-        );
-      }
-      layoutScript = expandHome(p.layoutScript);
-    }
 
     if (!Array.isArray(p.repos) || p.repos.length === 0) {
       throw new ConfigError(
@@ -394,7 +382,6 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
 
     projects.push({
       name,
-      ...(layoutScript ? { layoutScript } : {}),
       ...(projectDeployCommand ? { deployCommand: projectDeployCommand } : {}),
       repos,
     });

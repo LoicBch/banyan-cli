@@ -39,7 +39,6 @@ describe("validateConfig", () => {
     projects: [
       {
         name: "p1",
-        layoutScript: "/tmp/x",
         repos: [{ name: "front", path: "/tmp/r" }],
       },
     ],
@@ -50,19 +49,6 @@ describe("validateConfig", () => {
     assert.equal(cfg.version, 1);
     assert.equal(cfg.projects.length, 1);
     assert.equal(cfg.projects[0]?.repos[0]?.name, "front");
-  });
-
-  it("accepts a project without layoutScript", () => {
-    const cfg = validateConfig(
-      {
-        version: 1,
-        projects: [
-          { name: "p", repos: [{ name: "r", path: "/tmp/x" }] },
-        ],
-      },
-      source,
-    );
-    assert.equal(cfg.projects[0]?.layoutScript, undefined);
   });
 
   it("rejects unknown version", () => {
@@ -92,7 +78,7 @@ describe("validateConfig", () => {
   it("rejects empty repos list", () => {
     const bad = {
       version: 1,
-      projects: [{ name: "p", layoutScript: "/x", repos: [] }],
+      projects: [{ name: "p", repos: [] }],
     };
     assert.throws(() => validateConfig(bad, source), ConfigError);
   });
@@ -103,7 +89,6 @@ describe("validateConfig", () => {
       projects: [
         {
           name: "p",
-          layoutScript: "/x",
           repos: [
             { name: "front", path: "/a" },
             { name: "front", path: "/b" },
@@ -120,7 +105,7 @@ describe("validateConfig", () => {
         validateConfig(
           {
             version: 1,
-            projects: [{ layoutScript: "/x", repos: [{ name: "f", path: "/r" }] }],
+            projects: [{ repos: [{ name: "f", path: "/r" }] }],
           },
           source,
         ),
@@ -204,14 +189,12 @@ describe("validateConfig", () => {
         projects: [
           {
             name: "p",
-            layoutScript: "~/script.sh",
             repos: [{ name: "front", path: "~/repo" }],
           },
         ],
       },
       source,
     );
-    assert.equal(cfg.projects[0]?.layoutScript, path.join(homedir(), "script.sh"));
     assert.equal(cfg.projects[0]?.repos[0]?.path, path.join(homedir(), "repo"));
   });
 });
@@ -223,7 +206,6 @@ describe("getProject / getRepo", () => {
       projects: [
         {
           name: "demo",
-          layoutScript: "/x",
           repos: [
             { name: "front", path: "/a" },
             { name: "back", path: "/b" },

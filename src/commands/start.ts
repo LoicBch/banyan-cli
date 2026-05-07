@@ -1,24 +1,15 @@
 /**
  * `bn <project> start` — launch the project's tmux workspace.
  *
- * Two paths:
+ * Builds a single window `workspace` with two panes: the orchestrator
+ * (claude with full project context) on the left and a free terminal on
+ * the right. Each project gets the same ergonomic layout out of the box.
  *
- *   1. Legacy: if `layoutScript` is set in the project config, exec the bash
- *      file. The script is responsible for the full session/window/pane
- *      setup. Kept for backward-compat with users who have a custom layout.
- *
- *   2. Native (default): build the workspace ourselves — a single window
- *      `workspace` with two panes: the orchestrator (left) and a free
- *      terminal (right). No bash script needed; each project gets the same
- *      ergonomic layout out of the box.
- *
- * Idempotent: if the session+workspace window already exist, it just
+ * Idempotent: if the session + workspace window already exist, it just
  * attaches. Other windows (agents-<proj>, test-<feature>, ...) are
- * preserved.
+ * preserved across restarts.
  */
-import { existsSync } from "node:fs";
 import type { Context } from "../context.js";
-import { runInherit } from "../exec.js";
 import * as tmux from "../tmux.js";
 import { buildOrchestratorClaudeCommand } from "../orchestratorAgent.js";
 import { UsageError } from "../errors.js";
@@ -26,13 +17,6 @@ import { UsageError } from "../errors.js";
 const WORKSPACE_WINDOW = "workspace";
 
 export async function start(ctx: Context): Promise<number> {
-  const script = ctx.project.layoutScript;
-  if (script) {
-    if (!existsSync(script)) {
-      throw new UsageError(`layout script not found: ${script}`);
-    }
-    return runInherit("/bin/bash", [script]);
-  }
   return startNativeWorkspace(ctx);
 }
 
