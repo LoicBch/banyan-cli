@@ -119,10 +119,10 @@ describe("inferRun", () => {
     assert.equal(result!.stack, "gradle + spring boot");
   });
 
-  it("returns null on plain gradle without spring boot (could be Android)", () => {
-    const p = repo("gradle-android", {
+  it("returns null on plain gradle without spring boot or android plugin", () => {
+    const p = repo("gradle-plain", {
       "build.gradle":
-        `apply plugin: 'com.android.application'`,
+        `apply plugin: 'java-library'`,
     });
     assert.equal(inferRun(p), null);
   });
@@ -184,5 +184,119 @@ describe("inferRun", () => {
     const result = inferRun(p);
     assert.ok(result);
     assert.equal(result!.stack, "node + npm");
+  });
+
+  // ── Android ──────────────────────────────────────────────────────────────
+
+  it("detects android (apply plugin) with default 'app' module", () => {
+    const p = repo("android-default", {
+      "build.gradle": `apply plugin: 'com.android.application'`,
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.equal(result!.stack, "android (gradle)");
+    assert.match(result!.run.command, /:app:installDebug/);
+    assert.match(result!.run.command, /<your\.package>/);
+  });
+
+  it("detects android via app/build.gradle with applicationId", () => {
+    const p = repo("android-with-id", {
+      "settings.gradle": `include ':app'`,
+      "app/build.gradle": `
+        apply plugin: 'com.android.application'
+        android { defaultConfig { applicationId "com.example.demo" } }
+      `,
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.equal(result!.stack, "android (gradle)");
+    assert.match(result!.run.command, /com\.example\.demo\/\.MainActivity/);
+  });
+
+  it("detects custom android module name", () => {
+    const p = repo("android-custom", {
+      "settings.gradle": `include(":mobile")`,
+      "mobile/build.gradle": `apply plugin: 'com.android.application'`,
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.run.command, /:mobile:installDebug/);
+  });
+
+  it("android detection wins over generic gradle", () => {
+    // A bare gradle file without spring-boot would return null;
+    // but with com.android.application it's detected as android.
+    const p = repo("android-vs-generic", {
+      "build.gradle": `apply plugin: 'com.android.application'`,
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.equal(result!.stack, "android (gradle)");
+  });
+
+  // ── Python ───────────────────────────────────────────────────────────────
+
+  it("detects django via manage.py", () => {
+    const p = repo("django", {
+      "manage.py": "import django",
+      "requirements.txt": "django==5.0",
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.stack, /django/);
+    assert.match(result!.run.command, /manage\.py runserver/);
+    assert.equal(result!.run.port, 8000);
+  });
+
+  it("detects django + poetry", () => {
+    const p = repo("django-poetry", {
+      "manage.py": "",
+      "pyproject.toml": "[tool.poetry]\nname = \"demo\"",
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.stack, /poetry/);
+    assert.match(result!.run.command, /^poetry run /);
+  });
+
+  it("detects fastapi via dep + main.py", () => {
+    const p = repo("fastapi", {
+      "requirements.txt": "fastapi==0.110\nuvicorn",
+      "main.py": "from fastapi import FastAPI\napp = FastAPI()",
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.stack, /fastapi/);
+    assert.match(result!.run.command, /uvicorn main:app/);
+  });
+
+  it("detects fastapi + uv", () => {
+    const p = repo("fastapi-uv", {
+      "pyproject.toml": "[project]\ndependencies = [\"fastapi\"]",
+      "uv.lock": "",
+      "main.py": "app = FastAPI()",
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.run.command, /^uv run /);
+  });
+
+  it("detects flask", () => {
+    const p = repo("flask", {
+      "requirements.txt": "Flask==3.0",
+      "app.py": "from flask import Flask",
+    });
+    const result = inferRun(p);
+    assert.ok(result);
+    assert.match(result!.stack, /flask/);
+    assert.match(result!.run.command, /flask --app app run/);
+    assert.equal(result!.run.port, 5000);
+  });
+
+  it("returns null on python with no recognised framework", () => {
+    const p = repo("python-script", {
+      "requirements.txt": "requests==2.31\nclick",
+    });
+    assert.equal(inferRun(p), null);
   });
 });
