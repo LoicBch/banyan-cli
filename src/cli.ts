@@ -113,13 +113,23 @@ export async function run(argv: string[]): Promise<number> {
 
   program
     .command("init <project>")
-    .description("create a new project (cwd as first repo by default)")
+    .description(
+      "create a new project (cwd as first repo by default) and immediately launch the workspace " +
+        "(orchestrator + terminal pane). use --no-start to skip the launch — useful when you want " +
+        "to add more repos with `bn <project> add-repo` before starting.",
+    )
     .option("-r, --repo-name <name>", "name for the first repo (default: basename of cwd)")
     .option("-p, --path <path>", "path of the first repo (default: cwd)")
     .option("-l, --layout <path>", "layout script path (optional)")
-    .action(async (project: string, opts: { repoName?: string; path?: string; layout?: string }) => {
-      await init(config, project, opts);
-    });
+    .option("--no-start", "register the project without launching the workspace")
+    .action(
+      async (
+        project: string,
+        opts: { repoName?: string; path?: string; layout?: string; start?: boolean },
+      ) => {
+        await init(config, project, opts);
+      },
+    );
 
   program
     .command("install-tmux")

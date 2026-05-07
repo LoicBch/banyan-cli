@@ -4,11 +4,19 @@ import type { Config } from "../config.js";
 import { saveConfig, expandHome } from "../config.js";
 import { logger } from "../logger.js";
 import { UsageError, ConfigError } from "../errors.js";
+import { buildContext } from "../context.js";
+import { start } from "./start.js";
 
 export interface InitOpts {
   repoName?: string;
   path?: string;
   layout?: string;
+  /** Skip the auto-launch of the workspace (orchestrator + terminal pane).
+   *  Default behaviour is to launch it immediately, since the workspace is
+   *  the foundation of a banyan project — not optional infrastructure to
+   *  set up later. Use --no-start when you want to register additional
+   *  repos via `bn <project> add-repo` before starting the orchestrator. */
+  start?: boolean;
 }
 
 export async function init(
@@ -45,11 +53,19 @@ export async function init(
 
   await saveConfig(next);
   logger.ok(`created project "${projectName}" with repo "${repoName}" → ${repoPath}`);
-  if (!layout) {
-    logger.info(
-      `no layoutScript set. add one later with: bn ${projectName} set-layout <path>`,
-    );
+
+  // Auto-launch the workspace unless the caller opted out. The workspace
+  // (orchestrator pane + terminal pane) is the foundation of every banyan
+  // project — `bn init` is the moment that foundation is laid.
+  if (opts.start !== false) {
+    logger.info(`launching workspace…`);
+    const ctx = await buildContext(next, projectName);
+    const code = await start(ctx);
+    if (code !== 0) process.exit(code);
+    return next;
   }
+
   logger.info(`add more repos with: bn ${projectName} add-repo <name> [path]`);
+  logger.info(`launch the workspace with: bn ${projectName} start`);
   return next;
 }
