@@ -15,6 +15,7 @@ import {
 } from "./actions.js";
 import { readReports } from "../reports.js";
 import { listTodoFeatures } from "../todo.js";
+import { buildPipeline } from "./pipeline.js";
 import { approvalStatus, approvePlan, getApproval, rejectPlan } from "../approval.js";
 import { readdirSync, existsSync as fsExists } from "node:fs";
 import { homedir } from "node:os";
@@ -86,6 +87,27 @@ export async function startServer(
           latestOnly: q.latestOnly === "true" || q.latestOnly === "1",
         });
         res.json({ reports });
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
+
+  // Pipeline view per project — aggregates worktrees + todos + approvals +
+  // reports into a per-feature lifecycle state. Powers the headline view in
+  // the dashboard.
+  app.get(
+    "/api/pipeline/:project",
+    async (req: Request<{ project: string }>, res: Response) => {
+      const projectName = req.params.project;
+      const project = config.projects.find((p) => p.name === projectName);
+      if (!project) {
+        res.status(404).json({ error: `unknown project '${projectName}'` });
+        return;
+      }
+      try {
+        const features = await buildPipeline(project);
+        res.json({ features });
       } catch (err) {
         res.status(500).json({ error: (err as Error).message });
       }

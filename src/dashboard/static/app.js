@@ -606,6 +606,138 @@ function renderReportsSection(reports) {
   ]);
 }
 
+// ── pipeline ───────────────────────────────────────────────────────────────
+const PIPELINE_STAGES = ["created", "planning", "approval", "working", "reported", "merged"];
+const STAGE_LABELS = {
+  created:  "Created",
+  planning: "Planning",
+  approval: "Approval",
+  working:  "Working",
+  reported: "Reported",
+  merged:   "Merged",
+};
+const FLAG_LABELS = {
+  rejected:     { text: "rejected — agent revising", color: "red" },
+  blocked:      { text: "blocked",                   color: "red" },
+  needs_review: { text: "needs review",              color: "yellow" },
+};
+
+function pipelineDot(state, label) {
+  // state: "passed" | "current" | "pending"
+  const cls = {
+    passed:  "bg-emerald-500",
+    current: "bg-sky-400 ring-2 ring-sky-300/40",
+    pending: "bg-neutral-700",
+  }[state];
+  const textCls = state === "pending" ? "text-neutral-600" : "text-neutral-300";
+  return h("div", { class: "flex flex-col items-center gap-1 flex-1 min-w-0" }, [
+    h("div", { class: `w-3 h-3 rounded-full ${cls}` }),
+    h("span", { class: `text-[10px] uppercase tracking-wider ${textCls} truncate` }, [label]),
+  ]);
+}
+
+function pipelineConnector(state) {
+  const cls = state === "passed" ? "bg-emerald-500" : "bg-neutral-700";
+  return h("div", { class: `flex-shrink-0 h-px w-6 ${cls} self-start mt-[5px]` });
+}
+
+function renderPipelineBar(stageIndex) {
+  const children = [];
+  PIPELINE_STAGES.forEach((stage, i) => {
+    const state =
+      i < stageIndex ? "passed" : i === stageIndex ? "current" : "pending";
+    children.push(pipelineDot(state, STAGE_LABELS[stage]));
+    if (i < PIPELINE_STAGES.length - 1) {
+      const connState = i < stageIndex ? "passed" : "pending";
+      children.push(pipelineConnector(connState));
+    }
+  });
+  return h("div", { class: "flex items-start gap-1 w-full" }, children);
+}
+
+function renderFeatureRow(project, entry) {
+  const flag = entry.flag ? FLAG_LABELS[entry.flag] : null;
+  const todoSummary = entry.todo ? `${entry.todo.done}/${entry.todo.total} todo` : null;
+  const reposLabel = entry.repos.length > 0 ? entry.repos.join(", ") : "no worktree";
+
+  // Inline action bar — depends on the current stage / flag.
+  const actions = [];
+  if (entry.approval?.status === "pending") {
+    actions.push(
+      btn("approve plan", {
+        variant: "success",
+        onClick: () => runAction("/api/actions/approve", {
+          project: project.name,
+          feature: entry.feature,
+        }, `approve ${entry.feature}`),
+      }),
+      btn("reject", {
+        variant: "danger",
+        onClick: () => {
+          const note = window.prompt(`reject reason for ${entry.feature}? (optional)`);
+          if (note === null) return;
+          runAction("/api/actions/approve", {
+            project: project.name,
+            feature: entry.feature,
+            reject: true,
+            note: note || undefined,
+          }, `reject ${entry.feature}`);
+        },
+      }),
+    );
+  }
+
+  const reportLine = entry.latestReport
+    ? h("div", { class: "text-xs text-neutral-400 mt-1" }, [
+        h("span", { class: "font-medium" }, [`report: `]),
+        h("span", {}, [entry.latestReport.summary]),
+      ])
+    : null;
+
+  const flagPill = flag
+    ? h("span", { class: "ml-2" }, [pill(flag.text, flag.color)])
+    : null;
+
+  return h("div", { class: "border border-neutral-800 rounded-lg p-4 bg-neutral-950 space-y-3" }, [
+    // Top row: feature name, repos, optional flag, todo summary
+    h("div", { class: "flex items-center gap-3" }, [
+      h("span", { class: "font-mono text-sm font-medium" }, [entry.feature]),
+      h("span", { class: "text-xs text-neutral-500" }, [reposLabel]),
+      flagPill,
+      todoSummary
+        ? h("span", { class: "ml-auto text-xs text-neutral-500" }, [todoSummary])
+        : h("span", { class: "ml-auto" }),
+    ]),
+    // Pipeline bar
+    renderPipelineBar(entry.stageIndex),
+    // Latest report summary if any
+    reportLine,
+    // Inline actions for the current stage
+    actions.length > 0
+      ? h("div", { class: "flex gap-2" }, actions)
+      : null,
+  ]);
+}
+
+function renderPipelineSection(project) {
+  const features = project.pipeline;
+  if (!features || features.length === 0) return null;
+  const inProgress = features.filter((f) => f.stage !== "merged").length;
+  return h("section", { class: "border-t border-neutral-800 pt-3 mt-2 space-y-3" }, [
+    h("div", { class: "flex items-center justify-between" }, [
+      h("h3", { class: "text-sm text-neutral-300 font-medium" }, [
+        `🛤  pipeline — ${features.length} feature${features.length > 1 ? "s" : ""}`,
+        inProgress < features.length
+          ? h("span", { class: "ml-2 text-xs text-neutral-500" }, [
+              `(${inProgress} in progress, ${features.length - inProgress} merged)`,
+            ])
+          : null,
+      ]),
+    ]),
+    h("div", { class: "space-y-2" }, features.map((f) => renderFeatureRow(project, f))),
+  ]);
+}
+
 function renderProject(project) {
   const activeCount = project.repos.reduce((s, r) => s + r.worktrees.length, 0);
   const runningStacks = project.repos.flatMap((r) => r.stacks).filter((s) => s.running).length;
@@ -619,6 +751,7 @@ function renderProject(project) {
       ])
     : null;
 
+  const pipelineSection = renderPipelineSection(project);
   const approvalsSection = renderApprovalsSection(project);
   const todosSection = renderTodosSection(project.todos);
   const reportsSection = renderReportsSection(project.reports);
@@ -636,6 +769,7 @@ function renderProject(project) {
         runningStacks > 0 ? h("span", { class: "text-emerald-400" }, [`· ${runningStacks} stacks up`]) : null,
       ]),
     ]),
+    pipelineSection,
     h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
     pulseSection,
     approvalsSection,
@@ -714,6 +848,17 @@ async function fetchApprovals(projectName) {
   }
 }
 
+async function fetchPipeline(projectName) {
+  try {
+    const r = await fetch(`/api/pipeline/${encodeURIComponent(projectName)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data.features) ? data.features : [];
+  } catch {
+    return [];
+  }
+}
+
 // ── notifications ──────────────────────────────────────────────────────────
 // Fire a browser notification when a never-seen-before report.ts shows up.
 // Per-project last-seen ts is stashed in localStorage so reloading doesn't
@@ -782,11 +927,12 @@ async function loop() {
     if (Array.isArray(state.projects)) {
       await Promise.all(
         state.projects.map(async (p) => {
-          [p.pulse, p.reports, p.todos, p.approvals] = await Promise.all([
+          [p.pulse, p.reports, p.todos, p.approvals, p.pipeline] = await Promise.all([
             fetchPulse(p.name),
             fetchReports(p.name),
             fetchTodos(p.name),
             fetchApprovals(p.name),
+            fetchPipeline(p.name),
           ]);
           notifyNewReports(p.name, p.reports);
         }),
