@@ -1,6 +1,6 @@
 /**
  * Per-project config-mutation commands: add-repo, remove-repo, remove,
- * set-base, set-run.
+ * set-base, set-run, infer-run.
  */
 import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
@@ -9,6 +9,7 @@ import { removeRepo } from "../commands/removeRepo.js";
 import { removeProject } from "../commands/removeProject.js";
 import { setBase } from "../commands/setBase.js";
 import { setRun } from "../commands/setRun.js";
+import { inferRunCmd } from "../commands/inferRunCmd.js";
 
 export function register(
   projectCmd: Command,
@@ -53,5 +54,17 @@ export function register(
     .option("--clear", "remove the run config")
     .action(async (repoName: string, opts: { command?: string; port?: number; portEnv?: string; setup?: string; clear?: boolean }) => {
       await setRun(config, project.name, repoName, opts);
+    });
+
+  projectCmd
+    .command("infer-run [repo]")
+    .description(
+      "auto-detect the run config for a repo by inspecting marker files " +
+        "(package.json, build.gradle, pom.xml, go.mod). no repo = all repos in the project. " +
+        "skips repos that already have a run config unless --force.",
+    )
+    .option("-f, --force", "overwrite existing run config")
+    .action(async (repoName: string | undefined, opts: { force?: boolean }) => {
+      await inferRunCmd(config, project.name, repoName, { force: opts.force });
     });
 }
