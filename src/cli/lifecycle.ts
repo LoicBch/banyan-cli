@@ -63,17 +63,25 @@ export function register(
     });
 
   projectCmd
-    .command("stop [feature]")
+    .command("stop <feature>")
     .description(
-      "no args: kill the entire project tmux session. " +
-        "with <feature>: stop only that feature's run processes (kills its test window).",
+      "stop a feature's run processes (kills its test-<feature> window). " +
+        "the agent pane and the project session are left running. " +
+        "use `bn <project> kill` to tear down the whole session.",
     )
-    .action(async (feature: string | undefined) => {
-      if (feature) {
-        await testStop(await buildContext(config, project.name), feature);
-      } else {
-        await stop(await buildContext(config, project.name));
-      }
+    .action(async (feature: string) => {
+      await testStop(await buildContext(config, project.name), feature);
+    });
+
+  projectCmd
+    .command("kill")
+    .description(
+      "tear down the entire project tmux session — orchestrator, agents, " +
+        "all running stacks. destructive, use when you want a clean slate. " +
+        "worktrees, reports, todos, etc. on disk are untouched.",
+    )
+    .action(async () => {
+      await stop(await buildContext(config, project.name));
     });
 
   projectCmd
