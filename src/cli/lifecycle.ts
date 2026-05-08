@@ -167,29 +167,23 @@ export function register(
       "show end-of-task reports submitted by per-feature agents (timeline). " +
         "no branch: all reports. with <branch>: just that branch's history.",
     )
-    .option("--since <iso>", "only reports submitted at-or-after this ISO timestamp")
-    .option("--latest", "one entry per feature (the latest)")
+    .option("--latest", "one entry per branch (the latest), useful as a status snapshot")
     .option("--json", "emit raw JSON (one record per line in --watch mode)")
     .option("-w, --watch", "tail new reports as they arrive (Ctrl+C to stop)")
-    .option("--no-notify", "in --watch mode, suppress the macOS notification")
     .action(
       async (
         feature: string | undefined,
         opts: {
-          since?: string;
           latest?: boolean;
           json?: boolean;
           watch?: boolean;
-          notify?: boolean;
         },
       ) => {
         await reportsLs(config, project.name, {
           feature,
-          since: opts.since,
           latestOnly: opts.latest,
           json: opts.json,
           watch: opts.watch,
-          notify: opts.notify,
         });
       },
     );
@@ -197,12 +191,12 @@ export function register(
   projectCmd
     .command("approve <branch>")
     .description(
-      "approve (or reject) the agent's plan for a feature created with --review-plan. " +
-        "without flags: approve. with --reject: reject the plan; the agent revises on next turn. " +
-        "with --show: read the current plan + approval state, no mutation.",
+      "approve (or reject) whatever's pending for this branch — the plan if a plan-review gate is open, " +
+        "otherwise the latest report. without flags: approve. with --reject: reject (agent revises). " +
+        "with --show: read current state, no mutation.",
     )
-    .option("--reject [reason]", "reject the plan instead of approving (optional reason)")
-    .option("--show", "show plan + approval state without mutating")
+    .option("--reject [reason]", "reject (the plan or report — whichever is pending) instead of approving")
+    .option("--show", "show plan + report state without mutating")
     .action(
       async (
         feature: string,

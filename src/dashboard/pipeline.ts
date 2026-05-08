@@ -16,6 +16,7 @@ import * as git from "../git.js";
 import * as naming from "../naming.js";
 import { getTodo, type FeatureTodo } from "../todo.js";
 import { getApproval, approvalStatus, type ApprovalState, type ApprovalStatus } from "../approval.js";
+import { reportApprovalStatus, type ReportApprovalStatus } from "../reportApproval.js";
 import { readReports, type FeatureReport } from "../reports.js";
 
 /** Linear stages every feature passes through, in order. */
@@ -47,6 +48,7 @@ export interface PipelineEntry {
   todo?: { total: number; done: number; updatedAt: string };
   approval?: { status: ApprovalStatus; planSubmittedAt: string | null; approvedAt: string | null; rejectionNote: string | null };
   latestReport?: FeatureReport;
+  reportApproval?: { status: ReportApprovalStatus; rejectionNote: string | null };
 }
 
 const STAGES: PipelineStage[] = [
@@ -117,6 +119,7 @@ function buildEntry(
   const approval = getApproval(projectName, feature);
   const reports = readReports(projectName, { feature });
   const latestReport = reports.length > 0 ? reports[reports.length - 1] : undefined;
+  const reportApproval = reportApprovalStatus(projectName, feature);
 
   const { stage, flag } = decideStage({ repos, todo, approval, latestReport });
 
@@ -142,6 +145,10 @@ function buildEntry(
       },
     } : {}),
     ...(latestReport ? { latestReport } : {}),
+    reportApproval: {
+      status: reportApproval.status,
+      rejectionNote: reportApproval.state?.rejectionNote ?? null,
+    },
   };
 }
 

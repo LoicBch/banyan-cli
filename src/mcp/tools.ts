@@ -439,6 +439,64 @@ export const tools: ToolDef[] = [
   },
   {
     spec: {
+      name: "banyan_approve_report",
+      description:
+        "Approve the latest end-of-task report submitted for a feature. Signals that the user (or orchestrator on the user's behalf) has reviewed the report and is satisfied — typically the next step is `bn merge <feature>`. Errors if no report has been submitted.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "string" },
+          feature: { type: "string" },
+        },
+        required: ["project", "feature"],
+        additionalProperties: false,
+      },
+    },
+    handler: async (args: any) =>
+      api.approveFeatureReport(args.project, args.feature),
+  },
+  {
+    spec: {
+      name: "banyan_reject_report",
+      description:
+        "Reject the latest end-of-task report. Use when the report is incomplete or the work needs more iteration. The agent should pick up the rejection note via a follow-up task (e.g. `banyan_assign_task` with the rejection content) — banyan does not auto-feed the note back to the agent.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "string" },
+          feature: { type: "string" },
+          note: {
+            type: "string",
+            description: "explanation for the rejection — what should change",
+          },
+        },
+        required: ["project", "feature"],
+        additionalProperties: false,
+      },
+    },
+    handler: async (args: any) =>
+      api.rejectFeatureReport(args.project, args.feature, args.note),
+  },
+  {
+    spec: {
+      name: "banyan_get_report_approval",
+      description:
+        "Read the current report-approval state for a feature. Returns one of: no-report-yet, pending, approved, rejected. Use this to know if there's a report awaiting review or already decided on.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "string" },
+          feature: { type: "string" },
+        },
+        required: ["project", "feature"],
+        additionalProperties: false,
+      },
+    },
+    handler: async (args: any) =>
+      api.getFeatureReportApproval(args.project, args.feature),
+  },
+  {
+    spec: {
       name: "banyan_get_plan_approval",
       description:
         "Read the current plan-approval state for a feature. Returns one of: no-plan-yet, pending, approved, rejected. Use this to know whether you (orchestrator or agent) need to wait, approve, or revise.",

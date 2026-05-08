@@ -53,6 +53,13 @@ import {
   type ApprovalState,
   type ApprovalStatus,
 } from "../approval.js";
+import {
+  approveReport,
+  rejectReport,
+  reportApprovalStatus,
+  type ReportApprovalState,
+  type ReportApprovalStatus,
+} from "../reportApproval.js";
 import { buildContext } from "../context.js";
 import { UsageError } from "../errors.js";
 
@@ -457,6 +464,51 @@ export async function getFeatureApproval(
   await validateProject(projectName);
   const state = getApproval(projectName, feature);
   return { state: state ?? null, status: approvalStatus(state) };
+}
+
+export async function approveFeatureReport(
+  projectName: string,
+  feature: string,
+): Promise<{ ok: true; state: ReportApprovalState }> {
+  await validateProject(projectName);
+  const r = reportApprovalStatus(projectName, feature);
+  if (!r.latestReportTs) {
+    throw new UsageError(`no report submitted for ${projectName}/${feature}`);
+  }
+  return { ok: true, state: approveReport(projectName, feature, r.latestReportTs) };
+}
+
+export async function rejectFeatureReport(
+  projectName: string,
+  feature: string,
+  note?: string,
+): Promise<{ ok: true; state: ReportApprovalState }> {
+  await validateProject(projectName);
+  const r = reportApprovalStatus(projectName, feature);
+  if (!r.latestReportTs) {
+    throw new UsageError(`no report submitted for ${projectName}/${feature}`);
+  }
+  return {
+    ok: true,
+    state: rejectReport(projectName, feature, r.latestReportTs, note),
+  };
+}
+
+export async function getFeatureReportApproval(
+  projectName: string,
+  feature: string,
+): Promise<{
+  status: ReportApprovalStatus;
+  latestReportTs: string | null;
+  state: ReportApprovalState | null;
+}> {
+  await validateProject(projectName);
+  const r = reportApprovalStatus(projectName, feature);
+  return {
+    status: r.status,
+    latestReportTs: r.latestReportTs,
+    state: r.state ?? null,
+  };
 }
 
 export async function updateFeatureTodo(

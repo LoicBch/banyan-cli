@@ -483,6 +483,7 @@ function renderApproval(project, approval) {
         onClick: () => runAction("/api/actions/approve", {
           project: project.name,
           feature: approval.feature,
+          scope: "plan",
         }, `approve ${approval.feature}`),
       }),
       btn("reject", {
@@ -494,6 +495,7 @@ function renderApproval(project, approval) {
           runAction("/api/actions/approve", {
             project: project.name,
             feature: approval.feature,
+            scope: "plan",
             reject: true,
             note: note || undefined,
           }, `reject ${approval.feature}`);
@@ -655,36 +657,47 @@ function renderPipelineBar(stageIndex) {
   return h("div", { class: "flex items-start gap-1 w-full" }, children);
 }
 
+function approveButtons(project, entry, scope) {
+  const label = scope === "plan" ? "plan" : "report";
+  return [
+    btn(`approve ${label}`, {
+      variant: "success",
+      onClick: () => runAction("/api/actions/approve", {
+        project: project.name,
+        feature: entry.feature,
+        scope,
+      }, `approve ${label} ${entry.feature}`),
+    }),
+    btn("reject", {
+      variant: "danger",
+      onClick: () => {
+        const note = window.prompt(`reject reason for ${entry.feature}'s ${label}? (optional)`);
+        if (note === null) return;
+        runAction("/api/actions/approve", {
+          project: project.name,
+          feature: entry.feature,
+          scope,
+          reject: true,
+          note: note || undefined,
+        }, `reject ${label} ${entry.feature}`);
+      },
+    }),
+  ];
+}
+
 function renderFeatureRow(project, entry) {
   const flag = entry.flag ? FLAG_LABELS[entry.flag] : null;
   const todoSummary = entry.todo ? `${entry.todo.done}/${entry.todo.total} todo` : null;
   const reposLabel = entry.repos.length > 0 ? entry.repos.join(", ") : "no worktree";
 
-  // Inline action bar — depends on the current stage / flag.
+  // Inline action bar — depends on what's pending. Plan takes precedence
+  // over report (matches the lifecycle: plan must be approved before the
+  // agent can do work that produces a report).
   const actions = [];
   if (entry.approval?.status === "pending") {
-    actions.push(
-      btn("approve plan", {
-        variant: "success",
-        onClick: () => runAction("/api/actions/approve", {
-          project: project.name,
-          feature: entry.feature,
-        }, `approve ${entry.feature}`),
-      }),
-      btn("reject", {
-        variant: "danger",
-        onClick: () => {
-          const note = window.prompt(`reject reason for ${entry.feature}? (optional)`);
-          if (note === null) return;
-          runAction("/api/actions/approve", {
-            project: project.name,
-            feature: entry.feature,
-            reject: true,
-            note: note || undefined,
-          }, `reject ${entry.feature}`);
-        },
-      }),
-    );
+    actions.push(...approveButtons(project, entry, "plan"));
+  } else if (entry.reportApproval?.status === "pending") {
+    actions.push(...approveButtons(project, entry, "report"));
   }
 
   const reportLine = entry.latestReport

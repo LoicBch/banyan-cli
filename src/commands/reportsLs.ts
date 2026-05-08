@@ -1,16 +1,14 @@
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
-import { getProject, type Config } from "../config.js";
+import { getProject, type Config, type ProjectConfig } from "../config.js";
 import * as naming from "../naming.js";
 import { readReports, type FeatureReport } from "../reports.js";
 
 export interface ReportsLsOpts {
   feature?: string;
-  since?: string;
   latestOnly?: boolean;
   json?: boolean;
   watch?: boolean;
-  notify?: boolean;
 }
 
 /** Render the project's report timeline to the terminal. */
@@ -19,16 +17,16 @@ export async function reportsLs(
   projectName: string,
   opts: ReportsLsOpts = {},
 ): Promise<void> {
+  const project = getProject(config, projectName);
+
   // Canonicalise the optional feature filter so `feature/login` and `login`
   // both target the same set of reports.
   let feature = opts.feature;
   if (feature) {
-    const project = getProject(config, projectName);
     feature = await naming.resolveProjectFeatureKey(project, feature);
   }
   const initial = readReports(projectName, {
     feature,
-    since: opts.since,
     latestOnly: opts.latestOnly,
   });
 
@@ -41,7 +39,7 @@ export async function reportsLs(
         `no reports for project '${projectName}'${opts.feature ? ` feature '${opts.feature}'` : ""}`,
       );
     } else {
-      for (const r of initial) printReport(r);
+      for (const r of initial) printReport(project, r);
     }
   }
 
@@ -56,22 +54,18 @@ export async function reportsLs(
   // eslint-disable-next-line no-constant-condition
   while (true) {
     await sleep(1000);
-    const fresh = readReports(projectName, {
-      feature,
-      since: cursor || undefined,
-    }).filter((r) => r.ts > cursor); // drop the bookmark itself if echoed
-
+    const fresh = readReports(projectName, { feature }).filter(
+      (r) => r.ts > cursor,
+    );
     if (fresh.length === 0) continue;
     cursor = fresh[fresh.length - 1]!.ts;
 
     if (opts.json) {
       for (const r of fresh) process.stdout.write(JSON.stringify(r) + "\n");
     } else {
-      for (const r of fresh) printReport(r);
+      for (const r of fresh) printReport(project, r);
     }
-    if (opts.notify !== false) {
-      for (const r of fresh) osNotify(projectName, r);
-    }
+    for (const r of fresh) osNotify(projectName, r);
   }
 }
 
@@ -95,11 +89,24 @@ function osNotify(projectName: string, r: FeatureReport): void {
   }
 }
 
-function printReport(r: FeatureReport): void {
+/** Find the worktree path of `feature` for any non-compose repo of the
+ *  project — used as a "where is the code" hint in the rendered report. */
+function findWorktreeHint(project: ProjectConfig, feature: string): string | undefined {
+  for (const r of project.repos) {
+    if (r.type === "compose") continue;
+    const wt = naming.existingWorktreePath(r.path, feature);
+    if (wt) return wt;
+  }
+  return undefined;
+}
+
+function printReport(project: ProjectConfig, r: FeatureReport): void {
   const ts = new Date(r.ts).toLocaleString();
   const tag = statusTag(r.status);
+  const wt = findWorktreeHint(project, r.feature);
   logger.info(``);
   logger.info(`── ${r.feature}  ${tag}  ${ts} ──`);
+  if (wt) logger.info(`worktree: ${wt}`);
   logger.info(r.summary);
   logger.info(``);
   logger.info(`test:`);

@@ -17,6 +17,7 @@ import { readReports } from "../reports.js";
 import { listTodoFeatures } from "../todo.js";
 import { buildPipeline } from "./pipeline.js";
 import { approvalStatus, approvePlan, getApproval, rejectPlan } from "../approval.js";
+import { approveReport, rejectReport, reportApprovalStatus } from "../reportApproval.js";
 import { readdirSync, existsSync as fsExists } from "node:fs";
 import { homedir } from "node:os";
 
@@ -143,18 +144,33 @@ export async function startServer(
   );
 
   app.post("/api/actions/approve", (req, res) => {
-    if (!requireFields(req, res, ["project", "feature"])) return;
-    const { project, feature, reject, note } = req.body as {
+    if (!requireFields(req, res, ["project", "feature", "scope"])) return;
+    const { project, feature, scope, reject, note } = req.body as {
       project: string;
       feature: string;
+      scope: "plan" | "report";
       reject?: boolean;
       note?: string;
     };
     try {
-      const state = reject
-        ? rejectPlan(project, feature, note)
-        : approvePlan(project, feature);
-      res.json({ ok: true, state, status: approvalStatus(state) });
+      if (scope === "plan") {
+        const state = reject
+          ? rejectPlan(project, feature, note)
+          : approvePlan(project, feature);
+        res.json({ ok: true, state, status: approvalStatus(state) });
+      } else if (scope === "report") {
+        const r = reportApprovalStatus(project, feature);
+        if (!r.latestReportTs) {
+          res.status(400).json({ ok: false, error: "no report to decide on" });
+          return;
+        }
+        const state = reject
+          ? rejectReport(project, feature, r.latestReportTs, note)
+          : approveReport(project, feature, r.latestReportTs);
+        res.json({ ok: true, state });
+      } else {
+        res.status(400).json({ ok: false, error: `unknown scope '${scope}'` });
+      }
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
     }
