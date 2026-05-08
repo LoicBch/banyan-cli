@@ -18,7 +18,6 @@ import { testStop } from "../commands/testStop.js";
 import { testLs } from "../commands/testLs.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
-import { sync as syncCmd } from "../commands/sync.js";
 import { pulse as pulseCmd } from "../commands/pulse.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
@@ -132,24 +131,6 @@ export function register(
     .option("-w, --watch <seconds>", "refresh every N seconds (live mode)", (v) => parseInt(v, 10))
     .action(async (opts: { base?: string; watch?: number }) => {
       await pulseCmd(config, project.name, { base: opts.base, watch: opts.watch });
-    });
-
-  projectCmd
-    .command("sync")
-    .description(
-      "rebase every active feature on its base branch in one shot. " +
-        "Uses the headless claude resolver (with cross-feature context) on conflicts.",
-    )
-    .option("-b, --base <branch>", "override base branch (default: per-repo baseBranch / origin/HEAD / main)")
-    .option("--push", "push --force-with-lease after each successful rebase")
-    .option("--no-resolve", "don't auto-resolve conflicts; pause and report (matches `bn merge --no-resolve`)")
-    .action(async (opts: { base?: string; push?: boolean; resolve?: boolean }) => {
-      await syncCmd(config, project.name, {
-        base: opts.base,
-        push: opts.push,
-        // commander turns --no-resolve into opts.resolve === false
-        noResolve: opts.resolve === false,
-      });
     });
 
   projectCmd
