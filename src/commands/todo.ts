@@ -1,4 +1,6 @@
 import { logger } from "../logger.js";
+import { getProject, type Config } from "../config.js";
+import * as naming from "../naming.js";
 import {
   setTodo,
   addTodoItems,
@@ -26,10 +28,15 @@ export interface TodoCmdOpts {
 }
 
 export async function todoCmd(
+  config: Config,
   projectName: string,
-  feature: string,
+  inputFeature: string,
   opts: TodoCmdOpts = {},
 ): Promise<void> {
+  // Canonicalise: accept "feature/login" or "login" — both map to the
+  // same state file.
+  const project = getProject(config, projectName);
+  const feature = await naming.resolveProjectFeatureKey(project, inputFeature);
   let todo: FeatureTodo | undefined;
   let mutated = false;
 

@@ -21,7 +21,7 @@ export interface AssignTaskOpts {
 export async function assignTask(
   config: Config,
   projectName: string,
-  feature: string,
+  inputFeature: string,
   prompt: string,
   opts: AssignTaskOpts = {},
 ): Promise<{ paneId: string }> {
@@ -29,6 +29,10 @@ export async function assignTask(
     throw new UsageError("prompt cannot be empty");
   }
   const project = getProject(config, projectName);
+
+  // Canonicalise: accept full branch names (e.g. "feature/login") and
+  // resolve them back to the feature short name used as the pane tag.
+  const feature = await naming.resolveProjectFeatureKey(project, inputFeature);
 
   const session = naming.sessionName(project.name);
   const agentsWin = naming.agentsWindowName(project.name);

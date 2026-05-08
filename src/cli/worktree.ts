@@ -94,7 +94,7 @@ export function register(
       "remove worktree even with uncommitted changes (branch is still kept)",
     )
     .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await wtRm(
@@ -116,7 +116,7 @@ export function register(
     .description("fetch + rebase worktree on base branch. omit repo to rebase all worktrees of this feature")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .action(async (feature: string, repo: string | undefined, opts: { base?: string }) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await rebase(
@@ -162,7 +162,7 @@ export function register(
           autoResolve?: boolean;
         },
       ) => {
-        const repos = resolveRepos(getProject(config, project.name), feature, repo);
+        const repos = await resolveRepos(getProject(config, project.name), feature, repo);
         for (const r of repos) {
           if (repos.length > 1) logger.info(`=== ${r} ===`);
           await merge(
@@ -190,7 +190,7 @@ export function register(
       "remove worktree even with uncommitted changes; force-delete branch even with unmerged commits",
     )
     .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await cleanup(

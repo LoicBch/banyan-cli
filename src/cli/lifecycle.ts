@@ -7,7 +7,7 @@ import type { Config, ProjectConfig } from "../config.js";
 import { buildContext } from "../context.js";
 import { logger } from "../logger.js";
 import { resolveLocation } from "../commands/whereami.js";
-import { info } from "../commands/info.js";
+import { configShow } from "../commands/configCmd.js";
 import { start } from "../commands/start.js";
 import { stop } from "../commands/stop.js";
 import { attach } from "../commands/attach.js";
@@ -32,10 +32,10 @@ export function register(
   config: Config,
 ): void {
   projectCmd
-    .command("info")
-    .description("show project details (layout, repos)")
+    .command("config")
+    .description("show the project's static config (repos, run commands, base branches) — what's stored in ~/.config/banyan/config.yaml")
     .action(async () => {
-      await info(await buildContext(config, project.name));
+      await configShow(await buildContext(config, project.name));
     });
 
   projectCmd
@@ -183,7 +183,7 @@ export function register(
           notify?: boolean;
         },
       ) => {
-        await reportsLs(project.name, {
+        await reportsLs(config, project.name, {
           feature,
           since: opts.since,
           latestOnly: opts.latest,
@@ -208,7 +208,7 @@ export function register(
         feature: string,
         opts: { reject?: string | boolean; show?: boolean },
       ) => {
-        await approveCmd(project.name, feature, opts);
+        await approveCmd(config, project.name, feature, opts);
       },
     );
 
@@ -237,7 +237,7 @@ export function register(
           json?: boolean;
         },
       ) => {
-        await todoCmd(project.name, feature, opts);
+        await todoCmd(config, project.name, feature, opts);
       },
     );
 

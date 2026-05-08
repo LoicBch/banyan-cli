@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
+import { getProject, type Config } from "../config.js";
+import * as naming from "../naming.js";
 import { readReports, type FeatureReport } from "../reports.js";
 
 export interface ReportsLsOpts {
@@ -13,11 +15,19 @@ export interface ReportsLsOpts {
 
 /** Render the project's report timeline to the terminal. */
 export async function reportsLs(
+  config: Config,
   projectName: string,
   opts: ReportsLsOpts = {},
 ): Promise<void> {
+  // Canonicalise the optional feature filter so `feature/login` and `login`
+  // both target the same set of reports.
+  let feature = opts.feature;
+  if (feature) {
+    const project = getProject(config, projectName);
+    feature = await naming.resolveProjectFeatureKey(project, feature);
+  }
   const initial = readReports(projectName, {
-    feature: opts.feature,
+    feature,
     since: opts.since,
     latestOnly: opts.latestOnly,
   });
@@ -47,7 +57,7 @@ export async function reportsLs(
   while (true) {
     await sleep(1000);
     const fresh = readReports(projectName, {
-      feature: opts.feature,
+      feature,
       since: cursor || undefined,
     }).filter((r) => r.ts > cursor); // drop the bookmark itself if echoed
 

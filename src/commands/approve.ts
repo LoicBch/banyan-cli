@@ -1,4 +1,6 @@
 import { logger } from "../logger.js";
+import { getProject, type Config } from "../config.js";
+import * as naming from "../naming.js";
 import {
   approvalStatus,
   approvePlan,
@@ -17,10 +19,13 @@ export interface ApproveOpts {
 }
 
 export async function approveCmd(
+  config: Config,
   projectName: string,
-  feature: string,
+  inputFeature: string,
   opts: ApproveOpts = {},
 ): Promise<void> {
+  const project = getProject(config, projectName);
+  const feature = await naming.resolveProjectFeatureKey(project, inputFeature);
   if (opts.show) {
     const state = getApproval(projectName, feature);
     const status = approvalStatus(state);

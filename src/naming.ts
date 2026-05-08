@@ -174,6 +174,31 @@ export interface BranchCheckout {
  *
  * Returns null if neither path resolves.
  */
+/**
+ * Project-level canonicalisation: try `resolveBranchCheckout` against every
+ * non-compose repo in the project. Returns the first match's `featureKey`,
+ * which is the canonical short identifier for state files / tmux.
+ *
+ * Used by commands that don't operate on a single repo (todo, approve,
+ * reports, task) but still need to map `feature/login` ↔ `login`.
+ *
+ * Falls back to a sanitised version of the input (`/` → `__`) if no repo
+ * has the branch checked out — e.g. when the user is operating on a
+ * feature whose worktree was already cleaned up but whose state files
+ * still exist.
+ */
+export async function resolveProjectFeatureKey(
+  project: { repos: Array<{ path: string; type?: string }> },
+  input: string,
+): Promise<string> {
+  for (const r of project.repos) {
+    if (r.type === "compose") continue;
+    const c = await resolveBranchCheckout(r.path, input);
+    if (c) return c.featureKey;
+  }
+  return input.replace(/\//g, "__");
+}
+
 export async function resolveBranchCheckout(
   repoPath: string,
   input: string,
