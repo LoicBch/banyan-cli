@@ -635,7 +635,7 @@ export async function mergeFeature(
   projectName: string,
   feature: string,
   repo?: string,
-  opts: { autoResolve?: boolean; strategy?: "squash" | "merge" | "rebase"; local?: boolean } = {},
+  opts: { noResolve?: boolean; local?: boolean } = {},
 ): Promise<{ ok: true }> {
   const config = await getConfig();
   const project = getProject(config, projectName);
@@ -645,8 +645,8 @@ export async function mergeFeature(
   });
   for (const r of targets) {
     await mergeCmd(await buildContext(config, projectName, { feature, repoName: r }), {
-      autoResolve: opts.autoResolve ?? true, // default to auto in MCP
-      strategy: opts.strategy,
+      // Resolver runs by default in MCP-driven merges (orchestrator path).
+      noResolve: opts.noResolve ?? false,
       local: opts.local,
     });
   }

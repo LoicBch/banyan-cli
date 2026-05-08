@@ -9,7 +9,8 @@ export async function configShow(ctx: Context): Promise<void> {
   ctx.logger.info(`repos:`);
   for (const r of ctx.project.repos) {
     const base = r.baseBranch ? ` (base: ${r.baseBranch})` : "";
-    ctx.logger.info(`  ${r.name.padEnd(10)} ${contractHome(r.path)}${base}`);
+    const strat = r.mergeStrategy ? ` (merge: ${r.mergeStrategy})` : "";
+    ctx.logger.info(`  ${r.name.padEnd(10)} ${contractHome(r.path)}${base}${strat}`);
     if (r.run) {
       if (r.run.setup) {
         ctx.logger.info(`    setup:  ${r.run.setup}`);

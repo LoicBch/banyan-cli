@@ -34,9 +34,7 @@ export async function mergeViaPR(
   if (notReady) throw new UsageError(notReady);
 
   // 2. Pre-flight local rebase: catch conflicts BEFORE touching origin.
-  if (!opts.skipPreflight) {
-    await runPreflightRebase(ctx, base, opts);
-  }
+  await runPreflightRebase(ctx, base, opts);
 
   // 2b. If the branch now has no commits or diff vs origin/<base>, the feature
   //     is effectively already on base (likely absorbed by a sibling merge).
@@ -128,9 +126,10 @@ async function handleMergeAttempt(
   opts: MergeOpts,
   mrUrl: string,
 ): Promise<void> {
+  const strategy = ctx.repo!.mergeStrategy ?? "squash";
   switch (status.state) {
     case "mergeable":
-      ctx.logger.info(`mergeable — merging with strategy=${opts.strategy ?? "squash"}…`);
+      ctx.logger.info(`mergeable — merging with strategy=${strategy}…`);
       await mergeWithRetry(ctx, provider, repoPath, branch, opts);
       ctx.logger.ok(`merged into ${base} via ${provider.name}`);
       ctx.logger.info(`cleanup with: bn ${ctx.project.name} cleanup ${ctx.feature} ${ctx.repo!.name}`);
@@ -140,7 +139,7 @@ async function handleMergeAttempt(
       if (opts.wait) {
         ctx.logger.info(`CI running, --wait set → scheduling auto-merge when green…`);
         await provider.merge(repoPath, branch, {
-          strategy: opts.strategy ?? "squash",
+          strategy,
           waitForCI: true,
           removeSourceBranch: true,
         });
@@ -191,14 +190,14 @@ async function mergeWithRetry(
   provider: PRProvider,
   repoPath: string,
   branch: string,
-  opts: MergeOpts,
+  _opts: MergeOpts,
 ): Promise<void> {
   const delays = [1500, 3000, 5000, 8000]; // ~17s total
   let lastErr: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
       await provider.merge(repoPath, branch, {
-        strategy: opts.strategy ?? "squash",
+        strategy: ctx.repo!.mergeStrategy ?? "squash",
         removeSourceBranch: true,
       });
       return;

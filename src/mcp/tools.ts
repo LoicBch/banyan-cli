@@ -661,15 +661,17 @@ export const tools: ToolDef[] = [
     spec: {
       name: "banyan_merge_feature",
       description:
-        "Push + create MR/PR + merge for one or all repos of the feature. Pre-flight rebase happens locally; conflicts are auto-resolved by spawning a headless Claude resolver (--auto-resolve true by default in MCP).",
+        "Push + create MR/PR + merge for one or all repos of the feature. Pre-flight rebase always runs; conflicts are auto-resolved by a headless Claude resolver (set noResolve=true to opt out and pause for manual fix). The merge strategy comes from the repo's `mergeStrategy` config field (default 'squash').",
       inputSchema: {
         type: "object",
         properties: {
           project: { type: "string" },
           feature: { type: "string" },
           repo: { type: "string" },
-          autoResolve: { type: "boolean", description: "default true in MCP" },
-          strategy: { type: "string", enum: ["squash", "merge", "rebase"] },
+          noResolve: {
+            type: "boolean",
+            description: "opt out of the headless conflict resolver (default: resolver runs)",
+          },
           local: { type: "boolean", description: "skip MR flow, merge locally" },
         },
         required: ["project", "feature"],
@@ -678,8 +680,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.mergeFeature(args.project, args.feature, args.repo, {
-        autoResolve: args.autoResolve,
-        strategy: args.strategy,
+        noResolve: args.noResolve,
         local: args.local,
       }),
   },

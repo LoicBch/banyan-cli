@@ -47,7 +47,10 @@ export async function runPreflightRebase(
       baseRef: `origin/${base}`,
       preRebaseHead,
       logger: ctx.logger,
-      auto: opts.autoResolve,
+      // Resolver runs by default. opts.noResolve flips back to manual:
+      // the function will report and exit, leaving the rebase paused for
+      // the user to resolve.
+      auto: !opts.noResolve,
       // Cross-feature awareness: same scope as the orchestrator.
       addDirs: projectParentDirs(ctx.project),
       mcpConfig: ensureBanyanMcpConfig(),

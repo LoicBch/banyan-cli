@@ -142,12 +142,13 @@ export function register(
     )
     .option("-b, --base <branch>", "override base branch (default: per-repo baseBranch / origin/HEAD / main)")
     .option("--push", "push --force-with-lease after each successful rebase")
-    .option("--skip-resolver", "don't auto-resolve conflicts; pause and report")
-    .action(async (opts: { base?: string; push?: boolean; skipResolver?: boolean }) => {
+    .option("--no-resolve", "don't auto-resolve conflicts; pause and report (matches `bn merge --no-resolve`)")
+    .action(async (opts: { base?: string; push?: boolean; resolve?: boolean }) => {
       await syncCmd(config, project.name, {
         base: opts.base,
         push: opts.push,
-        skipResolver: opts.skipResolver,
+        // commander turns --no-resolve into opts.resolve === false
+        noResolve: opts.resolve === false,
       });
     });
 

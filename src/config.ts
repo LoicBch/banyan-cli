@@ -57,6 +57,9 @@ export interface RepoConfig {
   type?: RepoType;           // default: "git"
   path: string;
   baseBranch?: string;
+  /** Strategy to use when merging via the PR/MR flow. Defaults to "squash"
+   *  if not set. Per-repo because conventions vary across teams. */
+  mergeStrategy?: "squash" | "merge" | "rebase";
   run?: RunConfig;
   deployCommand?: string;
   // For type=compose only:
@@ -132,6 +135,7 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
         ...(r.type && r.type !== "git" ? { type: r.type } : {}),
         path: contractHome(r.path),
         ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
+        ...(r.mergeStrategy ? { mergeStrategy: r.mergeStrategy } : {}),
         ...(r.run
           ? {
               run: {
@@ -221,6 +225,16 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
           );
         }
         baseBranch = r.baseBranch;
+      }
+
+      let mergeStrategy: RepoConfig["mergeStrategy"];
+      if (r.mergeStrategy !== undefined && r.mergeStrategy !== null && r.mergeStrategy !== "") {
+        if (typeof r.mergeStrategy !== "string" || !["squash", "merge", "rebase"].includes(r.mergeStrategy)) {
+          throw new ConfigError(
+            `${sourcePath}: projects[${i}].repos[${j}].mergeStrategy must be one of: squash, merge, rebase`,
+          );
+        }
+        mergeStrategy = r.mergeStrategy as RepoConfig["mergeStrategy"];
       }
 
       let run: RunConfig | undefined;
@@ -364,6 +378,7 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         ...(type !== "git" ? { type } : {}),
         path: rPath,
         ...(baseBranch ? { baseBranch } : {}),
+        ...(mergeStrategy ? { mergeStrategy } : {}),
         ...(run ? { run } : {}),
         ...(deployCommand ? { deployCommand } : {}),
         ...(composeFile ? { composeFile } : {}),

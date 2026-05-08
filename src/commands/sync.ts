@@ -39,7 +39,7 @@ export interface SyncOpts {
   /** Push --force-with-lease after each successful rebase. */
   push?: boolean;
   /** Skip the headless conflict resolver, just report and move on. */
-  skipResolver?: boolean;
+  noResolve?: boolean;
 }
 
 interface RepoOutcome {
@@ -165,7 +165,7 @@ async function syncOne(args: {
   }
 
   // 5. Conflicts — spawn the headless resolver unless asked to skip.
-  if (opts.skipResolver) {
+  if (opts.noResolve) {
     logger.warn(
       `  ${tag}: conflicts detected on rebase — left paused (use bn rebase ${feature} ${repo.name} or resolve manually)`,
     );
@@ -173,7 +173,7 @@ async function syncOne(args: {
       feature,
       repo: repo.name,
       state: "conflict-failed",
-      detail: "rebase paused, --skip-resolver was set",
+      detail: "rebase paused, --no-resolve was set",
     };
   }
 

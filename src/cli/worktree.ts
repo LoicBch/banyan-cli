@@ -113,7 +113,7 @@ export function register(
 
   projectCmd
     .command("rebase <branch> [repo]")
-    .description("fetch + rebase worktree on base branch. omit repo to rebase all worktrees of this feature")
+    .description("fetch + rebase the worktree on its base branch. omit repo to rebase all worktrees of this branch.")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .action(async (feature: string, repo: string | undefined, opts: { base?: string }) => {
       const repos = await resolveRepos(getProject(config, project.name), feature, repo);
@@ -128,24 +128,19 @@ export function register(
 
   projectCmd
     .command("merge <branch> [repo]")
-    .description("push + create MR/PR + merge (GitLab/GitHub). --local to skip the MR flow.")
+    .description(
+      "push + create MR/PR + merge (GitLab/GitHub). always pre-flights a local rebase first " +
+        "and runs the headless claude resolver on conflicts (cross-feature aware). " +
+        "--local for the offline path, --no-resolve to opt out of auto-resolution.",
+    )
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .option("--local", "skip the MR/PR flow, merge locally as before")
     .option("--wait", "wait for CI to pass, then auto-merge")
     .option("--draft", "create MR as draft (don't attempt to merge)")
     .option("--open", "open the MR/PR in the browser after creating")
     .option(
-      "--strategy <strategy>",
-      "merge strategy: squash | merge | rebase (default: squash)",
-      "squash",
-    )
-    .option(
-      "--skip-preflight",
-      "skip the local rebase / conflict preview before pushing",
-    )
-    .option(
-      "--auto-resolve",
-      "on conflict, launch the claude resolver without asking",
+      "--no-resolve",
+      "on conflict during pre-flight, don't run the claude resolver — pause for manual fix",
     )
     .action(
       async (
@@ -157,9 +152,7 @@ export function register(
           wait?: boolean;
           draft?: boolean;
           open?: boolean;
-          strategy?: "squash" | "merge" | "rebase";
-          skipPreflight?: boolean;
-          autoResolve?: boolean;
+          resolve?: boolean;
         },
       ) => {
         const repos = await resolveRepos(getProject(config, project.name), feature, repo);
@@ -173,9 +166,8 @@ export function register(
               wait: opts.wait,
               draft: opts.draft,
               open: opts.open,
-              strategy: opts.strategy,
-              skipPreflight: opts.skipPreflight,
-              autoResolve: opts.autoResolve,
+              // commander turns --no-resolve into opts.resolve === false
+              noResolve: opts.resolve === false,
             },
           );
         }
