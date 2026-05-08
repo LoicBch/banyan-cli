@@ -2,7 +2,6 @@ import { getProject, type Config, type ProjectConfig, type RepoConfig } from "..
 import * as naming from "../naming.js";
 import * as tmux from "../tmux.js";
 import * as docker from "../docker.js";
-import * as git from "../git.js";
 import * as state from "../state.js";
 import { shellQuote } from "../shell.js";
 import { findFreePort } from "../util/port.js";
@@ -21,6 +20,12 @@ interface RepoPlan {
     containerPort: number;
     hostPort: number;
   }>;
+}
+
+interface RepoCheckout {
+  repo: RepoConfig;
+  path: string;
+  isMainCheckout: boolean;
 }
 
 const KILL_GRACE_MS = 1500;
@@ -55,10 +60,14 @@ function delay(ms: number): Promise<void> {
 export async function test(
   config: Config,
   projectName: string,
-  feature: string,
+  branch: string,
   onlyRepos?: string[],
 ): Promise<void> {
-  naming.assertValidFeature(feature);
+  // We accept full branch names here (with `/`), so the strict feature-name
+  // validation doesn't apply. We still want to reject empty input.
+  if (!branch || branch.trim().length === 0) {
+    throw new UsageError("branch name cannot be empty");
+  }
 
   const project = getProject(config, projectName);
 
@@ -74,36 +83,30 @@ export async function test(
     }
   }
 
-  // Pre-flight: which selected git repos actually have a worktree for this
-  // feature? If none, fail fast — don't bring up compose, don't allocate
-  // ports, don't open tmux. The user probably typo'd the feature name.
-  const eligible = selected.filter((r) => {
-    if (r.type === "compose") return false;
-    return naming.existingWorktreePath(r.path, feature) !== undefined;
-  });
-  if (eligible.length === 0) {
-    const knownFeatures = new Set<string>();
-    for (const r of project.repos) {
-      if (r.type === "compose") continue;
-      try {
-        for (const wt of await git.worktreeList(r.path)) {
-          if (wt.path === r.path) continue;
-          if (!wt.path.startsWith(`${r.path}-`)) continue;
-          knownFeatures.add(wt.path.slice(r.path.length + 1));
-        }
-      } catch {
-        // ignore — best-effort hint only
-      }
+  // Pre-flight: for each selected git repo, find a checkout matching the
+  // input. The input is interpreted as either a banyan feature short name
+  // (legacy `bn start login` after `bn wt login`) or a full branch name
+  // (`bn start develop`, `bn start feature/login`). Resolution is per-repo
+  // because some repos may have the branch and others may not.
+  const checkouts: RepoCheckout[] = [];
+  for (const r of selected) {
+    if (r.type === "compose") continue;
+    const c = await naming.resolveBranchCheckout(r.path, branch);
+    if (c) {
+      checkouts.push({ repo: r, path: c.path, isMainCheckout: c.isMainCheckout });
     }
-    const hint =
-      knownFeatures.size > 0
-        ? ` known features: ${[...knownFeatures].sort().join(", ")}.`
-        : "";
-    throw new UsageError(
-      `no worktrees for feature '${feature}' in any selected repo. ` +
-        `create them first: bn ${projectName} wt ${feature}.${hint}`,
-    );
   }
+  if (checkouts.length === 0) {
+    throw new UsageError(buildResolutionErrorMessage(project, branch));
+  }
+
+  // Use the canonical feature key from the first repo that resolved. All
+  // repos should produce the same key in practice (same input → same
+  // resolution), so this is just a representative.
+  const firstResolution = await naming.resolveBranchCheckout(checkouts[0]!.repo.path, branch);
+  const feature = firstResolution?.featureKey ?? branch.replace(/\//g, "__");
+
+  const eligible = checkouts.map((c) => c.repo);
 
   // Auto-start any compose-type stack that isn't already up for this feature.
   // Only triggered when at least one ELIGIBLE runnable repo needs composePorts
@@ -128,8 +131,9 @@ export async function test(
     composePorts?: RepoPlan["composePorts"];
   }
   const partials: PartialPlan[] = [];
+  const checkoutByName = new Map(checkouts.map((c) => [c.repo.name, c]));
   for (const r of eligible) {
-    const wtPath = naming.existingWorktreePath(r.path, feature)!;
+    const wtPath = checkoutByName.get(r.name)!.path;
     if (!r.run) {
       logger.warn(`skip ${r.name}: no run config (set with: bn ${projectName} set-run ${r.name} --command ...)`);
       continue;
@@ -191,7 +195,8 @@ export async function test(
 
   if (plans.length === 0) {
     throw new UsageError(
-      `no repos eligible for feature '${feature}'. create worktrees with: bn ${projectName} wt ${feature}`,
+      `no repos eligible for '${branch}' — none of them have a run config. ` +
+        `set one with: bn ${projectName} set-run <repo> --command "<cmd>" [--port <n>] [--port-env <var>]`,
     );
   }
 
@@ -332,6 +337,47 @@ export async function test(
     }
   }
   logger.info(`attach with: bn ${projectName} attach`);
+}
+
+/**
+ * Build a helpful error message for the case where `bn start <X>` couldn't
+ * resolve `X` to any checkout. Tailors the suggestion based on whether the
+ * input matches a configured baseBranch (suggest git checkout) or looks
+ * like a feature branch (suggest bn wt).
+ */
+function buildResolutionErrorMessage(
+  project: ProjectConfig,
+  input: string,
+): string {
+  // Is this the baseBranch of any repo in the project?
+  const baseBranchRepos = project.repos
+    .filter((r) => r.type !== "compose" && r.baseBranch === input)
+    .map((r) => r.name);
+
+  if (baseBranchRepos.length > 0) {
+    return (
+      `branch '${input}' is the baseBranch of ${baseBranchRepos.join(", ")} ` +
+        `but isn't checked out anywhere (main checkout is on a different branch). ` +
+        `bring it back with: cd <repo-path> && git checkout ${input}`
+    );
+  }
+
+  // Looks like a feature branch (feature/<X>) → suggest bn wt with the suffix
+  if (input.startsWith("feature/")) {
+    const short = input.slice("feature/".length);
+    return (
+      `branch '${input}' has no worktree. ` +
+        `create one with: bn ${project.name} wt ${short}`
+    );
+  }
+
+  // Generic non-feature branch → suggest both options
+  return (
+    `branch '${input}' is not checked out anywhere. ` +
+      `create a worktree with: bn ${project.name} wt ${input}` +
+      `${input.includes("/") ? ` --prefix ""` : ""}, ` +
+      `or check it out in the main repo: cd <repo-path> && git checkout ${input}`
+  );
 }
 
 /**

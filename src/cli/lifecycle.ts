@@ -39,12 +39,14 @@ export function register(
     });
 
   projectCmd
-    .command("start [feature] [repos...]")
+    .command("start [branch] [repos...]")
     .description(
       "no args from project root: launch the project tmux workspace (orchestrator + terminal). " +
-        "no args from a worktree dir: start/restart the feature inferred from cwd. " +
-        "with <feature>: start (or restart if already up) every repo's run command for that feature. " +
-        "with <feature> <repo...>: start/restart only those repos.",
+        "no args from a worktree dir: start/restart the run stack for the inferred branch. " +
+        "with <branch>: start (or restart if already up) every repo's run command on that branch. " +
+        "<branch> can be a feature short name (`bn start login` after `bn wt login`), " +
+        "a base branch checked out in the main repo (`bn start develop`), or any full branch name. " +
+        "with <branch> <repo...>: start/restart only those repos.",
     )
     .action(async (feature: string | undefined, repos: string[]) => {
       if (!feature) {

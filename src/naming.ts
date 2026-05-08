@@ -147,6 +147,79 @@ export async function resolveBranchName(
   return branchName(feature);
 }
 
+export interface BranchCheckout {
+  /** Filesystem path of the matched checkout — main repo or a worktree. */
+  path: string;
+  /** Canonical short identifier used for state files / tmux window names.
+   *  - For a banyan-managed worktree (created by `bn wt`): the feature
+   *    short name parsed from the worktree path.
+   *  - For the main checkout (or any non-banyan worktree): the user input
+   *    with `/` replaced by `__` so it's safe in tmux / file names. */
+  featureKey: string;
+  /** True if the matched checkout is the main repo (not a worktree). */
+  isMainCheckout: boolean;
+}
+
+/**
+ * Resolve a `bn start <X>` argument to a concrete checkout path.
+ *
+ * Resolution order (first match wins):
+ *   1. Treat X as a banyan feature short name → look at the conventional
+ *      worktree path `<repo-parent>/worktree-<repo>/<X>/`. This is the
+ *      legacy / common case (`bn start login` after `bn wt login`).
+ *   2. Treat X as a full branch name → ask git for the worktree whose
+ *      branch matches X. Covers `bn start develop` (main checkout on
+ *      develop), `bn start feature/login` (worktree on feature/login),
+ *      and any non-conventional branch.
+ *
+ * Returns null if neither path resolves.
+ */
+export async function resolveBranchCheckout(
+  repoPath: string,
+  input: string,
+): Promise<BranchCheckout | null> {
+  // 1. Conventional feature short name (no slash, has a worktree dir).
+  if (!input.includes("/")) {
+    const conventional = existingWorktreePath(repoPath, input);
+    if (conventional) {
+      return { path: conventional, featureKey: input, isMainCheckout: false };
+    }
+  }
+
+  // 2. Branch lookup via git.
+  let wts: Awaited<ReturnType<typeof git.worktreeList>>;
+  try {
+    wts = await git.worktreeList(repoPath);
+  } catch {
+    return null;
+  }
+  const inputBranch = input.replace(/^refs\/heads\//, "");
+  for (const wt of wts) {
+    if (!wt.branch) continue;
+    const wtBranch = wt.branch.replace(/^refs\/heads\//, "");
+    if (wtBranch !== inputBranch) continue;
+    const isMain = wt.path === repoPath;
+    if (isMain) {
+      return {
+        path: wt.path,
+        featureKey: input.replace(/\//g, "__"),
+        isMainCheckout: true,
+      };
+    }
+    // Non-main worktree: prefer the parsed feature short name as the key
+    // (so `bn start login` and `bn start feature/login` share state when
+    // they refer to the same worktree).
+    const parsed = parseWorktreePath(wt.path, repoPath);
+    return {
+      path: wt.path,
+      featureKey: parsed?.feature ?? input.replace(/\//g, "__"),
+      isMainCheckout: false,
+    };
+  }
+
+  return null;
+}
+
 export function windowName(targetName: string, feature: string): string {
   return `${targetName}-${feature}`;
 }
