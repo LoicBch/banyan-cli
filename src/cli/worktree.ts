@@ -22,7 +22,7 @@ export function register(
   config: Config,
 ): void {
   projectCmd
-    .command("wt <feature> [repos...]")
+    .command("wt <branch> [repos...]")
     .description(
       "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
         "agent mode controls autonomy: interactive (plain claude, you drive), assisted (asks on big decisions), " +
@@ -35,7 +35,7 @@ export function register(
     )
     .option(
       "--prefix <prefix>",
-      "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<feature>). pass '' for no prefix.",
+      "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<branch>). pass '' for no prefix.",
     )
     .option(
       "-m, --mode <mode>",
@@ -43,7 +43,7 @@ export function register(
     )
     .option(
       "--review-plan",
-      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <feature>`. orthogonal to --mode (combine with autonomous or autopilot).",
+      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <branch>`. orthogonal to --mode (combine with autonomous or autopilot).",
     )
     .action(
       async (
@@ -76,7 +76,7 @@ export function register(
     );
 
   projectCmd
-    .command("task <feature> <prompt>")
+    .command("task <branch> <prompt>")
     .description("send a prompt to the per-feature claude agent (paste-and-submit into the existing pane)")
     .option("-f, --force", "send even if claude isn't detected as running in the pane")
     .action(async (feature: string, prompt: string, opts: { force?: boolean }) => {
@@ -87,7 +87,7 @@ export function register(
     });
 
   projectCmd
-    .command("wt-rm <feature> [repo]")
+    .command("wt-rm <branch> [repo]")
     .description("remove worktree (keep branch local + remote) and close pane. omit repo to act on all worktrees of this feature")
     .option(
       "-f, --force",
@@ -112,7 +112,7 @@ export function register(
     });
 
   projectCmd
-    .command("rebase <feature> [repo]")
+    .command("rebase <branch> [repo]")
     .description("fetch + rebase worktree on base branch. omit repo to rebase all worktrees of this feature")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .action(async (feature: string, repo: string | undefined, opts: { base?: string }) => {
@@ -127,7 +127,7 @@ export function register(
     });
 
   projectCmd
-    .command("merge <feature> [repo]")
+    .command("merge <branch> [repo]")
     .description("push + create MR/PR + merge (GitLab/GitHub). --local to skip the MR flow.")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .option("--local", "skip the MR/PR flow, merge locally as before")
@@ -183,7 +183,7 @@ export function register(
     );
 
   projectCmd
-    .command("cleanup <feature> [repo]")
+    .command("cleanup <branch> [repo]")
     .description("remove worktree + delete branch (safe) + close pane. omit repo to cleanup all worktrees of this feature")
     .option(
       "-f, --force",

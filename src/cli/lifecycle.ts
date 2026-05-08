@@ -63,9 +63,9 @@ export function register(
     });
 
   projectCmd
-    .command("stop <feature>")
+    .command("stop <branch>")
     .description(
-      "stop a feature's run processes (kills its test-<feature> window). " +
+      "stop a branch's run processes (kills its test-<branch> window). " +
         "the agent pane and the project session are left running. " +
         "use `bn <project> kill` to tear down the whole session.",
     )
@@ -152,7 +152,7 @@ export function register(
     });
 
   projectCmd
-    .command("ports [feature]")
+    .command("ports [branch]")
     .description(
       "show port allocations: run ports (back/front/...) from the last `bn start` and live compose ports (DB/PMA/...). " +
         "no feature: cwd-inferred or all features with recorded state.",
@@ -162,10 +162,10 @@ export function register(
     });
 
   projectCmd
-    .command("reports [feature]")
+    .command("reports [branch]")
     .description(
       "show end-of-task reports submitted by per-feature agents (timeline). " +
-        "no feature: all reports. with <feature>: just that feature's history.",
+        "no branch: all reports. with <branch>: just that branch's history.",
     )
     .option("--since <iso>", "only reports submitted at-or-after this ISO timestamp")
     .option("--latest", "one entry per feature (the latest)")
@@ -195,7 +195,7 @@ export function register(
     );
 
   projectCmd
-    .command("approve <feature>")
+    .command("approve <branch>")
     .description(
       "approve (or reject) the agent's plan for a feature created with --review-plan. " +
         "without flags: approve. with --reject: reject the plan; the agent revises on next turn. " +
@@ -213,7 +213,7 @@ export function register(
     );
 
   projectCmd
-    .command("todo <feature>")
+    .command("todo <branch>")
     .description(
       "view or edit the TODO list for a feature. " +
         "no flags = show. --set replaces the list, --add appends, --done/--undone toggles by id, --rm deletes. " +
