@@ -7,6 +7,7 @@ import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 import { removeAutopilotSettings } from "../autopilot.js";
 import { deleteApproval } from "../approval.js";
+import { deleteAgentState } from "../agentState.js";
 
 export interface CleanupOpts {
   /** Force-remove the worktree even if it has modified or untracked files,
@@ -106,4 +107,6 @@ export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<voi
   removeAutopilotSettings(ctx.project.name, ctx.feature);
   // Drop the plan-approval state file. Idempotent.
   deleteApproval(ctx.project.name, ctx.feature);
+  // Drop the recorded agent launch options. Idempotent.
+  deleteAgentState(ctx.project.name, ctx.feature);
 }

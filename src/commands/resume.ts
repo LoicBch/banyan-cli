@@ -21,6 +21,7 @@ import { getProject, type Config } from "../config.js";
 import * as git from "../git.js";
 import * as naming from "../naming.js";
 import * as state from "../state.js";
+import { readAgentState } from "../agentState.js";
 import { buildContext } from "../context.js";
 import { start } from "./start.js";
 import { wtAll } from "./wtAll.js";
@@ -57,11 +58,30 @@ export async function resume(config: Config, projectName: string): Promise<void>
   // then call start() last so it attaches to the now-fully-restored session.
 
   // ── Step 3: Recreate agent panes per feature ────────────────────────────
+  // For each feature, look up the persisted launch options (mode +
+  // requireApproval) from <project>.<feature>.agent.json. If absent
+  // (feature predates this state file), fall back to the legacy default —
+  // 'interactive' since that's what resume used to do, with a warning so
+  // the user knows the agent isn't in its original mode.
   for (const feature of features) {
     logger.info("");
-    logger.info(`── recreating agent pane for '${feature}' ──`);
+    const agentSt = readAgentState(projectName, feature);
+    const modeLabel = agentSt
+      ? `${agentSt.mode}${agentSt.requireApproval ? " + plan-review" : ""}`
+      : "interactive (no recorded mode — original mode unknown)";
+    logger.info(`── recreating agent pane for '${feature}' (${modeLabel}) ──`);
+    if (!agentSt) {
+      logger.warn(
+        `no recorded agent state for '${feature}'; resuming as interactive. ` +
+          `if this feature was originally autopilot/autonomous, run ` +
+          `\`bn ${projectName} cleanup ${feature}\` and recreate it explicitly.`,
+      );
+    }
     try {
-      await wtAll(config, projectName, feature);
+      await wtAll(config, projectName, feature, {
+        ...(agentSt ? { mode: agentSt.mode } : {}),
+        ...(agentSt?.requireApproval ? { requireApproval: true } : {}),
+      });
     } catch (err) {
       logger.warn(
         `failed to recreate agent pane for '${feature}': ${(err as Error).message}`,

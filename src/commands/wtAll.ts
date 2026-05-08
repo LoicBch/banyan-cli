@@ -9,6 +9,7 @@ import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
 import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js";
 import { generateAutopilotSettings, needsSupervisorHook } from "../autopilot.js";
+import { writeAgentState } from "../agentState.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -177,6 +178,10 @@ export async function wtAll(
     systemPrompt: buildAgentPrompt(projectName, feature, mode),
     settingsPath,
   });
+  // Persist how the agent was launched so `bn resume` can recreate it
+  // with the same mode + requireApproval. Without this, every resumed
+  // agent silently reverts to mode=interactive.
+  writeAgentState({ project: projectName, feature, mode, requireApproval });
   await tmux.selectPane(paneId);
   await tmux.selectWindow(session, agentsWin);
 
