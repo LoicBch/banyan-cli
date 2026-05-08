@@ -275,11 +275,20 @@ export async function test(
       await tmux.sendKeys(paneId, plan.command, { enter: true });
     }
 
+    // Free terminal pane for ad-hoc commands (curl, log tail, git status,
+    // etc.) while the stack runs. Sits in the same window with no command
+    // — just a shell. cwd: first plan's worktree so `git`/`ls` are useful.
+    const opsPaneId = await tmux.splitWindow(session, testWin, first.worktreePath);
+    await tmux.setPaneTitle(opsPaneId, "ops");
+    await tmux.setPaneUserOption(opsPaneId, "@banyan-pane", "ops");
+
     await tmux.enablePaneBorderLabels(session, testWin);
     await tmux.applyLayout(session, testWin, "tiled");
     await tmux.selectWindow(session, testWin);
 
-    logger.ok(`started '${feature}' (${plans.length} process${plans.length > 1 ? "es" : ""})`);
+    logger.ok(
+      `started '${feature}' (${plans.length} process${plans.length > 1 ? "es" : ""} + ops terminal)`,
+    );
   } else {
     // ── Branch B: window exists → start missing panes, restart existing ───
     let restarted = 0;
@@ -311,6 +320,20 @@ export async function test(
         added++;
       }
     }
+    // Make sure the ops terminal pane is there — it may have been created
+    // by an earlier banyan, killed by the user, or never existed (legacy
+    // test windows from before the ops pane was introduced).
+    const existingOps = await tmux.findPaneByUserOption(
+      session, testWin, "@banyan-pane", "ops",
+    );
+    if (!existingOps) {
+      const cwd = plans[0]!.worktreePath;
+      const opsPaneId = await tmux.splitWindow(session, testWin, cwd);
+      await tmux.setPaneTitle(opsPaneId, "ops");
+      await tmux.setPaneUserOption(opsPaneId, "@banyan-pane", "ops");
+      added++;
+    }
+
     if (added > 0) {
       await tmux.applyLayout(session, testWin, "tiled");
     }
