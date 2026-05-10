@@ -257,6 +257,3 @@ export function agentsWindowName(projectName: string): string {
   return `agents-${projectName}`;
 }
 
-export function orchestratorWindowName(projectName: string): string {
-  return `orchestrator-${projectName}`;
-}

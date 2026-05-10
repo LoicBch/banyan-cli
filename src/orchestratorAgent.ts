@@ -1,14 +1,9 @@
 /**
  * Shared logic for building & launching the banyan orchestrator agent.
  *
- * Used by:
- *   - `bn <project> start` (workspace layout: orchestrator pane + terminal pane)
- *   - `bn <project> orchestrator` (dedicated orchestrator-<project> window)
- *
- * Both paths spawn the same Claude session (same MCP config, same --add-dir
- * scope, same --continue marker, same system prompt) — they only differ in
- * the tmux window/pane layout. Centralising here keeps the two in sync and
- * removes the need for a per-project bash workspace script.
+ * Used by `bn <project> start` to spawn the orchestrator pane in the
+ * workspace tmux window (next to a free terminal pane). The same claude
+ * session is resumed across restarts via the marker file.
  */
 import {
   existsSync,

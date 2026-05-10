@@ -14,7 +14,6 @@ import {
   windowName,
   sessionName,
   agentsWindowName,
-  orchestratorWindowName,
 } from "../src/naming.js";
 
 describe("naming — basic", () => {
@@ -68,9 +67,6 @@ describe("naming — basic", () => {
     assert.equal(agentsWindowName("my-app"), "agents-my-app");
   });
 
-  it("orchestratorWindowName prefixes project name with 'orchestrator-'", () => {
-    assert.equal(orchestratorWindowName("frontend-app"), "orchestrator-frontend-app");
-  });
 });
 
 describe("naming — worktreePath (new layout)", () => {
