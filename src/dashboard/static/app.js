@@ -453,160 +453,9 @@ function renderReport(r) {
   ]);
 }
 
-function approvalStatusBadge(status) {
-  switch (status) {
-    case "pending":
-      return pill("plan pending review", "yellow");
-    case "approved":
-      return pill("approved", "green");
-    case "rejected":
-      return pill("rejected — agent revising", "red");
-    default:
-      return null;
-  }
-}
-
-function renderApproval(project, approval) {
-  const status = approval.status;
-  const ts = approval.planSubmittedAt
-    ? `submitted ${new Date(approval.planSubmittedAt).toLocaleString()}`
-    : approval.approvedAt
-      ? `approved ${new Date(approval.approvedAt).toLocaleString()}`
-      : "";
-
-  const actions = [];
-  if (status === "pending") {
-    actions.push(
-      btn("approve", {
-        variant: "success",
-        title: "approve the plan; agent will start working on its next turn",
-        onClick: () => runAction("/api/actions/approve", {
-          project: project.name,
-          feature: approval.feature,
-          scope: "plan",
-        }, `approve ${approval.feature}`),
-      }),
-      btn("reject", {
-        variant: "danger",
-        title: "reject the plan; agent will revise on its next turn",
-        onClick: () => {
-          const note = window.prompt(`reject reason for ${approval.feature}? (optional)`);
-          if (note === null) return; // cancelled
-          runAction("/api/actions/approve", {
-            project: project.name,
-            feature: approval.feature,
-            scope: "plan",
-            reject: true,
-            note: note || undefined,
-          }, `reject ${approval.feature}`);
-        },
-      }),
-    );
-  }
-
-  return h("div", { class: "border border-neutral-800 rounded p-3 bg-neutral-950 space-y-2" }, [
-    h("div", { class: "flex items-center gap-2" }, [
-      approvalStatusBadge(status),
-      h("span", { class: "font-medium text-sm" }, [approval.feature]),
-      h("span", { class: "text-xs text-neutral-500 ml-auto" }, [ts]),
-    ]),
-    approval.rejectionNote
-      ? h("p", { class: "text-xs text-rose-300" }, [`rejection note: ${approval.rejectionNote}`])
-      : null,
-    actions.length > 0
-      ? h("div", { class: "flex gap-2" }, actions)
-      : null,
-  ]);
-}
-
-function renderApprovalsSection(project) {
-  const approvals = project.approvals;
-  if (!approvals || approvals.length === 0) return null;
-  // Sort: pending first (the actionable ones), then rejected, then approved.
-  const order = { pending: 0, rejected: 1, approved: 2, "no-plan-yet": 3 };
-  const ordered = [...approvals].sort(
-    (a, b) => (order[a.status] ?? 99) - (order[b.status] ?? 99),
-  );
-  const pendingCount = ordered.filter((a) => a.status === "pending").length;
-  return h("details", {
-    class: "border-t border-neutral-800 pt-3 mt-2",
-    open: pendingCount > 0 ? "" : null,
-  }, [
-    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
-      `🛂 plan approvals — ${approvals.length} feature${approvals.length > 1 ? "s" : ""}`,
-      pendingCount > 0
-        ? h("span", { class: "ml-2 text-yellow-400" }, [`(${pendingCount} pending)`])
-        : null,
-    ]),
-    h("div", { class: "space-y-2" }, ordered.map((a) => renderApproval(project, a))),
-  ]);
-}
-
-function renderTodo(todo) {
-  const total = todo.items.length;
-  const done = todo.items.filter((it) => it.done).length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  const allDone = total > 0 && done === total;
-
-  const bar = h("div", { class: "h-1.5 bg-neutral-800 rounded overflow-hidden" }, [
-    h("div", {
-      class: `h-full ${allDone ? "bg-emerald-400" : "bg-sky-400"} transition-all`,
-      style: `width: ${pct}%`,
-    }),
-  ]);
-
-  return h("details", { class: "border border-neutral-800 rounded p-3 bg-neutral-950" }, [
-    h("summary", { class: "cursor-pointer flex items-center gap-3 select-none" }, [
-      h("span", { class: "font-medium text-sm" }, [todo.feature]),
-      h("span", { class: "text-xs text-neutral-500" }, [`${done}/${total}`]),
-      h("div", { class: "flex-1" }, [bar]),
-      allDone ? pill("complete", "green") : null,
-    ]),
-    h(
-      "ul",
-      { class: "mt-3 space-y-1 text-sm" },
-      todo.items.map((it) =>
-        h("li", { class: "flex items-start gap-2" }, [
-          h("span", {
-            class: `inline-block w-4 text-center ${it.done ? "text-emerald-400" : "text-neutral-600"}`,
-          }, [it.done ? "✓" : "·"]),
-          h("span", { class: it.done ? "line-through text-neutral-500" : "text-neutral-200" }, [
-            `${it.id}. ${it.text}`,
-          ]),
-        ]),
-      ),
-    ),
-  ]);
-}
-
-function renderTodosSection(todos) {
-  if (!todos || todos.length === 0) return null;
-  // Sort: in-progress first (any incomplete items), then completed.
-  const ordered = [...todos].sort((a, b) => {
-    const aDone = a.items.length > 0 && a.items.every((it) => it.done);
-    const bDone = b.items.length > 0 && b.items.every((it) => it.done);
-    if (aDone === bDone) return 0;
-    return aDone ? 1 : -1;
-  });
-  return h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
-    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
-      `📋 todos — ${todos.length} feature${todos.length > 1 ? "s" : ""}`,
-    ]),
-    h("div", { class: "space-y-2" }, ordered.map(renderTodo)),
-  ]);
-}
-
-function renderReportsSection(reports) {
-  if (!reports || reports.length === 0) return null;
-  // Most recent first in the UI.
-  const ordered = [...reports].reverse();
-  return h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
-    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
-      `📝 reports — ${reports.length} entr${reports.length > 1 ? "ies" : "y"}`,
-    ]),
-    h("div", { class: "space-y-2" }, ordered.map(renderReport)),
-  ]);
-}
+// Per-feature drill-down folds the approvals/todos/reports detail into
+// the pipeline row itself, so the project view stays workflow-first.
+// renderReport / renderReportList stay defined above for reuse there.
 
 // ── pipeline ───────────────────────────────────────────────────────────────
 const PIPELINE_STAGES = ["created", "planning", "approval", "working", "reported", "merged"];
@@ -685,14 +534,105 @@ function approveButtons(project, entry, scope) {
   ];
 }
 
+/** Resolve which TODO entry (if any) belongs to this feature, from the
+ *  project-level todos list the dashboard already loads. */
+function findTodo(project, feature) {
+  if (!project.todos) return null;
+  return project.todos.find((t) => t.feature === feature) ?? null;
+}
+
+/** Resolve the full report list for this feature (from the project-level
+ *  reports the dashboard already loads). */
+function findReports(project, feature) {
+  if (!project.reports) return [];
+  return project.reports.filter((r) => r.feature === feature);
+}
+
+/** One-line short stage label for the collapsed feature row. */
+function stageLabel(entry) {
+  if (entry.flag) return FLAG_LABELS[entry.flag].text;
+  return STAGE_LABELS[entry.stage] ?? entry.stage;
+}
+
+/** Pill colour for the stage. Off-pipeline flags override the stage. */
+function stagePill(entry) {
+  if (entry.flag) return pill(FLAG_LABELS[entry.flag].text, FLAG_LABELS[entry.flag].color);
+  switch (entry.stage) {
+    case "merged":   return pill("merged", "neutral");
+    case "reported": return pill("reported", "yellow");   // user action expected
+    case "approval": return pill("plan pending", "yellow");
+    case "working":  return pill("working", "blue");
+    case "planning": return pill("planning", "blue");
+    case "created":  return pill("created", "neutral");
+    default:         return pill(entry.stage, "neutral");
+  }
+}
+
+/** What's the user's next action? Used as a hint on the collapsed row. */
+function nextAction(entry) {
+  if (entry.approval?.status === "pending") return "→ approve plan";
+  if (entry.reportApproval?.status === "pending") return "→ review report";
+  if (entry.flag === "rejected") return "agent revising…";
+  if (entry.flag === "blocked") return "→ unblock";
+  if (entry.stage === "reported") return "→ test + merge";
+  return null;
+}
+
+function renderTodoChecklist(todo) {
+  if (!todo || todo.items.length === 0) return null;
+  const total = todo.items.length;
+  const done = todo.items.filter((it) => it.done).length;
+  return h("div", { class: "mt-3" }, [
+    h("div", { class: "text-xs text-neutral-500 mb-1" }, [
+      `TODO ${done}/${total}`,
+    ]),
+    h(
+      "ul",
+      { class: "space-y-0.5 text-sm" },
+      todo.items.map((it) =>
+        h("li", { class: "flex items-start gap-2" }, [
+          h("span", {
+            class: `inline-block w-4 text-center ${it.done ? "text-emerald-400" : "text-neutral-600"}`,
+          }, [it.done ? "✓" : "·"]),
+          h("span", { class: it.done ? "line-through text-neutral-500" : "text-neutral-200" }, [
+            `${it.id}. ${it.text}`,
+          ]),
+        ]),
+      ),
+    ),
+  ]);
+}
+
+function renderLatestReport(report) {
+  if (!report) return null;
+  const ts = new Date(report.ts).toLocaleString();
+  return h("div", { class: "mt-3 border border-neutral-800 rounded p-2 bg-neutral-900/50" }, [
+    h("div", { class: "flex items-center gap-2 mb-1" }, [
+      statusBadge(report.status),
+      h("span", { class: "text-xs text-neutral-500" }, [ts]),
+    ]),
+    h("p", { class: "text-sm text-neutral-200 whitespace-pre-wrap" }, [report.summary]),
+    report.testInstructions
+      ? h("div", { class: "mt-2" }, [
+          h("div", { class: "text-xs text-neutral-500 mb-0.5" }, ["how to test"]),
+          h("pre", { class: "text-xs font-mono whitespace-pre-wrap text-neutral-300 bg-neutral-950 rounded p-2" }, [
+            report.testInstructions,
+          ]),
+        ])
+      : null,
+    renderReportList("hesitations", report.hesitations),
+    renderReportList("open questions", report.openQuestions),
+    renderReportList("risks", report.risks),
+  ]);
+}
+
 function renderFeatureRow(project, entry) {
-  const flag = entry.flag ? FLAG_LABELS[entry.flag] : null;
   const todoSummary = entry.todo ? `${entry.todo.done}/${entry.todo.total} todo` : null;
   const reposLabel = entry.repos.length > 0 ? entry.repos.join(", ") : "no worktree";
+  const next = nextAction(entry);
 
-  // Inline action bar — depends on what's pending. Plan takes precedence
-  // over report (matches the lifecycle: plan must be approved before the
-  // agent can do work that produces a report).
+  // Action bar — depends on what's pending. Plan takes precedence over
+  // report (matches the lifecycle).
   const actions = [];
   if (entry.approval?.status === "pending") {
     actions.push(...approveButtons(project, entry, "plan"));
@@ -700,35 +640,60 @@ function renderFeatureRow(project, entry) {
     actions.push(...approveButtons(project, entry, "report"));
   }
 
-  const reportLine = entry.latestReport
-    ? h("div", { class: "text-xs text-neutral-400 mt-1" }, [
-        h("span", { class: "font-medium" }, [`report: `]),
-        h("span", {}, [entry.latestReport.summary]),
-      ])
-    : null;
+  const todo = findTodo(project, entry.feature);
+  const reports = findReports(project, entry.feature);
+  const latestReport = entry.latestReport ?? reports[reports.length - 1];
 
-  const flagPill = flag
-    ? h("span", { class: "ml-2" }, [pill(flag.text, flag.color)])
-    : null;
+  // Auto-open features that need user attention.
+  const needsAttention =
+    entry.approval?.status === "pending"
+    || entry.reportApproval?.status === "pending"
+    || entry.flag === "blocked"
+    || entry.flag === "rejected";
 
-  return h("div", { class: "border border-neutral-800 rounded-lg p-4 bg-neutral-950 space-y-3" }, [
-    // Top row: feature name, repos, optional flag, todo summary
-    h("div", { class: "flex items-center gap-3" }, [
-      h("span", { class: "font-mono text-sm font-medium" }, [entry.feature]),
+  return h("details", {
+    class: "border border-neutral-800 rounded-lg bg-neutral-950 group",
+    ...(needsAttention ? { open: "" } : {}),
+  }, [
+    // ── Collapsed summary line ───────────────────────────────────────────
+    h("summary", {
+      class: "cursor-pointer select-none px-3 py-2 flex items-center gap-3 text-sm",
+    }, [
+      stagePill(entry),
+      h("span", { class: "font-mono font-medium" }, [entry.feature]),
       h("span", { class: "text-xs text-neutral-500" }, [reposLabel]),
-      flagPill,
       todoSummary
-        ? h("span", { class: "ml-auto text-xs text-neutral-500" }, [todoSummary])
-        : h("span", { class: "ml-auto" }),
+        ? h("span", { class: "text-xs text-neutral-500" }, [todoSummary])
+        : null,
+      h("span", { class: "ml-auto text-xs text-neutral-400" }, [next ?? ""]),
     ]),
-    // Pipeline bar
-    renderPipelineBar(entry.stageIndex),
-    // Latest report summary if any
-    reportLine,
-    // Inline actions for the current stage
-    actions.length > 0
-      ? h("div", { class: "flex gap-2" }, actions)
-      : null,
+
+    // ── Drill-down ────────────────────────────────────────────────────────
+    h("div", { class: "px-3 pb-3 space-y-3" }, [
+      renderPipelineBar(entry.stageIndex),
+      // Plan rejection note (if recently rejected)
+      entry.approval?.status === "rejected" && entry.approval.rejectionNote
+        ? h("div", { class: "text-xs text-rose-300" }, [
+            `plan rejection: ${entry.approval.rejectionNote}`,
+          ])
+        : null,
+      renderTodoChecklist(todo),
+      renderLatestReport(latestReport),
+      // Older reports (history)
+      reports.length > 1
+        ? h("details", { class: "mt-2" }, [
+            h("summary", { class: "cursor-pointer text-xs text-neutral-500 hover:text-neutral-300" }, [
+              `older reports (${reports.length - 1})`,
+            ]),
+            h("div", { class: "mt-2 space-y-2" },
+              reports.slice(0, -1).reverse().map((r) => renderReport(r)),
+            ),
+          ])
+        : null,
+      actions.length > 0
+        ? h("div", { class: "flex gap-2 mt-2" }, actions)
+        : null,
+    ]),
   ]);
 }
 
@@ -755,19 +720,28 @@ function renderProject(project) {
   const activeCount = project.repos.reduce((s, r) => s + r.worktrees.length, 0);
   const runningStacks = project.repos.flatMap((r) => r.stacks).filter((s) => s.running).length;
 
-  const pulseSection = project.pulse
-    ? h("details", { class: "border-t border-neutral-800 pt-3 mt-2", open: "" }, [
+  // Workflow-first: per-feature pipeline rows are the primary view.
+  const pipelineSection = renderPipelineSection(project);
+
+  // Cross-feature conflict matrix — different angle (file × feature),
+  // not redundant with the per-feature pipeline. Kept, collapsible.
+  const pulseSection = project.pulse && project.pulse.features?.length > 0
+    ? h("details", { class: "border-t border-neutral-800 pt-3 mt-2" }, [
         h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
-          `🌡 pulse — conflict surface across active features (vs origin/${project.pulse.base})`,
+          `🌡 conflict surface (vs origin/${project.pulse.base})`,
         ]),
         renderPulse(project.pulse),
       ])
     : null;
 
-  const pipelineSection = renderPipelineSection(project);
-  const approvalsSection = renderApprovalsSection(project);
-  const todosSection = renderTodosSection(project.todos);
-  const reportsSection = renderReportsSection(project.reports);
+  // Infrastructure view: repos, worktrees, stacks. Secondary, collapsed
+  // by default — useful for debugging / MR status / stack control.
+  const infraSection = h("details", { class: "border-t border-neutral-800 pt-3 mt-2" }, [
+    h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
+      `🔧 infrastructure — ${project.repos.length} repo${project.repos.length > 1 ? "s" : ""}, ${activeCount} worktree${activeCount === 1 ? "" : "s"}`,
+    ]),
+    h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
+  ]);
 
   return h("section", { class: "bg-neutral-900 border border-neutral-800 rounded-lg p-5" }, [
     h("div", { class: "flex items-center justify-between mb-4" }, [
@@ -783,11 +757,8 @@ function renderProject(project) {
       ]),
     ]),
     pipelineSection,
-    h("div", { class: "space-y-4" }, project.repos.map((r) => renderRepo(project, r))),
     pulseSection,
-    approvalsSection,
-    todosSection,
-    reportsSection,
+    infraSection,
   ]);
 }
 
