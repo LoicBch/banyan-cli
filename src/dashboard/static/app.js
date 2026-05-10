@@ -653,6 +653,7 @@ function renderFeatureRow(project, entry) {
 
   return h("details", {
     class: "border border-neutral-800 rounded-lg bg-neutral-950 group",
+    "data-key": `feature:${project.name}/${entry.feature}`,
     ...(needsAttention ? { open: "" } : {}),
   }, [
     // ── Collapsed summary line ───────────────────────────────────────────
@@ -681,7 +682,10 @@ function renderFeatureRow(project, entry) {
       renderLatestReport(latestReport),
       // Older reports (history)
       reports.length > 1
-        ? h("details", { class: "mt-2" }, [
+        ? h("details", {
+            class: "mt-2",
+            "data-key": `older-reports:${project.name}/${entry.feature}`,
+          }, [
             h("summary", { class: "cursor-pointer text-xs text-neutral-500 hover:text-neutral-300" }, [
               `older reports (${reports.length - 1})`,
             ]),
@@ -726,7 +730,10 @@ function renderProject(project) {
   // Cross-feature conflict matrix — different angle (file × feature),
   // not redundant with the per-feature pipeline. Kept, collapsible.
   const pulseSection = project.pulse && project.pulse.features?.length > 0
-    ? h("details", { class: "border-t border-neutral-800 pt-3 mt-2" }, [
+    ? h("details", {
+        class: "border-t border-neutral-800 pt-3 mt-2",
+        "data-key": `pulse:${project.name}`,
+      }, [
         h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
           `🌡 conflict surface (vs origin/${project.pulse.base})`,
         ]),
@@ -736,7 +743,10 @@ function renderProject(project) {
 
   // Infrastructure view: repos, worktrees, stacks. Secondary, collapsed
   // by default — useful for debugging / MR status / stack control.
-  const infraSection = h("details", { class: "border-t border-neutral-800 pt-3 mt-2" }, [
+  const infraSection = h("details", {
+    class: "border-t border-neutral-800 pt-3 mt-2",
+    "data-key": `infra:${project.name}`,
+  }, [
     h("summary", { class: "cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 mb-2 select-none" }, [
       `🔧 infrastructure — ${project.repos.length} repo${project.repos.length > 1 ? "s" : ""}, ${activeCount} worktree${activeCount === 1 ? "" : "s"}`,
     ]),
@@ -762,6 +772,37 @@ function renderProject(project) {
   ]);
 }
 
+// Persist <details data-key="…"> open/closed state across re-renders so the
+// 2s polling loop doesn't slam shut whatever the user just opened. Keys
+// are stable identifiers (e.g. "feature:p4n/login", "infra:p4n").
+//
+// userOverrides records every explicit toggle the user made, so we can
+// distinguish:
+//   - "user opened it"   → keep open even if it's not currently a needs-attention feature
+//   - "user closed it"   → keep closed even if it would auto-open by default
+//   - "no user choice"   → fall back to the renderer's default (auto-open
+//                          for features needing attention, closed for
+//                          infrastructure / collapsed sections)
+const userOverrides = new Map(); // key -> boolean
+
+document.addEventListener("toggle", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLDetailsElement)) return;
+  const key = el.getAttribute("data-key");
+  if (!key) return;
+  userOverrides.set(key, el.open);
+}, true);
+
+function applyDetailsState(scope) {
+  for (const el of scope.querySelectorAll("details[data-key]")) {
+    const key = el.getAttribute("data-key");
+    const override = userOverrides.get(key);
+    if (override !== undefined) {
+      el.open = override;
+    }
+  }
+}
+
 function render(state) {
   root.innerHTML = "";
 
@@ -780,6 +821,9 @@ function render(state) {
   for (const project of state.projects) {
     root.appendChild(renderProject(project));
   }
+
+  // Restore any open/closed state the user explicitly set.
+  applyDetailsState(root);
 
   const time = new Date(state.generatedAt).toLocaleTimeString();
   lastRefreshEl.textContent = `refreshed ${time}`;
