@@ -62,7 +62,7 @@ export async function startServer(
         return;
       }
       try {
-        const { computePulse } = await import("../commands/pulse.js");
+        const { computePulse } = await import("./pulse.js");
         const result = await computePulse(project);
         res.json(result);
       } catch (err) {

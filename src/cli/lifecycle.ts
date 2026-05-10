@@ -18,7 +18,6 @@ import { testStop } from "../commands/testStop.js";
 import { testLs } from "../commands/testLs.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
-import { pulse as pulseCmd } from "../commands/pulse.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
 import { agentPrompt } from "../commands/agentPrompt.js";
@@ -119,18 +118,6 @@ export function register(
     .description("list features that currently have a running test window")
     .action(async () => {
       await testLs(await buildContext(config, project.name));
-    });
-
-  projectCmd
-    .command("pulse")
-    .description(
-      "real-time conflict-risk dashboard across active features. " +
-        "shows file × feature matrix, overlaps, complexity scores, and a suggested merge order.",
-    )
-    .option("-b, --base <branch>", "override base branch")
-    .option("-w, --watch <seconds>", "refresh every N seconds (live mode)", (v) => parseInt(v, 10))
-    .action(async (opts: { base?: string; watch?: number }) => {
-      await pulseCmd(config, project.name, { base: opts.base, watch: opts.watch });
     });
 
   projectCmd
