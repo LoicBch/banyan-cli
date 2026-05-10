@@ -16,7 +16,7 @@ import { getProject, type Config, type ProjectConfig } from "../config.js";
 import * as state from "../state.js";
 import * as docker from "../docker.js";
 import * as naming from "../naming.js";
-import { resolveLocation } from "./whereami.js";
+import { resolveLocation } from "../location.js";
 import { logger } from "../logger.js";
 
 export async function ports(

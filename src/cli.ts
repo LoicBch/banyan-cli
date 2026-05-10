@@ -8,8 +8,6 @@ import { packageVersion } from "./version.js";
 
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
-import { sidebar } from "./commands/sidebar.js";
-import { whereami } from "./commands/whereami.js";
 import { serve } from "./commands/serve.js";
 import { installTmux } from "./commands/installTmux.js";
 import { autopilotTick } from "./autopilot.js";
@@ -47,14 +45,11 @@ export async function run(argv: string[]): Promise<number> {
   //   a known top-level command nor an explicit project name.
   const TOP_LEVEL_COMMANDS = new Set([
     "ls",
-    "sidebar",
-    "whereami",
     "init",
     "serve",
     "install-tmux",
     "_autopilot-tick",
     "mcp-serve",
-    "mcp-log",
     "help",
     "--help",
     "-h",
@@ -86,20 +81,6 @@ export async function run(argv: string[]): Promise<number> {
     .description("list all projects and their repos")
     .action(async () => {
       await list(config);
-    });
-
-  program
-    .command("sidebar")
-    .description("live tree view of projects / repos / worktrees / agents")
-    .action(async () => {
-      await sidebar(config);
-    });
-
-  program
-    .command("whereami")
-    .description("report banyan context (project/repo/feature) for the current cwd")
-    .action(async () => {
-      await whereami(config);
     });
 
   program
@@ -156,20 +137,6 @@ export async function run(argv: string[]): Promise<number> {
     .action(async () => {
       const { runMcpServer } = await import("./mcp/server.js");
       await runMcpServer();
-    });
-
-  program
-    .command("mcp-log")
-    .description("show recent banyan MCP tool calls (logged by `banyan mcp-serve`)")
-    .option("-f, --follow", "tail the log live (Ctrl+C to stop)")
-    .option(
-      "-n, --lines <n>",
-      "show the last N entries (default 50)",
-      (v) => parseInt(v, 10),
-    )
-    .action(async (opts: { follow?: boolean; lines?: number }) => {
-      const { mcpLog } = await import("./commands/mcpLog.js");
-      await mcpLog({ follow: opts.follow, n: opts.lines });
     });
 
   // ── per-project commands (delegated) ─────────────────────────────────────

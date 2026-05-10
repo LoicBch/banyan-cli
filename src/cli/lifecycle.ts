@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
 import { buildContext } from "../context.js";
 import { logger } from "../logger.js";
-import { resolveLocation } from "../commands/whereami.js";
+import { resolveLocation } from "../location.js";
 import { configShow } from "../commands/configCmd.js";
 import { start } from "../commands/start.js";
 import { stop } from "../commands/stop.js";

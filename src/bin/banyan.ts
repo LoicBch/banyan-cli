@@ -9,8 +9,6 @@ const RESERVED = new Set(["banyan", "bn", "banyan.js", "bn.js"]);
 const TOPLEVEL_CMDS = new Set([
   "ls",
   "init",
-  "sidebar",
-  "whereami",
   "serve",
   "install-tmux",
   "_autopilot-tick",

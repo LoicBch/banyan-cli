@@ -1,8 +1,22 @@
+/**
+ * Detect the banyan context (project, repo, feature) from a cwd.
+ *
+ * Used internally by:
+ *   - project name inference at the top-level CLI dispatcher
+ *   - cwd-aware shortcuts in `bn start` (infer the feature from a worktree)
+ *   - `bn ports` to default to the feature inferred from cwd
+ *
+ * Covers:
+ *   - cwd IS a repo root     → { project, repo, inMainRepo: true }
+ *   - cwd inside repo        → same
+ *   - cwd is a worktree root → { project, repo, feature, worktreePath }
+ *   - cwd inside worktree    → same
+ *   - no match               → undefined
+ */
 import path from "node:path";
 import { realpathSync } from "node:fs";
-import type { Config, ProjectConfig, RepoConfig } from "../config.js";
-import * as naming from "../naming.js";
-import { shellEscapeSingleQuoted } from "../shell.js";
+import type { Config, ProjectConfig, RepoConfig } from "./config.js";
+import * as naming from "./naming.js";
 
 export interface LocationContext {
   project: ProjectConfig;
@@ -12,15 +26,6 @@ export interface LocationContext {
   inMainRepo: boolean;         // true if cwd is inside the repo itself (not a worktree sibling)
 }
 
-/**
- * Detect the banyan context (project, repo, feature) from a cwd.
- * Covers:
- *   - cwd IS a repo root     → { project, repo, inMainRepo: true }
- *   - cwd inside repo        → same
- *   - cwd is a worktree root → { project, repo, feature, worktreePath }
- *   - cwd inside worktree    → same
- *   - no match               → undefined
- */
 export function resolveLocation(cfg: Config, cwd: string): LocationContext | undefined {
   const resolved = canonical(cwd);
 
@@ -45,7 +50,7 @@ export function resolveLocation(cfg: Config, cwd: string): LocationContext | und
         continue;
       }
       // Worktree (new layout: <parent>/worktree-<basename>/<feature>,
-      //          legacy layout: <repoPath>-<feature>) — handled by naming
+      //          legacy layout: <repoPath>-<feature>) — handled by naming.
       const parsed = naming.parseWorktreePath(resolved, repoPath);
       if (parsed) {
         if (!best || repoPath.length > best.repoPath.length) {
@@ -88,26 +93,3 @@ function canonical(p: string): string {
     return abs;
   }
 }
-
-/** `bn whereami` CLI entry — prints shell-evaluable context. */
-export async function whereami(config: Config): Promise<void> {
-  const ctx = resolveLocation(config, process.cwd());
-
-  if (!ctx) {
-    // Not in any configured project — exit with status 1.
-    process.stderr.write("no banyan project matches the current directory\n");
-    process.exit(1);
-  }
-
-  // Emit shell-safe `key='value'` pairs, easy to `eval` or parse.
-  const lines: string[] = [];
-  lines.push(`project='${shellEscape(ctx.project.name)}'`);
-  if (ctx.repo) lines.push(`repo='${shellEscape(ctx.repo.name)}'`);
-  if (ctx.feature) lines.push(`feature='${shellEscape(ctx.feature)}'`);
-  if (ctx.worktreePath) lines.push(`worktree_path='${shellEscape(ctx.worktreePath)}'`);
-  lines.push(`in_main_repo='${ctx.inMainRepo ? "1" : "0"}'`);
-  process.stdout.write(lines.join("\n") + "\n");
-}
-
-// alias kept for clarity at the call site (`key='${shellEscape(...)}'`)
-const shellEscape = shellEscapeSingleQuoted;

@@ -352,8 +352,8 @@ export interface WindowInfo {
 }
 
 /**
- * List all `@banyan-pane` tags across all panes of a session (across all windows).
- * Used by the sidebar to correlate worktrees to live agent panes.
+ * List all `@banyan-pane` tags across all panes of a session (across all
+ * windows). Used by the dashboard to correlate worktrees to live agent panes.
  */
 export async function listBanyanPaneTags(session: string): Promise<string[]> {
   const r = await run("tmux", [
