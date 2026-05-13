@@ -176,13 +176,23 @@ export function register(
 
   projectCmd
     .command("cleanup <branch> [repo]")
-    .description("remove worktree + delete branch (safe) + close pane. omit repo to cleanup all worktrees of this feature")
+    .description(
+      "full teardown of a feature: remove worktree(s) + delete branch (safe) + close pane + " +
+        "stop compose stack and drop volumes. omit repo to cleanup everything across the project.",
+    )
     .option(
       "-f, --force",
       "remove worktree even with uncommitted changes; force-delete branch even with unmerged commits",
     )
     .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
-      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
+      // Full project cleanup also includes compose stacks. With an explicit
+      // repo, we only act on that one (the user knows what they're doing).
+      const repos = await resolveRepos(
+        getProject(config, project.name),
+        feature,
+        repo,
+        { includeCompose: !repo },
+      );
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await cleanup(

@@ -32,17 +32,22 @@ export interface BuildContextOpts {
  * Resolve the list of repo names to act on for a given feature.
  * - If `repoName` is provided → single-element array (validated).
  * - Else → all repos that have an existing worktree for this feature.
+ *   When `includeCompose` is set, compose-type repos are also included
+ *   (cleanup uses this so `bn cleanup <feature>` tears down the stack
+ *   too, not just the worktrees).
  *
  * Resolution accepts both forms:
  *   - feature short name (e.g. "login" after `bn wt login`) — legacy
  *   - full branch name (e.g. "feature/login", "fix/oauth") — new
  *
- * Throws if no repo has the feature/branch.
+ * Throws if no repo has the feature/branch (compose repos don't count
+ * for the "found something" check — we need at least one git checkout).
  */
 export async function resolveRepos(
   project: ProjectConfig,
   feature: string,
   repoName: string | undefined,
+  opts: { includeCompose?: boolean } = {},
 ): Promise<string[]> {
   if (repoName) {
     getRepo(project, repoName); // validates, throws on unknown
@@ -59,6 +64,15 @@ export async function resolveRepos(
       `no worktrees found for '${feature}' in project '${project.name}'. ` +
         `either pass a repo explicitly or create a worktree first: bn ${project.name} wt ${feature} <repo>`,
     );
+  }
+  // Append compose repos when the caller asks. Order matters: compose
+  // teardown happens AFTER the git worktrees of the same feature (the
+  // cleanup loop iterates in this order and the docker module handles
+  // stack stop + volume drop).
+  if (opts.includeCompose) {
+    for (const r of project.repos) {
+      if (r.type === "compose") withCheckout.push(r.name);
+    }
   }
   return withCheckout;
 }
