@@ -8,6 +8,9 @@ import * as docker from "../docker.js";
 import { test as testCmd } from "../commands/test.js";
 import { testStop } from "../commands/testStop.js";
 import { cleanup } from "../commands/cleanup.js";
+import { merge as mergeCmd } from "../commands/merge.js";
+import { rebase as rebaseCmd } from "../commands/rebase.js";
+import { resolveRepos } from "../context.js";
 import { detectProvider } from "../pr/detect.js";
 import type { MRStatus } from "../pr/types.js";
 
@@ -107,7 +110,9 @@ export function actionTestStop(
 export interface CleanupParams {
   project: string;
   feature: string;
-  repo: string;
+  /** Single repo to clean up. Omit for feature-wide cleanup (every repo + compose stacks). */
+  repo?: string;
+  force?: boolean;
 }
 
 export function actionCleanup(
@@ -116,9 +121,77 @@ export function actionCleanup(
 ): Promise<ActionResult> {
   return serialize(() =>
     captureAction(async () => {
-      await cleanup(
-        await buildContext(config, p.project, { feature: p.feature, repoName: p.repo }),
-      );
+      const project = getProject(config, p.project);
+      const repoNames = await resolveRepos(project, p.feature, p.repo, { includeCompose: !p.repo });
+      for (const r of repoNames) {
+        if (repoNames.length > 1) logger.info(`=== ${r} ===`);
+        await cleanup(
+          await buildContext(config, p.project, { feature: p.feature, repoName: r }),
+          p.force ? { force: true } : {},
+        );
+      }
+    }),
+  );
+}
+
+export interface MergeParams {
+  project: string;
+  feature: string;
+  /** Single repo to merge. Omit to merge every git repo of the feature. */
+  repo?: string;
+  local?: boolean;
+  draft?: boolean;
+  wait?: boolean;
+  noResolve?: boolean;
+}
+
+export function actionMerge(
+  config: Config,
+  p: MergeParams,
+): Promise<ActionResult> {
+  return serialize(() =>
+    captureAction(async () => {
+      const project = getProject(config, p.project);
+      const repoNames = await resolveRepos(project, p.feature, p.repo);
+      for (const r of repoNames) {
+        if (repoNames.length > 1) logger.info(`=== ${r} ===`);
+        await mergeCmd(
+          await buildContext(config, p.project, { feature: p.feature, repoName: r }),
+          {
+            local: p.local,
+            draft: p.draft,
+            wait: p.wait,
+            noResolve: p.noResolve,
+          },
+        );
+      }
+    }),
+  );
+}
+
+export interface RebaseParams {
+  project: string;
+  feature: string;
+  /** Single repo to rebase. Omit to rebase every git repo of the feature. */
+  repo?: string;
+  base?: string;
+}
+
+export function actionRebase(
+  config: Config,
+  p: RebaseParams,
+): Promise<ActionResult> {
+  return serialize(() =>
+    captureAction(async () => {
+      const project = getProject(config, p.project);
+      const repoNames = await resolveRepos(project, p.feature, p.repo);
+      for (const r of repoNames) {
+        if (repoNames.length > 1) logger.info(`=== ${r} ===`);
+        await rebaseCmd(
+          await buildContext(config, p.project, { feature: p.feature, repoName: r }),
+          p.base ? { base: p.base } : {},
+        );
+      }
     }),
   );
 }

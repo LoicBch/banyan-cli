@@ -81,8 +81,9 @@ export function buildActivity(
     }
   }
 
-  // Dashboard button
-  if (activity.dashboardUrl) {
+  // Dashboard button — Discord only accepts https:// URLs (no localhost),
+  // so we only emit a button in remote/tunneled mode.
+  if (activity.dashboardUrl && /^https:\/\//.test(activity.dashboardUrl)) {
     result.buttons = [
       {
         label: "View Dashboard",

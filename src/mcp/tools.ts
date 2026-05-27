@@ -1,14 +1,23 @@
 /**
  * MCP tool registry: every banyan operation exposed to MCP clients
  * (Claude Code, Cursor, etc.) is declared here. The shape is `{ spec,
- * handler }` so the server can both list specs and dispatch calls.
+ * handler, scopes? }` so the server can both list specs, dispatch calls,
+ * AND filter the toolset by scope at boot time — keeps per-feature agents
+ * and headless resolvers from paying 21k tokens of orchestrator-only
+ * tools they'd never call.
  */
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import * as api from "./api.js";
 
+/** Which class of caller is this tool meant for. A tool with no `scopes`
+ *  field is treated as `all` (backward-compat / power use). */
+export type ToolScope = "feature" | "resolver" | "orchestrator";
+
 export interface ToolDef<T = Record<string, unknown>> {
   spec: Tool;
   handler: (args: T) => Promise<unknown>;
+  /** Which scopes get this tool exposed. Omitted = available in every scope. */
+  scopes?: readonly ToolScope[];
 }
 
 export const tools: ToolDef[] = [
@@ -19,6 +28,7 @@ export const tools: ToolDef[] = [
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     handler: async () => api.listProjects(),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -33,6 +43,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.projectInfo(args.project),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -47,6 +58,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.listFeatures(args.project),
+    scopes: ["orchestrator", "resolver"],
   },
   {
     spec: {
@@ -64,6 +76,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.featureStatus(args.project, args.feature),
+    scopes: ["orchestrator", "resolver"],
   },
   {
     spec: {
@@ -77,6 +90,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.listStacks(args.project),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -94,6 +108,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.getStackPorts(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -113,6 +128,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.stackLogs(args.project, args.feature, args.service, args.tail ?? 100),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -165,6 +181,7 @@ export const tools: ToolDef[] = [
         args.mode,
         args.requireApproval,
       ),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -192,6 +209,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.assignTask(args.project, args.feature, args.prompt, { force: args.force }),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -266,6 +284,7 @@ export const tools: ToolDef[] = [
         filesChanged: args.filesChanged,
         commits: args.commits,
       }),
+    scopes: ["feature"],
   },
   {
     spec: {
@@ -299,6 +318,7 @@ export const tools: ToolDef[] = [
         since: args.since,
         latestOnly: args.latestOnly,
       }),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -321,6 +341,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.setFeatureTodo(args.project, args.feature, args.items),
+    scopes: ["feature"],
   },
   {
     spec: {
@@ -338,6 +359,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.getFeatureTodo(args.project, args.feature),
+    scopes: ["feature"],
   },
   {
     spec: {
@@ -381,6 +403,7 @@ export const tools: ToolDef[] = [
         undone: args.undone,
         remove: args.remove,
       }),
+    scopes: ["feature"],
   },
   {
     spec: {
@@ -398,6 +421,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.requestPlanApproval(args.project, args.feature),
+    scopes: ["feature"],
   },
   {
     spec: {
@@ -415,6 +439,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.approveFeaturePlan(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -436,6 +461,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.rejectFeaturePlan(args.project, args.feature, args.note),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -454,6 +480,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.approveFeatureReport(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -476,6 +503,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.rejectFeatureReport(args.project, args.feature, args.note),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -494,6 +522,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.getFeatureReportApproval(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -511,6 +540,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.getFeatureApproval(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -534,6 +564,7 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.removeFeature(args.project, args.feature, args.repo, args.force),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -552,6 +583,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.cleanupFeature(args.project, args.feature, args.repo),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -570,6 +602,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.startTest(args.project, args.feature, args.repos),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -587,6 +620,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.stopTest(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -603,6 +637,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.stackUp(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -619,6 +654,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.stackDown(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -636,6 +672,7 @@ export const tools: ToolDef[] = [
       },
     },
     handler: async (args: any) => api.stackRecreate(args.project, args.feature),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
@@ -656,12 +693,13 @@ export const tools: ToolDef[] = [
     },
     handler: async (args: any) =>
       api.rebaseFeature(args.project, args.feature, args.repo, args.base),
+    scopes: ["orchestrator"],
   },
   {
     spec: {
       name: "banyan_merge_feature",
       description:
-        "Push + create MR/PR + merge for one or all repos of the feature. Pre-flight rebase always runs; conflicts are auto-resolved by a headless Claude resolver (set noResolve=true to opt out and pause for manual fix). The merge strategy comes from the repo's `mergeStrategy` config field (default 'squash').",
+        "Push + create MR/PR + merge for one or all repos of the feature. Any uncommitted changes in the worktree are auto-committed first (message: 'auto-commit: <feature> before merge') and pushed as part of the MR — dirty worktrees do NOT cause data loss, so don't refuse to merge on that basis. Pre-flight rebase always runs; conflicts are auto-resolved by a headless Claude resolver (set noResolve=true to opt out and pause for manual fix). After a successful PR/MR merge the local <base> branch is fast-forwarded to origin/<base>. The merge strategy comes from the repo's `mergeStrategy` config field (default 'squash').",
       inputSchema: {
         type: "object",
         properties: {
@@ -683,5 +721,30 @@ export const tools: ToolDef[] = [
         noResolve: args.noResolve,
         local: args.local,
       }),
+    scopes: ["orchestrator"],
+  },
+  {
+    spec: {
+      name: "banyan_finalize_feature_name",
+      description:
+        "Promote a DRAFT worktree to a real feature name. You MUST call this exactly once after the user gives you their first instruction, with a short kebab-case slug describing the task (e.g. 'login-flow', 'crash-on-close', 'export-pdf-tweaks'). " +
+        "While the worktree is in draft state, every other banyan tool is blocked — this is the only way out. " +
+        "Banyan renames the git branch in every repo of the feature, re-tags the tmux pane, and migrates internal state. The on-disk path keeps its draft slug (cosmetic only — branch/MR/test all use the new name). " +
+        "Picks the name based on the user's request: be concise, descriptive, lowercase, hyphens between words, ≤30 chars. Avoid generic names like 'fix' or 'update'. Refuse to invent a name if the user's instruction is ambiguous — ask them for one short phrase summarising the task first.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description:
+              "kebab-case feature slug (lowercase letters, digits, '.', '_', '-'; must start with a letter or digit; cannot start with 'draft-')",
+          },
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+    handler: async (args: any) => api.finalizeFeatureName(args.name),
+    scopes: ["feature"],
   },
 ];

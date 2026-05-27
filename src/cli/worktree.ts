@@ -14,7 +14,9 @@ import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
 import { assignTask } from "../commands/assignTask.js";
 import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
+import { generateSlug } from "../slug.js";
 import { UsageError } from "../errors.js";
+
 
 export function register(
   projectCmd: Command,
@@ -22,9 +24,11 @@ export function register(
   config: Config,
 ): void {
   projectCmd
-    .command("wt <branch> [repos...]")
+    .command("wt [branch] [repos...]")
     .description(
       "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
+        "no branch = create a draft worktree (branch named draft-<ts>); the agent must call banyan_finalize_feature_name " +
+        "after your first prompt to pick the real name. " +
         "agent mode controls autonomy: interactive (plain claude, you drive), assisted (asks on big decisions), " +
         "autonomous (decides everything, documents hesitations), autopilot (autonomous + works through TODO list, " +
         "loops until banyan_report_done).",
@@ -47,7 +51,7 @@ export function register(
     )
     .action(
       async (
-        feature: string,
+        feature: string | undefined,
         repos: string[],
         opts: {
           prompt?: string;
@@ -65,13 +69,99 @@ export function register(
           }
           mode = opts.mode;
         }
-        await wtAll(config, project.name, feature, {
+        // Feature naming flow, in priority order:
+        //   1. explicit name → use it as-is
+        //   2. `--prompt "..."` + no name → infer slug from prompt, create wt
+        //      at the proper name from the start (slug-first, no draft)
+        //   3. no name + no prompt → create a DRAFT worktree, launch claude
+        //      directly in it. The agent calls banyan_finalize_feature_name
+        //      after the first user message; docker stacks are deferred until
+        //      then so they start with the real name.
+        let effectiveFeature = feature;
+        if (!effectiveFeature) {
+          if (opts.prompt) {
+            logger.info(`inferring feature name from prompt…`);
+            effectiveFeature = await generateSlug(opts.prompt);
+            logger.ok(`feature name: ${effectiveFeature}`);
+          } else {
+            const { generateDraftFeature } = await import("../naming.js");
+            effectiveFeature = generateDraftFeature();
+            logger.info(
+              `no prompt — opening claude in a draft worktree (${effectiveFeature}).`,
+            );
+            logger.info(
+              `tell the agent what you want; it will pick the real feature name and rename everything.`,
+            );
+          }
+        }
+        if (!effectiveFeature) {
+          // Unreachable in practice — earlier branches either set it or
+          // returned early. Belt-and-suspenders for TS narrowing.
+          throw new UsageError("could not determine feature name");
+        }
+        await wtAll(config, project.name, effectiveFeature, {
           ...(repos.length > 0 ? { only: repos } : {}),
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
           ...(opts.reviewPlan ? { requireApproval: true } : {}),
         });
+      },
+    );
+
+  // Hidden subcommand wired by `bn wt` when the user is inside tmux. The
+  // interactive "describe your task" pane runs banyan as a SUBPROCESS (not
+  // exec) to:
+  //   1. Infer the slug from the typed prompt
+  //   2. Create the worktrees + state files + launch script
+  //   3. Print the launch script path to stdout
+  // The bash caller then captures the printed path and `exec bash <path>` —
+  // the pane's bash IS replaced by claude, no banyan process to suicide.
+  projectCmd
+    .command("_wt-stage-from-prompt <prompt>", { hidden: true })
+    .description("(internal) infer slug + prep wt + write launch script. prints script path on stdout.")
+    .option("--repos <repos...>", "limit to these repos")
+    .option("--prefix <prefix>", "branch prefix")
+    .option("-m, --mode <mode>", "agent mode")
+    .option("--review-plan", "require plan approval before work starts")
+    .action(
+      async (
+        prompt: string,
+        opts: {
+          repos?: string[];
+          prefix?: string;
+          mode?: string;
+          reviewPlan?: boolean;
+        },
+      ) => {
+        const paneId = process.env.TMUX_PANE;
+        if (!paneId) {
+          throw new UsageError("_wt-stage-from-prompt must be run from within a tmux pane");
+        }
+        let mode: AgentMode | undefined;
+        if (opts.mode && isAgentMode(opts.mode)) mode = opts.mode;
+
+        // logger writes go to stderr by default — keep stdout clean for the
+        // launch-script path the bash caller will capture.
+        process.stderr.write("inferring feature name from prompt…\n");
+        const feature = await generateSlug(prompt);
+        process.stderr.write(`feature name: ${feature}\n`);
+
+        const { launchScriptPath } = await wtAll(config, project.name, feature, {
+          ...(opts.repos && opts.repos.length > 0 ? { only: opts.repos } : {}),
+          initialPrompt: prompt,
+          ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+          ...(mode !== undefined ? { mode } : {}),
+          ...(opts.reviewPlan ? { requireApproval: true } : {}),
+          inheritPaneId: paneId,
+          stagedLaunch: true,
+        });
+
+        if (!launchScriptPath) {
+          throw new UsageError("staged launch produced no script path — bug");
+        }
+        // ONLY emit the path on stdout. The bash caller does `SCRIPT=$(...)`.
+        process.stdout.write(launchScriptPath + "\n");
       },
     );
 

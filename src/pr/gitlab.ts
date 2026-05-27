@@ -2,6 +2,7 @@ import { run, runInherit } from "../exec.js";
 import type {
   CreateMROpts,
   MergeOpts,
+  MRMetadata,
   MRResult,
   MRStatus,
   PRProvider,
@@ -124,6 +125,33 @@ export class GitLabProvider implements PRProvider {
 
   async openInBrowser(repoPath: string, branch: string): Promise<void> {
     await runInherit("glab", ["mr", "view", branch, "--web"], { cwd: repoPath });
+  }
+
+  async metadata(repoPath: string, branch: string): Promise<MRMetadata | undefined> {
+    // `glab mr view --output json` already returns most fields; diff stats need
+    // a separate `glab mr diff` call which we skip for now (kept fast).
+    const r = await run(
+      "glab",
+      ["mr", "view", branch, "--output", "json"],
+      { cwd: repoPath },
+    );
+    if (r.code !== 0) return undefined;
+    try {
+      const d = JSON.parse(r.stdout) as Record<string, unknown>;
+      const author = (d.author as { username?: string } | undefined)?.username;
+      const changes =
+        typeof d.changes_count === "string"
+          ? parseInt(d.changes_count, 10)
+          : (typeof d.changes_count === "number" ? d.changes_count : undefined);
+      return {
+        ...(typeof d.title === "string" ? { title: d.title } : {}),
+        ...(typeof d.description === "string" ? { body: d.description } : {}),
+        ...(author ? { author } : {}),
+        ...(changes !== undefined && !Number.isNaN(changes) ? { filesChanged: changes } : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 }
 

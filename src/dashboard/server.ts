@@ -462,20 +462,24 @@ export async function startServer(
   // ── Discord Rich Presence ──────────────────────────────────────────────
   // Optional integration - displays Banyan activity in Discord profile.
   // Completely separated from core Banyan logic.
+  // Hoisted so the /api/discord/enabled endpoint can re-trigger a start
+  // after the user flips the toggle without restarting the dashboard.
+  const buildDiscordActivity = async () => {
+    const { readBanyanActivity } = await import("../integrations/discord-rpc/stateReader.js");
+    const dashboardUrl = `http://localhost:${opts.port ?? 4242}`;
+    return readBanyanActivity(config, dashboardUrl);
+  };
+
   const discordRpcService = await (async () => {
     try {
       const { DiscordRpcService } = await import("../integrations/discord-rpc/index.js");
       const { loadDiscordRpcConfig } = await import("../integrations/discord-rpc/configLoader.js");
-      const { readBanyanActivity } = await import("../integrations/discord-rpc/stateReader.js");
 
       const rpcConfig = loadDiscordRpcConfig();
       const service = DiscordRpcService.getInstance(rpcConfig);
 
       if (rpcConfig.enabled) {
-        await service.start(async () => {
-          const dashboardUrl = `http://localhost:${opts.port ?? 4242}`;
-          return readBanyanActivity(config, dashboardUrl);
-        });
+        await service.start(buildDiscordActivity);
         console.log("[discord-rpc] Service started");
       }
 
@@ -485,6 +489,72 @@ export async function startServer(
       return null;
     }
   })();
+
+  app.get("/api/discord/enabled", async (_req, res) => {
+    const { loadDiscordRpcConfig } = await import("../integrations/discord-rpc/configLoader.js");
+    const cfg = loadDiscordRpcConfig();
+    res.json({
+      enabled: cfg.enabled,
+      connected: discordRpcService?.isConnected() ?? false,
+    });
+  });
+
+  app.post("/api/discord/enabled", async (req, res) => {
+    const { loadDiscordRpcConfig, saveDiscordRpcConfig } = await import("../integrations/discord-rpc/configLoader.js");
+    const body = (req.body ?? {}) as { enabled?: boolean };
+    if (typeof body.enabled !== "boolean") {
+      res.status(400).json({ error: "missing 'enabled' boolean" });
+      return;
+    }
+    const cfg = loadDiscordRpcConfig();
+    cfg.enabled = body.enabled;
+    saveDiscordRpcConfig(cfg);
+
+    if (!discordRpcService) {
+      res.json({ ok: true, enabled: body.enabled, connected: false });
+      return;
+    }
+
+    discordRpcService.updateConfig({ enabled: body.enabled });
+    try {
+      if (body.enabled) {
+        await discordRpcService.start(buildDiscordActivity);
+        console.log("[discord-rpc] Service started (toggle)");
+      } else {
+        await discordRpcService.stop();
+        console.log("[discord-rpc] Service stopped (toggle)");
+      }
+    } catch (err) {
+      console.error("[discord-rpc] toggle failed:", (err as Error).message);
+    }
+
+    res.json({
+      ok: true,
+      enabled: body.enabled,
+      connected: discordRpcService.isConnected(),
+    });
+  });
+
+  app.get("/api/discord/focus", async (_req, res) => {
+    const { getDiscordFocus } = await import("../integrations/discord-rpc/focus.js");
+    res.json(getDiscordFocus());
+  });
+
+  app.post("/api/discord/focus", async (req, res) => {
+    const { setDiscordFocus } = await import("../integrations/discord-rpc/focus.js");
+    const body = (req.body ?? {}) as { project?: string | null; mode?: string };
+    const patch: { project?: string | null; mode?: "follow" | "aggregate" } = {};
+    if ("project" in body) {
+      patch.project = typeof body.project === "string" && body.project.length > 0
+        ? body.project
+        : null;
+    }
+    if (body.mode === "follow" || body.mode === "aggregate") {
+      patch.mode = body.mode;
+    }
+    const next = setDiscordFocus(patch);
+    res.json({ ok: true, ...next });
+  });
 
   app.get("/api/integrations/inbox", (req, res) => {
     const q = req.query as Record<string, string | undefined>;

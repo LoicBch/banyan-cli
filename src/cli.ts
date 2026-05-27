@@ -85,11 +85,30 @@ export async function run(argv: string[]): Promise<number> {
 
   program
     .command("serve")
-    .description("start the web dashboard (read-only overview of projects, worktrees, stacks)")
+    .description("start the web dashboard. add --remote to expose it via a public HTTPS tunnel (Cloudflare/ngrok) with token auth and a QR code for phone access.")
     .option("-p, --port <number>", "port to bind (default: first free from 4242)", (v) => parseInt(v, 10))
     .option("--no-open", "don't open the browser automatically")
-    .action(async (opts: { port?: number; open?: boolean }) => {
-      await serve(config, { port: opts.port, open: opts.open });
+    .option(
+      "--remote",
+      "expose the dashboard publicly via a tunnel; requires cloudflared or ngrok installed. enables token auth and prints a QR code.",
+    )
+    .option(
+      "--tunnel <provider>",
+      "force a tunnel provider: cloudflared | ngrok (default: auto-detect, prefer cloudflared)",
+    )
+    .option("--rotate-token", "rotate the auth token before starting (invalidates previous QRs)")
+    .action(async (opts: { port?: number; open?: boolean; remote?: boolean; tunnel?: string; rotateToken?: boolean }) => {
+      const tunnel =
+        opts.tunnel === "cloudflared" || opts.tunnel === "ngrok"
+          ? opts.tunnel
+          : undefined;
+      await serve(config, {
+        port: opts.port,
+        open: opts.open,
+        ...(opts.remote ? { remote: true } : {}),
+        ...(tunnel ? { tunnel } : {}),
+        ...(opts.rotateToken ? { rotateToken: true } : {}),
+      });
     });
 
   program
@@ -147,7 +166,16 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   } catch (err) {
     if (err instanceof BanyanError) {
-      logger.error(err.message);
+      if (err.details) {
+        logger.fail(err.details.title ?? err.message, {
+          ...(err.details.cause ? { cause: err.details.cause } : { cause: err.message }),
+          ...(err.details.fix ? { fix: err.details.fix } : {}),
+        });
+      } else {
+        // No structured details — keep the legacy compact format so existing
+        // error sites that just `throw new UsageError("…")` still look fine.
+        logger.error(err.message);
+      }
       return 1;
     }
     // commander's CommanderError has `.code`, `.exitCode`
@@ -156,7 +184,7 @@ export async function run(argv: string[]): Promise<number> {
       return 0;
     }
     const message = err instanceof Error ? err.message : String(err);
-    logger.error(message);
+    logger.fail("unexpected error", { cause: message });
     return 1;
   }
 }

@@ -53,7 +53,7 @@ export async function runPreflightRebase(
       auto: !opts.noResolve,
       // Cross-feature awareness: same scope as the orchestrator.
       addDirs: projectParentDirs(ctx.project),
-      mcpConfig: ensureBanyanMcpConfig(),
+      mcpConfig: ensureBanyanMcpConfig("resolver"),
     },
     result.conflicts,
   );
@@ -62,7 +62,21 @@ export async function runPreflightRebase(
   const stillRebasing = await git.isRebaseInProgress(worktreePath);
   if (stillRebasing) {
     throw new UsageError(
-      `rebase still in progress after resolver — inspect: cd ${worktreePath} && git status`,
+      `rebase still in progress after resolver`,
+      {
+        title: `rebase paused with unresolved conflicts (${ctx.repo!.name})`,
+        cause:
+          `The headless claude resolver couldn't finish — likely a stream timeout or it gave up on a ` +
+          `tricky conflict. The worktree is left mid-rebase so you can finish by hand or retry.`,
+        fix: [
+          `cd ${worktreePath}`,
+          `git status                # see the conflict files`,
+          `# resolve, then:`,
+          `git add -A && git rebase --continue`,
+          `# or to bail entirely: git rebase --abort`,
+          `# then re-run: bn ${ctx.project.name} merge ${ctx.feature} ${ctx.repo!.name}`,
+        ],
+      },
     );
   }
 }

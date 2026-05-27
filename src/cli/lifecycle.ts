@@ -18,6 +18,7 @@ import { testStop } from "../commands/testStop.js";
 import { testLs } from "../commands/testLs.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
+import { restartOrchestrator } from "../commands/restartOrchestrator.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
 import { agentPrompt } from "../commands/agentPrompt.js";
@@ -111,6 +112,17 @@ export function register(
     )
     .action(async () => {
       await resumeCmd(config, project.name);
+    });
+
+  projectCmd
+    .command("restart-orchestrator")
+    .description(
+      "respawn just the orchestrator pane: kills the current process in it and relaunches claude with the full system prompt + MCP config + parent dirs + --continue. " +
+        "use after the orchestrator's claude exited or got replaced. " +
+        "other panes, feature agents, and run stacks are untouched.",
+    )
+    .action(async () => {
+      await restartOrchestrator(await buildContext(config, project.name));
     });
 
   projectCmd

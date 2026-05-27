@@ -22,6 +22,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isDraftFeature } from "./naming.js";
 
 export type AgentMode = "interactive" | "assisted" | "autonomous" | "autopilot";
 
@@ -172,14 +173,41 @@ export function renderAgentPrompt(
 
 /** Build the rendered system prompt for a feature.
  *  Returns `undefined` for interactive mode (no system prompt to inject). */
+const DRAFT_BLOCK = `=== CRITICAL: DRAFT WORKTREE ===
+This worktree was created without a feature name. Banyan generated the placeholder slug '{{feature}}' for you.
+
+EVERY banyan_* tool except \`banyan_finalize_feature_name\` is BLOCKED until you finalize. You will see an error message telling you to finalize if you forget.
+
+YOUR FIRST ACTION after the user's first instruction:
+  1. Read the user's request carefully.
+  2. Pick a short kebab-case slug that describes the task (e.g. "login-flow", "crash-on-close", "export-pdf-tweaks"). Lowercase. Hyphens between words. ≤30 chars. Avoid "fix" / "update" / "stuff".
+  3. Call: banyan_finalize_feature_name({ name: "<your-slug>" })
+  4. Banyan will rename the git branch + tmux pane to your slug. The on-disk path keeps its draft slug (cosmetic only — ignore it).
+  5. Then proceed with the task normally.
+
+If the user's request is too vague to name (e.g. they just said "hello"), ask them for one short phrase summarising what they want before you finalize. Do NOT invent a generic name to bypass this — wait for clarity.
+===`;
+
 export function buildAgentPrompt(
   projectName: string,
   feature: string,
   mode: AgentMode,
 ): string | undefined {
   const template = loadAgentPromptTemplate(projectName, mode);
-  if (!template || template.trim().length === 0) return undefined;
-  return renderAgentPrompt(template, { project: projectName, feature });
+  if (!template || template.trim().length === 0) {
+    // Interactive mode: still inject the draft notice so the user sees the
+    // expectation even though no full system prompt is set.
+    if (isDraftFeature(feature)) {
+      return renderAgentPrompt(DRAFT_BLOCK, { project: projectName, feature });
+    }
+    return undefined;
+  }
+  const base = renderAgentPrompt(template, { project: projectName, feature });
+  if (isDraftFeature(feature)) {
+    return renderAgentPrompt(DRAFT_BLOCK, { project: projectName, feature }) +
+      "\n\n" + base;
+  }
+  return base;
 }
 
 /** Initialize the per-project per-mode prompt file from the default if it

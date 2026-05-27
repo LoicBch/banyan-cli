@@ -1,64 +1,64 @@
 #!/usr/bin/env bash
 # banyan-current-action.sh — run a banyan action using the current tmux pane's
-# context (project/repo/feature) when possible, fall back to a tmux prompt.
+# context (project/feature) when possible, fall back to a tmux prompt.
 #
 # Usage: banyan-current-action.sh <action>
 #   action = merge | cleanup | rebase | test | deploy
+#
+# Context detection (no CLI roundtrip):
+#   - feature: the `@banyan-pane` user option set on the current pane by
+#     `bn wt` (src/commands/wtAll.ts). Excludes the "ops" and "orchestrator"
+#     panes, which aren't feature-scoped.
+#   - project: the current tmux session name. By convention banyan sessions
+#     are named after the project (src/naming.ts:sessionName).
 
 set -euo pipefail
 
 ACTION="${1:?action required (merge|cleanup|rebase|test|deploy)}"
 
-# Get the current pane's cwd from tmux.
-PANE_CWD="$(tmux display-message -p -F '#{pane_current_path}' 2>/dev/null || echo "$HOME")"
+FEATURE="$(tmux display-message -p -F '#{@banyan-pane}' 2>/dev/null || true)"
+PROJECT="$(tmux display-message -p -F '#{session_name}' 2>/dev/null || true)"
 
-# Resolve context from that cwd via `bn whereami`.
-CONTEXT_OUT="$(cd "$PANE_CWD" && bn whereami 2>/dev/null || true)"
-
-if [[ -z "$CONTEXT_OUT" ]]; then
-    # No banyan context for this pane. Prompt for a feature, open a new window.
-    tmux command-prompt -p "${ACTION} feature:" \
-        "new-window -n '${ACTION}' 'bn ${ACTION} %1; echo; read -n1 -p \"press any key to close\"'"
-    exit 0
+# "ops" and "orchestrator" panes are not feature-scoped — treat as no feature.
+if [[ "$FEATURE" == "ops" || "$FEATURE" == "orchestrator" ]]; then
+    FEATURE=""
 fi
 
-# Eval shell-safe key='value' output from whereami.
-eval "$CONTEXT_OUT"
+run_with_feature() {
+    local feat="$1"
+    tmux new-window -n "${ACTION}-${feat}" \
+        "bn ${PROJECT} ${ACTION} ${feat}; echo; read -n1 -p 'press any key to close'"
+}
 
-PROJECT="${project:-}"
-REPO="${repo:-}"
-FEATURE="${feature:-}"
-IN_MAIN="${in_main_repo:-0}"
+prompt_for_feature() {
+    # Project still goes in front so the prompted feature lands in the right
+    # project. If no project was detected (running outside a banyan session),
+    # let `bn` resolve it from cwd / config defaults.
+    local cmd
+    if [[ -n "$PROJECT" ]]; then
+        cmd="bn ${PROJECT} ${ACTION} %1"
+    else
+        cmd="bn ${ACTION} %1"
+    fi
+    tmux command-prompt -p "${ACTION} feature:" \
+        "new-window -n '${ACTION}-%1' '${cmd}; echo; read -n1 -p \"press any key to close\"'"
+}
 
 case "$ACTION" in
-    merge|cleanup|rebase)
-        if [[ -n "$FEATURE" && -n "$REPO" ]]; then
-            tmux new-window -n "${ACTION}-${FEATURE}" \
-                "bn ${PROJECT} ${ACTION} ${FEATURE} ${REPO}; echo; read -n1 -p 'press any key to close'"
-        else
-            # in main repo or no feature detected → prompt
-            tmux command-prompt -p "${ACTION} feature:" \
-                "new-window -n '${ACTION}' 'bn ${PROJECT} ${ACTION} %1; echo; read -n1 -p \"press any key to close\"'"
-        fi
-        ;;
-    test)
+    merge|cleanup|rebase|test)
         if [[ -n "$FEATURE" ]]; then
-            # Test all repos with a worktree for this feature (BanyanCore handles selection)
-            tmux new-window -n "test-${FEATURE}" \
-                "bn ${PROJECT} test ${FEATURE}; echo; read -n1 -p 'press any key to close'"
+            run_with_feature "$FEATURE"
         else
-            tmux command-prompt -p "test feature:" \
-                "new-window -n 'test' 'bn ${PROJECT} test %1; echo; read -n1 -p \"press any key to close\"'"
+            prompt_for_feature
         fi
         ;;
     deploy)
-        if [[ -n "$REPO" ]]; then
-            tmux new-window -n "deploy-${REPO}" \
-                "bn ${PROJECT} deploy ${REPO}; echo; read -n1 -p 'press any key to close'"
-        else
-            tmux new-window -n "deploy-${PROJECT}" \
-                "bn ${PROJECT} deploy; echo; read -n1 -p 'press any key to close'"
-        fi
+        # deploy is project-scoped (no feature). Just run it for the current
+        # project, or let bn resolve if no project context.
+        local_cmd="bn deploy"
+        [[ -n "$PROJECT" ]] && local_cmd="bn ${PROJECT} deploy"
+        tmux new-window -n "deploy-${PROJECT:-default}" \
+            "${local_cmd}; echo; read -n1 -p 'press any key to close'"
         ;;
     *)
         echo "unknown action: $ACTION" >&2

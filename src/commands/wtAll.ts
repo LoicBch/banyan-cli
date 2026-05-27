@@ -10,6 +10,7 @@ import { runHook, buildHookEnv } from "../hooks.js";
 import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js";
 import { generateAutopilotSettings, needsSupervisorHook } from "../autopilot.js";
 import { writeAgentState } from "../agentState.js";
+import { ensureBanyanMcpConfig } from "../claudeContext.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -40,8 +41,19 @@ export async function wtAll(
      *  / `bn approve`) before the agent starts working. Orthogonal to
      *  mode. Ignored for mode=interactive. */
     requireApproval?: boolean;
+    /** Reuse this specific tmux pane to launch claude instead of splitting a
+     *  fresh one. Used by the interactive `bn wt` flow where we open a
+     *  "describe your task" pane first, infer the slug from the typed text,
+     *  then transform that same pane into the agent. */
+    inheritPaneId?: string;
+    /** Prepare everything but do NOT touch the tmux pane (no respawn, no
+     *  sendKeys, no layout change). Used when banyan is itself running INSIDE
+     *  the destination pane and would otherwise kill itself via respawn —
+     *  the caller (a bash script in that pane) reads `launchScriptPath` from
+     *  the return value and `exec`s it after banyan exits. */
+    stagedLaunch?: boolean;
   } = {},
-): Promise<void> {
+): Promise<{ launchScriptPath?: string }> {
   naming.assertValidFeature(feature);
 
   const project = getProject(config, projectName);
@@ -70,12 +82,26 @@ export async function wtAll(
   );
 
   // Phase 1 — compose stacks (no worktree, no pane).
-  for (const r of repos) {
-    if (r.type !== "compose") continue;
-    logger.info("");
-    logger.info(`--- ${r.name} (compose) ---`);
-    await docker.up(r, project, feature);
-    logger.ok(`stack up: ${docker.composeProjectName(project, feature)}`);
+  // For DRAFT features we defer this: spinning up the stack with `draft-<ts>`
+  // as the docker-compose project name would leak the placeholder slug into
+  // container names + volumes, and renaming after the fact = data loss.
+  // The agent's `banyan_finalize_feature_name` call starts the stacks under
+  // the real name once it's known.
+  if (!naming.isDraftFeature(feature)) {
+    for (const r of repos) {
+      if (r.type !== "compose") continue;
+      logger.info("");
+      logger.info(`--- ${r.name} (compose) ---`);
+      await docker.up(r, project, feature);
+      logger.ok(`stack up: ${docker.composeProjectName(project, feature)}`);
+    }
+  } else {
+    const composeRepos = repos.filter((r) => r.type === "compose");
+    if (composeRepos.length > 0) {
+      logger.info(
+        `deferring ${composeRepos.length} compose stack${composeRepos.length > 1 ? "s" : ""} until finalize (${composeRepos.map((r) => r.name).join(", ")})`,
+      );
+    }
   }
 
   // Phase 2 — git worktrees + post-create hook per repo.
@@ -93,8 +119,24 @@ export async function wtAll(
       ?? naming.worktreePath(r.path, feature);
     logger.info("");
     logger.info(`--- ${r.name} ---`);
-    await git.worktreeAdd(r.path, wtPath, branch);
-    logger.ok(`worktree: ${wtPath} (${branch})`);
+
+    // Branch new worktrees from origin/<base> so they start at the latest
+    // upstream HEAD even when the local base branch is stale (e.g. previous
+    // merges happened via the PR/MR flow, which only updates origin).
+    const base = await git.defaultBranch(r.path, r.baseBranch);
+    let startPoint: string | undefined;
+    try {
+      await git.fetchRef(r.path, base);
+      startPoint = `origin/${base}`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn(
+        `fetch origin/${base} failed for ${r.name} (${msg}); starting worktree from local ${base}`,
+      );
+    }
+
+    await git.worktreeAdd(r.path, wtPath, branch, startPoint);
+    logger.ok(`worktree: ${wtPath} (${branch}${startPoint ? ` ← ${startPoint}` : ""})`);
     worktreePaths.push(wtPath);
     await runHook(
       mainRepoPath,
@@ -115,7 +157,7 @@ export async function wtAll(
     logger.info("");
     logger.ok(`done (compose stacks only, no pane created)`);
     logger.info(`inspect: bn ${projectName} env ls`);
-    return;
+    return {};
   }
 
   const session = naming.sessionName(project.name);
@@ -128,7 +170,20 @@ export async function wtAll(
       : feature;
 
   let paneId: string;
-  if (!(await tmux.hasSession(session))) {
+  if (opts.inheritPaneId && opts.stagedLaunch) {
+    // We're INSIDE this pane already (called from a bash script via
+    // `banyan ... _wt-stage-from-prompt`). Don't respawn — that would kill
+    // us. Just retag the pane; the bash caller will exec the launch script
+    // when banyan exits.
+    paneId = opts.inheritPaneId;
+    logger.ok(`tmux pane (${paneId}) staged for inline launch`);
+  } else if (opts.inheritPaneId) {
+    // Caller wants this exact pane to host the agent (banyan running OUTSIDE
+    // the pane). Respawn the shell at the worktree cwd, then send keys.
+    paneId = opts.inheritPaneId;
+    await tmux.respawnPane(paneId, primaryCwd);
+    logger.ok(`tmux pane reused (${paneId}) at ${primaryCwd}`);
+  } else if (!(await tmux.hasSession(session))) {
     paneId = await tmux.newSession(session, agentsWin, primaryCwd);
     logger.ok(`tmux session: ${session} (created)`);
     logger.ok(`tmux window: ${session}:${agentsWin}`);
@@ -136,12 +191,50 @@ export async function wtAll(
     paneId = await tmux.newWindow(session, agentsWin, primaryCwd);
     logger.ok(`tmux window: ${session}:${agentsWin} (created)`);
   } else {
-    paneId = await tmux.splitWindow(session, agentsWin, primaryCwd);
-    logger.ok(`tmux pane added in ${session}:${agentsWin}`);
+    // Reuse an existing pane for this feature if one is already there.
+    // Without this, `bn resume` (or any second wtAll for the same feature)
+    // would split a duplicate pane next to the existing one.
+    const existing = await tmux.findPaneByUserOption(
+      session,
+      agentsWin,
+      "@banyan-pane",
+      paneTitle,
+    );
+    if (existing) {
+      paneId = existing;
+      await tmux.respawnPane(paneId, primaryCwd);
+      logger.ok(`tmux pane reused in ${session}:${agentsWin} (${paneTitle})`);
+    } else {
+      paneId = await tmux.splitWindow(session, agentsWin, primaryCwd);
+      logger.ok(`tmux pane added in ${session}:${agentsWin}`);
+    }
   }
 
   await tmux.setPaneTitle(paneId, paneTitle);
   await tmux.setPaneUserOption(paneId, "@banyan-pane", paneTitle);
+
+  // In staged mode we skip ops-pane setup + layout reflow: doing tmux layout
+  // changes while we're running inside the target pane would jostle our shell
+  // mid-script. The next `bn start` / resume can repair the layout if needed.
+  if (opts.stagedLaunch) {
+    const requireApproval = mode === "interactive" ? false : !!opts.requireApproval;
+    const settingsPath = needsSupervisorHook({ mode, requireApproval })
+      ? generateAutopilotSettings(projectName, feature)
+      : undefined;
+    const { launchScriptPath } = await claude.launchClaude(paneId, {
+      additionalDirs,
+      initialPrompt: opts.initialPrompt,
+      systemPrompt: buildAgentPrompt(projectName, feature, mode),
+      projectName,
+      feature,
+      settingsPath,
+      mcpConfig: ensureBanyanMcpConfig("feature"),
+      stagedOnly: true,
+    });
+    writeAgentState({ project: projectName, feature, mode, requireApproval });
+    logger.ok(`staged launch script: ${launchScriptPath}`);
+    return { launchScriptPath };
+  }
 
   // Add a small "ops" terminal pane at the bottom of the agents window if it
   // doesn't exist yet. It sits at the first git repo's main path (not the
@@ -176,7 +269,14 @@ export async function wtAll(
     additionalDirs,
     initialPrompt: opts.initialPrompt,
     systemPrompt: buildAgentPrompt(projectName, feature, mode),
+    projectName,
+    feature,
     settingsPath,
+    // Always pass the banyan MCP config so the agent can call
+    // banyan_finalize_feature_name (mandatory for drafts), banyan_report_done,
+    // banyan_set_todo, etc. Without this the system prompt's instructions to
+    // call these tools become no-ops because the tools aren't registered.
+    mcpConfig: ensureBanyanMcpConfig("feature"),
   });
   // Persist how the agent was launched so `bn resume` can recreate it
   // with the same mode + requireApproval. Without this, every resumed
@@ -195,4 +295,5 @@ export async function wtAll(
     `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}${modeSuffix}`,
   );
   logger.info(`attach with: bn ${projectName} attach`);
+  return {};
 }

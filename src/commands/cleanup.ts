@@ -9,6 +9,8 @@ import { removeAutopilotSettings } from "../autopilot.js";
 import { deleteApproval } from "../approval.js";
 import { deleteReportApproval } from "../reportApproval.js";
 import { deleteAgentState } from "../agentState.js";
+import { deleteFeaturePrompt, deleteFeatureLaunchScript } from "../claude.js";
+import { appendHistoryEvent } from "../history.js";
 
 export interface CleanupOpts {
   /** Force-remove the worktree even if it has modified or untracked files,
@@ -112,4 +114,20 @@ export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<voi
   deleteReportApproval(ctx.project.name, ctx.feature);
   // Drop the recorded agent launch options. Idempotent.
   deleteAgentState(ctx.project.name, ctx.feature);
+  // Drop the on-disk feature system prompt + launch script (used by launchClaude
+  // to keep the pane shell history clean). Idempotent.
+  deleteFeaturePrompt(ctx.project.name, ctx.feature);
+  deleteFeatureLaunchScript(ctx.project.name, ctx.feature);
+
+  try {
+    appendHistoryEvent({
+      kind: "cleanup",
+      project: ctx.project.name,
+      feature: ctx.feature,
+      repo: ctx.repo.name,
+      ...(opts.force ? { forced: true } : {}),
+    });
+  } catch (err) {
+    ctx.logger.warn(`history log write failed (non-fatal): ${(err as Error).message}`);
+  }
 }

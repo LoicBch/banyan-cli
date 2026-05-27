@@ -33,6 +33,7 @@ export async function worktreeAdd(
   repo: string,
   wtPath: string,
   branch: string,
+  startPoint?: string,
 ): Promise<void> {
   if (existsSync(wtPath)) {
     return;
@@ -41,9 +42,14 @@ export async function worktreeAdd(
   // intermediate directories itself, and our new layout puts worktrees inside
   // a `worktree-<repo>` subdir that may not exist yet.
   mkdirSync(dirname(wtPath), { recursive: true });
-  const withNew = await run("git", ["worktree", "add", wtPath, "-b", branch], { cwd: repo });
+  const newArgs = startPoint
+    ? ["worktree", "add", wtPath, "-b", branch, startPoint]
+    : ["worktree", "add", wtPath, "-b", branch];
+  const withNew = await run("git", newArgs, { cwd: repo });
   if (withNew.code === 0) return;
 
+  // Branch already exists — check it out as-is (no start point: we won't
+  // rewrite history of an existing branch).
   const existing = await run("git", ["worktree", "add", wtPath, branch], { cwd: repo });
   if (existing.code === 0) return;
 
@@ -93,12 +99,187 @@ export async function fetch(repo: string, remote = "origin"): Promise<void> {
   }
 }
 
+export async function fetchRef(
+  repo: string,
+  ref: string,
+  remote = "origin",
+): Promise<void> {
+  const r = await run("git", ["fetch", remote, ref], { cwd: repo });
+  if (r.code !== 0) {
+    throw new GitError(`fetch ${remote} ${ref} failed: ${r.stderr.trim()}`);
+  }
+}
+
+/**
+ * Fast-forward the local <base> branch to origin/<base>. Handles the common
+ * banyan layout where <base> is checked out in the main repo (so we can't
+ * just update the ref) by falling back to a `merge --ff-only` against the
+ * fetched `origin/<base>`.
+ *
+ * Strategy, in order:
+ *   1. `git fetch origin <base>:<base>` — fast ref update, works only when
+ *      <base> isn't checked out anywhere.
+ *   2. If (1) was rejected because <base> is checked out *at this repo* AND
+ *      this repo's HEAD is on <base>, fall back to:
+ *        - `git fetch origin <base>`  (updates origin/<base>)
+ *        - `git merge --ff-only origin/<base>`
+ *      That FFs the working copy cleanly without touching the index when
+ *      already up to date.
+ *   3. Anything else (non-FF, base checked out in another worktree, other
+ *      git error) → return `{ updated: false, message }`. Caller decides
+ *      whether to warn.
+ *
+ * Never throws; the user's `bn merge` flow continues regardless.
+ */
+export type FFReason =
+  | "diverged"              // local + origin both have unique commits → manual resolution needed
+  | "checked-out-elsewhere" // base is checked out in another worktree (not the main repo HEAD)
+  | "non-fast-forward"      // local is ahead of origin (pure non-FF)
+  | "no-remote-ref"         // origin doesn't have <base> at all
+  | "other";                // anything else
+
+export interface FFResult {
+  updated: boolean;
+  via?: "fetch-refspec" | "merge-ff";
+  /** Set when updated is false. Lets callers pick a precise message. */
+  reason?: FFReason;
+  /** Raw git output preserved for diagnostics. */
+  message?: string;
+  /** Optional ahead/behind counts vs origin/<base>, only populated for "diverged". */
+  diverge?: { ahead: number; behind: number };
+}
+
+export async function ffLocalBase(
+  repo: string,
+  base: string,
+  remote = "origin",
+): Promise<FFResult> {
+  // Path 1 — pure ref update. Works when <base> isn't checked out anywhere.
+  const refspec = await run("git", ["fetch", remote, `${base}:${base}`], { cwd: repo });
+  if (refspec.code === 0) return { updated: true, via: "fetch-refspec" };
+
+  const refspecErr = (refspec.stderr.trim() || refspec.stdout.trim());
+
+  // Quick classification on the refspec failure itself before any fallback.
+  if (/couldn'?t find remote ref|does not appear to be a git repository/i.test(refspecErr)) {
+    return { updated: false, reason: "no-remote-ref", message: refspecErr };
+  }
+
+  // Path 2 — base is checked out somewhere; if it's checked out HERE and we
+  // are on it, fall back to a merge --ff-only.
+  const lookedLikeCheckedOut = /checked out|refusing to fetch into branch/i.test(refspecErr);
+  if (lookedLikeCheckedOut) {
+    const head = await run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repo });
+    const onBase = head.code === 0 && head.stdout.trim() === base;
+    if (onBase) {
+      await run("git", ["fetch", remote, base], { cwd: repo });
+      const merge = await run("git", ["merge", "--ff-only", `${remote}/${base}`], { cwd: repo });
+      if (merge.code === 0) return { updated: true, via: "merge-ff" };
+      const mergeErr = merge.stderr.trim() || merge.stdout.trim();
+      // FF refused: either the branches diverged or local is ahead. Compute counts.
+      const counts = await aheadBehind(repo, base, `${remote}/${base}`);
+      const reason: FFReason =
+        counts && counts.ahead > 0 && counts.behind > 0
+          ? "diverged"
+          : counts && counts.ahead > 0
+          ? "non-fast-forward"
+          : "other";
+      return {
+        updated: false,
+        reason,
+        message: mergeErr,
+        ...(counts ? { diverge: counts } : {}),
+      };
+    }
+    // Checked out elsewhere (a feature worktree probably) — leave it alone.
+    return { updated: false, reason: "checked-out-elsewhere", message: refspecErr };
+  }
+
+  // Refspec fetch failed for some other reason — non-FF ref update.
+  if (/non-fast-forward|rejected/i.test(refspecErr)) {
+    const counts = await aheadBehind(repo, base, `${remote}/${base}`);
+    const reason: FFReason =
+      counts && counts.ahead > 0 && counts.behind > 0 ? "diverged" : "non-fast-forward";
+    return {
+      updated: false,
+      reason,
+      message: refspecErr,
+      ...(counts ? { diverge: counts } : {}),
+    };
+  }
+
+  return { updated: false, reason: "other", message: refspecErr };
+}
+
+/** Compute `git rev-list --left-right --count base...origin/base`. Returns
+ *  `{ ahead, behind }` where ahead = commits local has that remote doesn't,
+ *  behind = commits remote has that local doesn't. */
+async function aheadBehind(
+  repo: string,
+  local: string,
+  remote: string,
+): Promise<{ ahead: number; behind: number } | undefined> {
+  const r = await run(
+    "git",
+    ["rev-list", "--left-right", "--count", `${local}...${remote}`],
+    { cwd: repo },
+  );
+  if (r.code !== 0) return undefined;
+  const m = r.stdout.trim().match(/^(\d+)\s+(\d+)$/);
+  if (!m) return undefined;
+  return { ahead: parseInt(m[1]!, 10), behind: parseInt(m[2]!, 10) };
+}
+
 export async function rebase(wtPath: string, upstream: string): Promise<void> {
   const r = await run("git", ["rebase", upstream], { cwd: wtPath });
   if (r.code !== 0) {
     throw new GitError(
       `rebase on ${upstream} failed in ${wtPath}:\n${r.stderr.trim() || r.stdout.trim()}\n` +
         `resolve manually: cd ${wtPath} && git status`,
+    );
+  }
+}
+
+/**
+ * Rename a branch in place via `git branch -m <old> <new>`. Cheap (only the
+ * ref moves), no file movement, safe even if the branch is checked out in
+ * another worktree — the worktree's HEAD ref is updated atomically.
+ *
+ * Run from any path inside the same git repo; passing a worktree path also
+ * works because all of a repo's worktrees share the same branch namespace.
+ */
+export async function renameBranch(
+  repo: string,
+  oldBranch: string,
+  newBranch: string,
+): Promise<void> {
+  const r = await run("git", ["branch", "-m", oldBranch, newBranch], { cwd: repo });
+  if (r.code !== 0) {
+    throw new GitError(
+      `rename branch ${oldBranch} → ${newBranch} failed: ${r.stderr.trim()}`,
+    );
+  }
+}
+
+/**
+ * Move a worktree to a new path via `git worktree move`. The directory's
+ * inode is preserved across the rename, so a process holding the old cwd
+ * keeps working — its open file descriptors stay valid, only the path string
+ * is stale until it re-resolves cwd (e.g. via `cd .`).
+ *
+ * Used at draft → finalize time to rename `worktree-X/draft-<ts>` to
+ * `worktree-X/<real-feature>` without disrupting the agent running inside.
+ */
+export async function worktreeMove(
+  repo: string,
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  mkdirSync(dirname(newPath), { recursive: true });
+  const r = await run("git", ["worktree", "move", oldPath, newPath], { cwd: repo });
+  if (r.code !== 0) {
+    throw new GitError(
+      `git worktree move ${oldPath} ${newPath} failed: ${r.stderr.trim() || r.stdout.trim()}`,
     );
   }
 }

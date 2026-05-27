@@ -70,6 +70,41 @@ export async function merge(ctx: Context, opts: MergeOpts = {}): Promise<void> {
     await mergeLocal(ctx, base);
   } else {
     await mergeViaPR(ctx, base, opts);
+    // Keep the local <base> branch in sync with origin so subsequent `bn wt`
+    // (and any non-banyan work in the main repo) starts from up-to-date code.
+    // The PR/MR flow merges remotely — without this, local <base> stays stale.
+    const ff = await git.ffLocalBase(ctx.repo.path, base);
+    if (ff.updated) {
+      const how = ff.via === "merge-ff" ? " (via merge --ff-only)" : "";
+      ctx.logger.ok(`local ${base} fast-forwarded to origin/${base}${how}`);
+    } else {
+      const counts = ff.diverge ? ` (local +${ff.diverge.ahead} / origin +${ff.diverge.behind})` : "";
+      switch (ff.reason) {
+        case "diverged":
+          ctx.logger.warn(
+            `local ${base} has diverged from origin/${base}${counts} — won't auto-fix; ` +
+              `inspect with: git -C ${ctx.repo.path} log --oneline --left-right ${base}...origin/${base}`,
+          );
+          break;
+        case "non-fast-forward":
+          ctx.logger.info(
+            `local ${base} is ahead of origin/${base}${counts} — nothing to fast-forward.`,
+          );
+          break;
+        case "checked-out-elsewhere":
+          ctx.logger.info(
+            `local ${base} is checked out in a worktree — left alone (run \`git pull --ff-only\` there if needed).`,
+          );
+          break;
+        case "no-remote-ref":
+          ctx.logger.warn(`origin has no '${base}' branch — skipping fast-forward.`);
+          break;
+        default:
+          ctx.logger.info(
+            `local ${base} not fast-forwarded: ${(ff.message ?? "unknown").split("\n")[0]}`,
+          );
+      }
+    }
   }
 
   // post_merge hook (runs whether MR/PR or local merge succeeded)

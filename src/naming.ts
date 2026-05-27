@@ -84,6 +84,40 @@ export function parseWorktreePath(
  * in state.ts, and parseWorktreePath only takes the first segment). Branches
  * with prefixes belong on the `--prefix` flag, not in the feature ID.
  */
+/**
+ * Reserved prefix used by `bn wt` when no feature name was provided. The
+ * agent that boots in such a worktree must call `banyan_finalize_feature_name`
+ * before any other banyan operation — see the MCP guard rail.
+ */
+export const DRAFT_PREFIX = "draft-";
+
+export function isDraftFeature(feature: string): boolean {
+  return feature.startsWith(DRAFT_PREFIX);
+}
+
+/** Unique slug used while we wait for the agent to pick the real name. */
+export function generateDraftFeature(): string {
+  const ts = Date.now().toString(36);
+  const rnd = Math.random().toString(36).slice(2, 6);
+  return `${DRAFT_PREFIX}${ts}${rnd}`;
+}
+
+/**
+ * Validate a slug coming from the agent (or a user via `bn wt-rename`).
+ * Same constraints as a feature name except we explicitly forbid the
+ * `draft-` prefix so it can't be confused with an unfinalized worktree.
+ */
+export function assertValidFinalizedFeature(name: string): void {
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) {
+    throw new UsageError(
+      `'${name}' is not a valid feature name. use lowercase letters, digits, '.', '_', '-'; must start with a letter or digit.`,
+    );
+  }
+  if (isDraftFeature(name)) {
+    throw new UsageError(`feature name cannot start with '${DRAFT_PREFIX}' (reserved for draft worktrees)`);
+  }
+}
+
 export function assertValidFeature(feature: string): void {
   if (feature.includes("/")) {
     const last = feature.split("/").pop()!;

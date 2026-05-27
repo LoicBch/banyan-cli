@@ -17,10 +17,18 @@ import { UsageError } from "../errors.js";
 const WORKSPACE_WINDOW = "workspace";
 
 export async function start(ctx: Context): Promise<number> {
-  return startNativeWorkspace(ctx);
+  await ensureWorkspace(ctx);
+  await tmux.selectWindow(ctx.naming.session, WORKSPACE_WINDOW);
+  return await tmux.attach(ctx.naming.session);
 }
 
-async function startNativeWorkspace(ctx: Context): Promise<number> {
+/**
+ * Build the workspace window (orchestrator + terminal) if it isn't already
+ * up. Idempotent; does NOT attach. Use this when you need the workspace to
+ * exist (e.g. as window 1 during `bn resume`) without taking over the
+ * terminal.
+ */
+export async function ensureWorkspace(ctx: Context): Promise<void> {
   const project = ctx.project;
   const session = ctx.naming.session;
 
@@ -32,31 +40,31 @@ async function startNativeWorkspace(ctx: Context): Promise<number> {
   }
   const primaryCwd = gitRepos[0]!.path;
 
-  // If the workspace window is already up, just attach.
+  // Already built — nothing to do.
   if (
     (await tmux.hasSession(session)) &&
     (await tmux.windowExists(session, WORKSPACE_WINDOW))
   ) {
-    ctx.logger.info(`workspace already running for '${project.name}' — attaching`);
-    await tmux.selectWindow(session, WORKSPACE_WINDOW);
-    return await tmux.attach(session);
+    ctx.logger.info(`workspace already running for '${project.name}'`);
+    return;
   }
 
   // Build the orchestrator's claude command (also records the --continue
   // marker so a later relaunch picks up the same conversation).
   const { command: claudeCmd, parentDirs } = await buildOrchestratorClaudeCommand(project);
 
-  // Create the session + workspace window if needed, otherwise add the
-  // workspace window to the existing session (preserves any agents-<proj>
-  // and test-<feature> windows already there).
+  // Create the session + workspace window if needed. If the session exists
+  // but workspace doesn't, insert workspace as window 1 (`-b -t :0`) so it
+  // stays the canonical first window even when agents/test windows already
+  // exist (e.g. during `bn resume`).
   let orchPaneId: string;
   if (!(await tmux.hasSession(session))) {
     orchPaneId = await tmux.newSession(session, WORKSPACE_WINDOW, primaryCwd);
     ctx.logger.ok(`tmux session: ${session} (created)`);
     ctx.logger.ok(`tmux window: ${session}:${WORKSPACE_WINDOW} (created)`);
   } else {
-    orchPaneId = await tmux.newWindow(session, WORKSPACE_WINDOW, primaryCwd);
-    ctx.logger.ok(`tmux window: ${session}:${WORKSPACE_WINDOW} (created)`);
+    orchPaneId = await tmux.newWindowBefore(session, WORKSPACE_WINDOW, primaryCwd, 0);
+    ctx.logger.ok(`tmux window: ${session}:${WORKSPACE_WINDOW} (created, position 1)`);
   }
   await tmux.setPaneTitle(orchPaneId, "orchestrator");
   await tmux.setPaneUserOption(orchPaneId, "@banyan-pane", "orchestrator");
@@ -73,10 +81,8 @@ async function startNativeWorkspace(ctx: Context): Promise<number> {
   await tmux.enablePaneBorderLabels(session, WORKSPACE_WINDOW);
   await tmux.sendKeys(orchPaneId, claudeCmd, { enter: true });
   await tmux.selectPane(orchPaneId);
-  await tmux.selectWindow(session, WORKSPACE_WINDOW);
 
   ctx.logger.ok(
     `workspace launched: orchestrator + terminal (${parentDirs.length} parent dir${parentDirs.length > 1 ? "s" : ""} in --add-dir)`,
   );
-  return await tmux.attach(session);
 }

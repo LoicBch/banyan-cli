@@ -1,4 +1,4 @@
-import { getProject, type Config, type ProjectConfig, type RepoConfig } from "../config.js";
+import { effectiveRunCommand, getProject, type Config, type ProjectConfig, type RepoConfig } from "../config.js";
 import * as naming from "../naming.js";
 import * as tmux from "../tmux.js";
 import * as docker from "../docker.js";
@@ -182,7 +182,7 @@ export async function test(
       envPairs.push(`${k}=${shellQuote(resolved)}`);
     }
     const commandPrefix = envPairs.length > 0 ? envPairs.join(" ") + " " : "";
-    const runCommand = `${commandPrefix}${pp.repo.run!.command}`;
+    const runCommand = `${commandPrefix}${effectiveRunCommand(pp.repo.run!)}`;
     const fullCommand = pp.repo.run!.setup ? `${pp.repo.run!.setup} && ${runCommand}` : runCommand;
     plans.push({
       repo: pp.repo,
@@ -284,7 +284,6 @@ export async function test(
 
     await tmux.enablePaneBorderLabels(session, testWin);
     await tmux.applyLayout(session, testWin, "tiled");
-    await tmux.selectWindow(session, testWin);
 
     logger.ok(
       `started '${feature}' (${plans.length} process${plans.length > 1 ? "es" : ""} + ops terminal)`,
@@ -338,7 +337,6 @@ export async function test(
       await tmux.applyLayout(session, testWin, "tiled");
     }
     await tmux.enablePaneBorderLabels(session, testWin);
-    await tmux.selectWindow(session, testWin);
 
     const parts: string[] = [];
     if (restarted > 0) parts.push(`${restarted} restarted`);

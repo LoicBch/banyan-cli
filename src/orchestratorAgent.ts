@@ -15,12 +15,11 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import type { ProjectConfig } from "./config.js";
-import * as git from "./git.js";
-import * as naming from "./naming.js";
 import {
   ensureBanyanMcpConfig,
   projectParentDirs,
 } from "./claudeContext.js";
+import { writeLaunchScript } from "./claude.js";
 import { shellQuote } from "./shell.js";
 
 const BANYAN_DIR = path.join(homedir(), ".config", "banyan");
@@ -83,6 +82,21 @@ function staticSystemPrompt(projectName: string): string {
     `  banyan_set_todo, banyan_get_todo, banyan_update_todo, ...). Use them`,
     `  to read state and act on the project.`,
     ``,
+    `Feature inventory — ALWAYS dynamic:`,
+    `- DO NOT rely on any feature list cached in your context. Features are`,
+    `  created, cleaned up, and renamed between turns (and across sessions`,
+    `  resumed via --continue). What you remember from earlier is stale.`,
+    `- ALWAYS call banyan_list_features as your first action when:`,
+    `    · the user asks anything about project state or active features,`,
+    `    · you're about to call banyan_create_feature (to confirm the name`,
+    `      is free + check for related work that may conflict),`,
+    `    · you're about to call banyan_merge_feature / banyan_cleanup_feature`,
+    `      (confirm the feature actually exists right now),`,
+    `    · you're resuming after any wait, or it's the first message of a`,
+    `      session.`,
+    `- The tool is cheap. Re-listing on every turn is fine. Acting on stale`,
+    `  state is not.`,
+    ``,
     `Use yourself for:`,
     `- Distributing tasks: when the user describes one or more tasks, call`,
     `  banyan_create_feature for each — pass the task description as`,
@@ -143,37 +157,13 @@ function staticSystemPrompt(projectName: string): string {
   ].join("\n");
 }
 
-/**
- * Inventory of currently-active features, derived from `git worktree list` on
- * each repo of the project. Returns "" if it can't be computed (errors are
- * swallowed — the static prompt is still useful without it).
- */
-async function buildFeatureInventory(project: ProjectConfig): Promise<string> {
-  const featureMap = new Map<string, string[]>();
-  for (const repo of project.repos) {
-    if (repo.type === "compose") continue;
-    const wts = await git.worktreeList(repo.path).catch(() => []);
-    for (const wt of wts) {
-      if (wt.path === repo.path) continue;
-      const parsed = naming.parseWorktreePath(wt.path, repo.path);
-      if (!parsed) continue;
-      const list = featureMap.get(parsed.feature) ?? [];
-      list.push(repo.name);
-      featureMap.set(parsed.feature, list);
-    }
-  }
-  if (featureMap.size === 0) {
-    return "\n\nNo features active yet. Suggest banyan_create_feature to start one.";
-  }
-  const lines = ["", "Current features:"];
-  for (const [feat, repos] of featureMap.entries()) {
-    lines.push(`  - ${feat}  (repos: ${repos.join(", ")})`);
-  }
-  return "\n" + lines.join("\n");
-}
-
 export async function buildSystemPrompt(project: ProjectConfig): Promise<string> {
-  return staticSystemPrompt(project.name) + (await buildFeatureInventory(project));
+  // The feature inventory is INTENTIONALLY not injected here. A snapshot
+  // baked into the system prompt rapidly goes stale (features are
+  // created/cleaned/renamed mid-session, and the same prompt is reused on
+  // every --continue restart). The orchestrator is instructed to always
+  // call banyan_list_features for the live view.
+  return staticSystemPrompt(project.name);
 }
 
 /**
@@ -185,14 +175,23 @@ export async function buildOrchestratorClaudeCommand(
   project: ProjectConfig,
 ): Promise<{ command: string; parentDirs: string[]; mcpConfig: string }> {
   const parentDirs = projectParentDirs(project);
-  const mcpConfig = ensureBanyanMcpConfig();
+  const mcpConfig = ensureBanyanMcpConfig("orchestrator");
   const systemPrompt = await buildSystemPrompt(project);
+
+  // Stash the system prompt on disk and have the shell substitute it via
+  // `$(cat …)` instead of inlining the multi-thousand-character literal.
+  // Without this the pane history shows pages of `cmdor quote>` zsh
+  // continuation prompts while the command is being typed.
+  const stateDir = path.join(homedir(), ".config", "banyan", "state");
+  mkdirSync(stateDir, { recursive: true });
+  const promptPath = path.join(stateDir, `${project.name}.orchestrator.prompt.md`);
+  writeFileSync(promptPath, systemPrompt, "utf8");
 
   const addDirArgs = parentDirs.map(shellQuote).join(" ");
   const argsTail =
     `--mcp-config ${shellQuote(mcpConfig)} ` +
     `--add-dir ${addDirArgs} ` +
-    `--append-system-prompt ${shellQuote(systemPrompt)}`;
+    `--append-system-prompt "$(cat ${shellQuote(promptPath)})"`;
 
   // Try to resume a prior orchestrator session via `--continue`; if no
   // session exists for this cwd (e.g. fresh project, marker stale, or user
@@ -209,5 +208,13 @@ export async function buildOrchestratorClaudeCommand(
   // the launch — the user just gets a fresh conversation.
   recordOrchestratorMarker(project.name);
 
-  return { command, parentDirs, mcpConfig };
+  // Hide the verbose invocation behind a launch script so the workspace pane
+  // doesn't show 500+ chars of --add-dir / --mcp-config / $(cat …) before
+  // claude takes over. The script body holds the real command; the pane only
+  // sees `clear && bash <script>`.
+  const launchScript = path.join(stateDir, `${project.name}.orchestrator.launch.sh`);
+  writeLaunchScript(launchScript, command);
+  const hiddenCommand = `clear && bash ${shellQuote(launchScript)}`;
+
+  return { command: hiddenCommand, parentDirs, mcpConfig };
 }

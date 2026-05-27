@@ -7,6 +7,22 @@ import { ConfigError } from "./errors.js";
 
 export interface RunConfig {
   command: string;
+  /**
+   * Named alternative commands for this repo. Use cases: switching between
+   * `./gradlew installDebug` and `emulator -avd Pixel_7_API_34`, or between
+   * debug / release builds. Edit from the dashboard's Config tab.
+   *
+   * Example:
+   *   presets:
+   *     gradle:   "./gradlew installDebug"
+   *     emulator: "emulator -avd Pixel_7_API_34 -no-snapshot-load"
+   *   activePreset: emulator
+   */
+  presets?: Record<string, string>;
+  /** Name of the currently selected preset. When set AND present in
+   *  `presets`, that preset's command is used in place of `command`. When
+   *  unset (or pointing at a missing preset), falls back to `command`. */
+  activePreset?: string;
   port?: number;
   portEnv?: string;
   setup?: string;
@@ -77,6 +93,15 @@ export interface Config {
   projects: ProjectConfig[];
 }
 
+/** Resolve the command that `bn test` should actually run for a repo:
+ *  the active preset's command if set and valid, otherwise the default. */
+export function effectiveRunCommand(run: RunConfig): string {
+  if (run.activePreset && run.presets && run.presets[run.activePreset]) {
+    return run.presets[run.activePreset]!;
+  }
+  return run.command;
+}
+
 export function defaultConfigPath(): string {
   return (
     process.env.BANYAN_CONFIG ??
@@ -140,6 +165,10 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
           ? {
               run: {
                 command: r.run.command,
+                ...(r.run.presets && Object.keys(r.run.presets).length > 0
+                  ? { presets: r.run.presets }
+                  : {}),
+                ...(r.run.activePreset ? { activePreset: r.run.activePreset } : {}),
                 ...(r.run.port !== undefined ? { port: r.run.port } : {}),
                 ...(r.run.portEnv ? { portEnv: r.run.portEnv } : {}),
                 ...(r.run.setup ? { setup: r.run.setup } : {}),
@@ -325,8 +354,50 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
             composePorts[k] = v;
           }
         }
+        let presets: Record<string, string> | undefined;
+        if (runObj.presets !== undefined && runObj.presets !== null) {
+          if (!isObject(runObj.presets)) {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].run.presets must be a mapping`,
+            );
+          }
+          presets = {};
+          for (const [k, v] of Object.entries(runObj.presets)) {
+            if (typeof v !== "string" || v === "") {
+              throw new ConfigError(
+                `${sourcePath}: projects[${i}].repos[${j}].run.presets.${k} must be a non-empty string`,
+              );
+            }
+            if (!/^[\w.-]+$/.test(k)) {
+              throw new ConfigError(
+                `${sourcePath}: projects[${i}].repos[${j}].run.presets: preset name '${k}' must match [A-Za-z0-9_.-]+`,
+              );
+            }
+            presets[k] = v;
+          }
+        }
+        let activePreset: string | undefined;
+        if (
+          runObj.activePreset !== undefined &&
+          runObj.activePreset !== null &&
+          runObj.activePreset !== ""
+        ) {
+          if (typeof runObj.activePreset !== "string") {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].run.activePreset must be a string`,
+            );
+          }
+          if (!presets || !(runObj.activePreset in presets)) {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].run.activePreset '${runObj.activePreset}' is not in run.presets`,
+            );
+          }
+          activePreset = runObj.activePreset;
+        }
         run = {
           command,
+          ...(presets && Object.keys(presets).length > 0 ? { presets } : {}),
+          ...(activePreset ? { activePreset } : {}),
           ...(port !== undefined ? { port } : {}),
           ...(portEnv ? { portEnv } : {}),
           ...(setup ? { setup } : {}),
