@@ -66,7 +66,7 @@ showMode: true          # Show agent mode (autonomous, assisted, etc.)
 
 ### When you have active features:
 
-**Details:** `Project: park4night`
+**Details:** `Project: my-project`
 **State:** `3 features • autonomous mode`
 **Elapsed:** Time since dashboard started
 **Button:** "View Dashboard" → Opens your local dashboard

@@ -161,10 +161,10 @@ sources:
 rules:
   # - source: my-clickup
   #   when:
-  #     assigneesAny: ["loic@park4night.com"]
+  #     assigneesAny: ["you@example.com"]
   #     statusesAny: ["to do", "in progress"]
   #   suggest:
-  #     project: park4night
+  #     project: my-project
   #     mode: autonomous
 `;
   if (!existsSync(CONFIG_PATH)) {

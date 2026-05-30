@@ -47,6 +47,8 @@ bn myproject merge login      ← rebase + push + MR + auto-resolve conflicts
 - **A project-wide orchestrator agent** with cross-feature awareness: detects merge conflicts before they happen, recommends merge order, drives merges with a headless conflict resolver.
 - **Isolated dev stacks**: dynamic ports, per-feature compose stacks, env injection (`SERVER_PORT`, `DB_PORT`, `{{back.port}}`), `adb reverse` automation for Android.
 - **Real-time conflict pulse** (CLI + web dashboard) showing the file × feature matrix as you type.
+- **Web dashboard**: pipeline view, per-feature drill-down, config editor, keyboard shortcuts. `bn serve --remote` exposes it over an HTTPS tunnel with token auth + QR code for phone access.
+- **Integrations**: pull tasks from ClickUp (or any provider, ~100 LOC each) into a dashboard inbox; Discord Rich Presence shows what you're working on.
 - **MCP server**: every banyan operation exposed as a tool to Claude Code, Cursor, anything MCP-aware.
 - **Survives reboots**: `bn <project> resume` recreates panes, restarts run processes, resumes Claude conversations.
 
@@ -160,8 +162,9 @@ Worktrees are grouped under their repo's parent dir:
 bn ls                          list all projects
 bn whereami                    detect project/repo/feature from cwd
 bn init <project>              create a new project
+bn ask <question>              ask Claude with full project context
 bn sidebar                     live tree view (terminal)
-bn serve                       web dashboard (browser)
+bn serve [--remote]            web dashboard (browser). --remote = HTTPS tunnel + QR code
 bn install-tmux [-f]           render the tmux config to ~/.config/banyan/
 bn mcp-serve                   MCP server over stdio (used by claude --mcp-config)
 bn mcp-log [-f] [-n N]         tail recent MCP tool calls
@@ -189,11 +192,15 @@ bn <project> deploy [repo] [args]     run the project's deploy command
 bn <project> wt <feature> [repos...]    create worktree(s) + agent pane(s)
 bn <project> wt-rm <feature> [repo]     remove worktree (keep branch)
 bn <project> wt-ls                      list worktrees across repos
+bn <project> task <feature> <prompt>    paste a prompt into the feature's agent pane
 bn <project> rebase <feature> [repo]    rebase on origin/<base>
 bn <project> merge <feature> [repo]     push + create MR/PR + merge (auto-resolve)
 bn <project> cleanup <feature> [repo]   remove worktree + delete branch + close pane
 bn <project> sync                       rebase every active feature on its base branch
 bn <project> pulse [--watch <s>]        conflict-risk dashboard (file × feature)
+bn <project> todo <feature>             todo list for the feature's agent
+bn <project> reports [feature]          read agent reports
+bn <project> approve <feature>          approve a pending agent report (autonomous mode)
 ```
 
 ### Orchestrator
@@ -299,6 +306,25 @@ Edit the file directly or via `bn ... add-repo / set-run / set-base`. Paths are 
 ### Auto adb reverse for Android panes
 
 If a repo's `command` invokes `adb` (heuristic: any Android install/run), banyan auto-prepends `adb reverse tcp:<canonical> tcp:<allocated>` for every other repo with a port. Your app code can hardcode `http://localhost:8080/api/` (canonical port) and it tunnels to the dynamic backend port via USB. No app-side config needed.
+
+## Web dashboard
+
+`bn serve` opens a local browser dashboard (default port 4242):
+
+- **Pipeline tab** — projects × features × repos status at a glance; click a feature to drill into its agents, ports, and recent activity. `<details>` open/closed state is preserved across refreshes.
+- **Config tab** — edit each repo's run command and define named presets with an active selection. Writes back to `config.yaml` while preserving your comments.
+- **Shortcuts tab** — discoverable list of the tmux key bindings banyan installs.
+- **Inbox** — tasks pulled from configured integrations (see below); accept one to spawn it as a feature, dismiss the rest.
+
+`bn serve --remote` exposes the dashboard over an HTTPS tunnel (Cloudflare by default, ngrok as a fallback) with token-based auth and prints a QR code so you can monitor and accept tasks from your phone. Locked behind a bearer token — only people you share the URL with can connect.
+
+## Integrations
+
+Optional sources that feed the dashboard inbox. Configured in `~/.config/banyan/integrations.yaml` (sample written on first run).
+
+**ClickUp** — poll a ClickUp list, filter by assignee/status, surface matching tasks in the dashboard. You decide which to spawn as features. Provider-agnostic plumbing: adding Linear or Jira is ~100 LOC.
+
+**Discord Rich Presence** — when the dashboard is running, your Discord status shows the current project, number of active features, and overall mode (autonomous/supervised). Toggle individual fields in config. See `src/integrations/discord-rpc/README.md` for the full schema.
 
 ## Hooks
 
@@ -424,7 +450,7 @@ npm test         # node --test on dist/test
 npm run clean
 ```
 
-71 tests across naming, state, project inference, hooks, claude context, config. CI runs on Ubuntu + macOS, Node 20 + 22.
+192 tests across 15 suites (naming, state, project inference, hooks, claude context, config, pipeline, reports, approval, autopilot, todo, agent prompt, infer-run). CI runs on Ubuntu + macOS, Node 20 + 22.
 
 ## Contributing
 
