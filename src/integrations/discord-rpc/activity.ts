@@ -34,16 +34,10 @@ export function buildActivity(
     details.push(`Project: ${activity.project}`);
   }
 
-  // Feature count
+  // Feature count + names. Discord's `state` field caps at ~128 chars, so
+  // we fit as many names as we can and surface the overflow as "+N more".
   if (config.showFeatureCount && activity.features.length > 0) {
-    const count = activity.features.length;
-    const plural = count > 1 ? "features" : "feature";
-    state.push(`${count} ${plural}`);
-
-    // Show first feature name if only one
-    if (count === 1) {
-      state.push(`(${activity.features[0]})`);
-    }
+    state.push(formatFeatureList(activity.features));
   }
 
   // Mode info (show most common mode if multiple features)
@@ -93,4 +87,32 @@ export function buildActivity(
   }
 
   return result;
+}
+
+const STATE_MAX = 110; // leave headroom for the appended mode suffix
+
+function formatFeatureList(features: string[]): string {
+  const count = features.length;
+  const plural = count > 1 ? "features" : "feature";
+  const prefix = `${count} ${plural}: `;
+
+  let included = 0;
+  let acc = "";
+  for (const name of features) {
+    const sep = included === 0 ? "" : ", ";
+    const tentative = acc + sep + name;
+    const remaining = count - included - 1;
+    const suffix = remaining > 0 ? ` +${remaining} more` : "";
+    if ((prefix + tentative + suffix).length > STATE_MAX) break;
+    acc = tentative;
+    included += 1;
+  }
+
+  if (included === 0) {
+    // Single name too long even on its own — fall back to plain count.
+    return `${count} ${plural}`;
+  }
+
+  const omitted = count - included;
+  return omitted > 0 ? `${prefix}${acc} +${omitted} more` : `${prefix}${acc}`;
 }
