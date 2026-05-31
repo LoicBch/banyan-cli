@@ -8,16 +8,16 @@ export interface MergeOpts {
   local?: boolean;
   /** Wait for CI to pass and auto-merge. */
   wait?: boolean;
-  /** Merge strategy when using the PR/MR flow. */
-  strategy?: "squash" | "merge" | "rebase";
   /** Create the MR as draft (no auto-merge). */
   draft?: boolean;
   /** Open the MR in the browser after creating. */
   open?: boolean;
-  /** Skip the pre-flight local rebase / conflict resolution step. */
-  skipPreflight?: boolean;
-  /** When pre-flight finds conflicts, launch the claude resolver without asking. */
-  autoResolve?: boolean;
+  /** When pre-flight finds conflicts, opt out of the headless claude
+   *  resolver. Default behaviour (without this flag) launches the
+   *  resolver. The resolver is cross-feature aware via --add-dir on
+   *  every parent dir of the project, so it produces decisions
+   *  consistent with what other in-flight features have done. */
+  noResolve?: boolean;
 }
 
 export function humanizeFeatureTitle(feature: string): string {

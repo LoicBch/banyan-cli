@@ -5,6 +5,7 @@
 import type { Context } from "../../context.js";
 import * as git from "../../git.js";
 import { UsageError } from "../../errors.js";
+import { appendHistoryEvent } from "../../history.js";
 
 export async function mergeLocal(ctx: Context, base: string): Promise<void> {
   const branch = ctx.naming.branchName!;
@@ -48,5 +49,18 @@ export async function mergeLocal(ctx: Context, base: string): Promise<void> {
     );
   }
   ctx.logger.ok(`merged ${branch} into ${base} locally`);
+  try {
+    appendHistoryEvent({
+      kind: "merge",
+      project: ctx.project.name,
+      feature: ctx.feature!,
+      repo: ctx.repo!.name,
+      base,
+      local: true,
+      strategy: ctx.repo!.mergeStrategy ?? "merge",
+    });
+  } catch (err) {
+    ctx.logger.warn(`history log write failed (non-fatal): ${(err as Error).message}`);
+  }
   ctx.logger.info(`cleanup with: bn ${ctx.project.name} cleanup ${ctx.feature} ${ctx.repo!.name}`);
 }

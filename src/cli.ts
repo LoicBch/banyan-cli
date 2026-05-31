@@ -4,12 +4,13 @@ import { BanyanError } from "./errors.js";
 import { logger } from "./logger.js";
 import { inferProjectFromCwd } from "./projectInference.js";
 import { printBanner } from "./banner.js";
+import { packageVersion } from "./version.js";
 
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
-import { sidebar } from "./commands/sidebar.js";
-import { whereami } from "./commands/whereami.js";
 import { serve } from "./commands/serve.js";
+import { installTmux } from "./commands/installTmux.js";
+import { autopilotTick } from "./autopilot.js";
 
 import { registerProjectCommands } from "./cli/project.js";
 
@@ -44,12 +45,11 @@ export async function run(argv: string[]): Promise<number> {
   //   a known top-level command nor an explicit project name.
   const TOP_LEVEL_COMMANDS = new Set([
     "ls",
-    "sidebar",
-    "whereami",
     "init",
     "serve",
+    "install-tmux",
+    "_autopilot-tick",
     "mcp-serve",
-    "mcp-log",
     "help",
     "--help",
     "-h",
@@ -72,7 +72,7 @@ export async function run(argv: string[]): Promise<number> {
   program
     .name("banyan")
     .description("tmux + git worktrees + Claude Code, multi-repo per project")
-    .version("0.2.0")
+    .version(packageVersion())
     .exitOverride();
 
   // ── top-level commands (no project) ──────────────────────────────────────
@@ -84,36 +84,70 @@ export async function run(argv: string[]): Promise<number> {
     });
 
   program
-    .command("sidebar")
-    .description("live tree view of projects / repos / worktrees / agents")
-    .action(async () => {
-      await sidebar(config);
-    });
-
-  program
-    .command("whereami")
-    .description("report banyan context (project/repo/feature) for the current cwd")
-    .action(async () => {
-      await whereami(config);
-    });
-
-  program
     .command("serve")
-    .description("start the web dashboard (read-only overview of projects, worktrees, stacks)")
+    .description("start the web dashboard. add --remote to expose it via a public HTTPS tunnel (Cloudflare/ngrok) with token auth and a QR code for phone access.")
     .option("-p, --port <number>", "port to bind (default: first free from 4242)", (v) => parseInt(v, 10))
     .option("--no-open", "don't open the browser automatically")
-    .action(async (opts: { port?: number; open?: boolean }) => {
-      await serve(config, { port: opts.port, open: opts.open });
+    .option(
+      "--remote",
+      "expose the dashboard publicly via a tunnel; requires cloudflared or ngrok installed. enables token auth and prints a QR code.",
+    )
+    .option(
+      "--tunnel <provider>",
+      "force a tunnel provider: cloudflared | ngrok (default: auto-detect, prefer cloudflared)",
+    )
+    .option("--rotate-token", "rotate the auth token before starting (invalidates previous QRs)")
+    .action(async (opts: { port?: number; open?: boolean; remote?: boolean; tunnel?: string; rotateToken?: boolean }) => {
+      const tunnel =
+        opts.tunnel === "cloudflared" || opts.tunnel === "ngrok"
+          ? opts.tunnel
+          : undefined;
+      await serve(config, {
+        port: opts.port,
+        open: opts.open,
+        ...(opts.remote ? { remote: true } : {}),
+        ...(tunnel ? { tunnel } : {}),
+        ...(opts.rotateToken ? { rotateToken: true } : {}),
+      });
     });
 
   program
     .command("init <project>")
-    .description("create a new project (cwd as first repo by default)")
+    .description(
+      "register a new project in the banyan config (cwd as the first repo by default). " +
+        "this command only writes config; run `bn <project> start` afterwards to launch the workspace " +
+        "(orchestrator + terminal). multi-repo: register additional repos with `bn <project> add-repo` " +
+        "before starting.",
+    )
     .option("-r, --repo-name <name>", "name for the first repo (default: basename of cwd)")
     .option("-p, --path <path>", "path of the first repo (default: cwd)")
-    .option("-l, --layout <path>", "layout script path (optional)")
-    .action(async (project: string, opts: { repoName?: string; path?: string; layout?: string }) => {
-      await init(config, project, opts);
+    .action(
+      async (
+        project: string,
+        opts: { repoName?: string; path?: string },
+      ) => {
+        await init(config, project, opts);
+      },
+    );
+
+  program
+    .command("install-tmux")
+    .description("render the banyan tmux config to ~/.config/banyan/banyan.tmux.conf")
+    .option("-f, --force", "overwrite an existing rendered config")
+    .action(async (opts: { force?: boolean }) => {
+      await installTmux({ force: opts.force });
+    });
+
+  // Hidden internal command — invoked by claude as a Stop hook for features
+  // launched in autopilot mode. Reads stdin (claude hook payload), checks
+  // TODO + reports state, and either exits 0 (allow stop) or emits a block
+  // directive to keep the agent looping.
+  program
+    .command("_autopilot-tick <project> <feature>")
+    .description("[internal] Stop hook for autopilot mode")
+    .action(async (proj: string, feat: string) => {
+      const code = await autopilotTick(proj, feat);
+      process.exit(code);
     });
 
   program
@@ -124,20 +158,6 @@ export async function run(argv: string[]): Promise<number> {
       await runMcpServer();
     });
 
-  program
-    .command("mcp-log")
-    .description("show recent banyan MCP tool calls (logged by `banyan mcp-serve`)")
-    .option("-f, --follow", "tail the log live (Ctrl+C to stop)")
-    .option(
-      "-n, --lines <n>",
-      "show the last N entries (default 50)",
-      (v) => parseInt(v, 10),
-    )
-    .action(async (opts: { follow?: boolean; lines?: number }) => {
-      const { mcpLog } = await import("./commands/mcpLog.js");
-      await mcpLog({ follow: opts.follow, n: opts.lines });
-    });
-
   // ── per-project commands (delegated) ─────────────────────────────────────
   registerProjectCommands(program, config);
 
@@ -146,7 +166,16 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   } catch (err) {
     if (err instanceof BanyanError) {
-      logger.error(err.message);
+      if (err.details) {
+        logger.fail(err.details.title ?? err.message, {
+          ...(err.details.cause ? { cause: err.details.cause } : { cause: err.message }),
+          ...(err.details.fix ? { fix: err.details.fix } : {}),
+        });
+      } else {
+        // No structured details — keep the legacy compact format so existing
+        // error sites that just `throw new UsageError("…")` still look fine.
+        logger.error(err.message);
+      }
       return 1;
     }
     // commander's CommanderError has `.code`, `.exitCode`
@@ -155,7 +184,7 @@ export async function run(argv: string[]): Promise<number> {
       return 0;
     }
     const message = err instanceof Error ? err.message : String(err);
-    logger.error(message);
+    logger.fail("unexpected error", { cause: message });
     return 1;
   }
 }

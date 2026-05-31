@@ -9,15 +9,49 @@ import {
   existingWorktreePath,
   parseWorktreePath,
   branchName,
+  formatBranchName,
+  assertValidFeature,
   windowName,
   sessionName,
   agentsWindowName,
-  orchestratorWindowName,
 } from "../src/naming.js";
 
 describe("naming — basic", () => {
   it("branchName prepends feature/ prefix", () => {
     assert.equal(branchName("login"), "feature/login");
+  });
+
+  it("formatBranchName uses default 'feature' prefix when none given", () => {
+    assert.equal(formatBranchName("login"), "feature/login");
+  });
+
+  it("formatBranchName uses a custom prefix", () => {
+    assert.equal(formatBranchName("oauth", "fix"), "fix/oauth");
+  });
+
+  it("formatBranchName with empty prefix returns the bare feature", () => {
+    assert.equal(formatBranchName("v2.1", ""), "v2.1");
+  });
+
+  it("formatBranchName supports multi-segment prefixes", () => {
+    assert.equal(formatBranchName("hotfix", "release/v1"), "release/v1/hotfix");
+  });
+
+  it("formatBranchName trims trailing slashes from the prefix", () => {
+    assert.equal(formatBranchName("foo", "fix/"), "fix/foo");
+    assert.equal(formatBranchName("foo", "fix//"), "fix/foo");
+  });
+
+  it("assertValidFeature rejects names with '/' and points to --prefix", () => {
+    assert.throws(() => assertValidFeature("fix/oauth"), /--prefix/);
+  });
+
+  it("assertValidFeature rejects empty names", () => {
+    assert.throws(() => assertValidFeature(""), /empty/);
+  });
+
+  it("assertValidFeature accepts a plain name", () => {
+    assert.doesNotThrow(() => assertValidFeature("login"));
   });
 
   it("windowName joins target and feature with dash", () => {
@@ -33,16 +67,13 @@ describe("naming — basic", () => {
     assert.equal(agentsWindowName("my-app"), "agents-my-app");
   });
 
-  it("orchestratorWindowName prefixes project name with 'orchestrator-'", () => {
-    assert.equal(orchestratorWindowName("frontend-app"), "orchestrator-frontend-app");
-  });
 });
 
 describe("naming — worktreePath (new layout)", () => {
   it("groups feature worktrees under <parent>/worktree-<basename>", () => {
     assert.equal(
-      worktreePath("/home/u/IdeaProjects/Server", "login"),
-      "/home/u/IdeaProjects/worktree-Server/login",
+      worktreePath("/repos/IdeaProjects/Server", "login"),
+      "/repos/IdeaProjects/worktree-Server/login",
     );
   });
 
@@ -61,53 +92,53 @@ describe("naming — worktreePath (new layout)", () => {
 describe("naming — legacyWorktreePath", () => {
   it("returns the old sibling-dash format", () => {
     assert.equal(
-      legacyWorktreePath("/home/u/IdeaProjects/Server", "login"),
-      "/home/u/IdeaProjects/Server-login",
+      legacyWorktreePath("/repos/IdeaProjects/Server", "login"),
+      "/repos/IdeaProjects/Server-login",
     );
   });
 });
 
 describe("naming — parseWorktreePath", () => {
-  const repoPath = "/home/u/Dev/Server";
+  const repoPath = "/repos/Dev/Server";
 
   it("detects new layout root", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/worktree-Server/login", repoPath),
+      parseWorktreePath("/repos/Dev/worktree-Server/login", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects new layout subdir", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/worktree-Server/login/src/main", repoPath),
+      parseWorktreePath("/repos/Dev/worktree-Server/login/src/main", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects legacy layout root", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-login", repoPath),
+      parseWorktreePath("/repos/Dev/Server-login", repoPath),
       { feature: "login" },
     );
   });
 
   it("detects legacy layout subdir", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-login/src/main", repoPath),
+      parseWorktreePath("/repos/Dev/Server-login/src/main", repoPath),
       { feature: "login" },
     );
   });
 
   it("handles features with dashes in legacy layout", () => {
     assert.deepEqual(
-      parseWorktreePath("/home/u/Dev/Server-add-login-form", repoPath),
+      parseWorktreePath("/repos/Dev/Server-add-login-form", repoPath),
       { feature: "add-login-form" },
     );
   });
 
   it("returns undefined for unrelated paths", () => {
     assert.equal(parseWorktreePath("/tmp/foo", repoPath), undefined);
-    assert.equal(parseWorktreePath("/home/u/Dev/Other", repoPath), undefined);
+    assert.equal(parseWorktreePath("/repos/Dev/Other", repoPath), undefined);
   });
 
   it("does not match the main repo path itself", () => {

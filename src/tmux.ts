@@ -72,6 +72,33 @@ export async function newWindow(
   return out.trim();
 }
 
+/**
+ * Insert a new window BEFORE the given index (`-b -t session:index`). Used
+ * to place the canonical first window (e.g. `workspace`) at position 1 even
+ * when other windows already exist (e.g. during `bn resume`).
+ */
+export async function newWindowBefore(
+  session: string,
+  windowName: string,
+  cwd: string,
+  beforeIndex: number,
+): Promise<string> {
+  const out = await runOrThrow("tmux", [
+    "new-window",
+    "-b",
+    "-t",
+    `${session}:${beforeIndex}`,
+    "-n",
+    windowName,
+    "-c",
+    cwd,
+    "-P",
+    "-F",
+    "#{pane_id}",
+  ]);
+  return out.trim();
+}
+
 export async function killWindow(session: string, windowName: string): Promise<void> {
   const r = await run("tmux", ["kill-window", "-t", `${session}:${windowName}`]);
   if (r.code !== 0 && !/can't find/i.test(r.stderr)) {
@@ -233,6 +260,19 @@ export async function killPane(paneId: string): Promise<void> {
   }
 }
 
+/**
+ * Kill whatever process is running in the pane and start a fresh shell at
+ * `cwd`. The pane id is preserved, so geometry, title, and user options stay
+ * intact. Useful for restarting a long-running TUI (e.g. Claude) in place
+ * without recreating the pane.
+ */
+export async function respawnPane(paneId: string, cwd: string): Promise<void> {
+  const r = await run("tmux", ["respawn-pane", "-k", "-t", paneId, "-c", cwd]);
+  if (r.code !== 0) {
+    throw new TmuxError(`respawn-pane failed: ${r.stderr.trim()}`);
+  }
+}
+
 export async function sendKeys(
   paneId: string,
   keys: string,
@@ -352,8 +392,8 @@ export interface WindowInfo {
 }
 
 /**
- * List all `@banyan-pane` tags across all panes of a session (across all windows).
- * Used by the sidebar to correlate worktrees to live agent panes.
+ * List all `@banyan-pane` tags across all panes of a session (across all
+ * windows). Used by the dashboard to correlate worktrees to live agent panes.
  */
 export async function listBanyanPaneTags(session: string): Promise<string[]> {
   const r = await run("tmux", [

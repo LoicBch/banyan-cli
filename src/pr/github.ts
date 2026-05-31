@@ -2,6 +2,7 @@ import { run, runInherit } from "../exec.js";
 import type {
   CreateMROpts,
   MergeOpts,
+  MRMetadata,
   MRResult,
   MRStatus,
   PRProvider,
@@ -126,6 +127,30 @@ export class GitHubProvider implements PRProvider {
 
   async openInBrowser(repoPath: string, branch: string): Promise<void> {
     await runInherit("gh", ["pr", "view", branch, "--web"], { cwd: repoPath });
+  }
+
+  async metadata(repoPath: string, branch: string): Promise<MRMetadata | undefined> {
+    const r = await run(
+      "gh",
+      ["pr", "view", branch, "--json", "title,body,author,additions,deletions,files"],
+      { cwd: repoPath },
+    );
+    if (r.code !== 0) return undefined;
+    try {
+      const d = JSON.parse(r.stdout) as Record<string, unknown>;
+      const files = Array.isArray(d.files) ? d.files : [];
+      const author = (d.author as { login?: string } | undefined)?.login;
+      return {
+        ...(typeof d.title === "string" ? { title: d.title } : {}),
+        ...(typeof d.body === "string" ? { body: d.body } : {}),
+        ...(author ? { author } : {}),
+        ...(typeof d.additions === "number" ? { additions: d.additions } : {}),
+        ...(typeof d.deletions === "number" ? { deletions: d.deletions } : {}),
+        filesChanged: files.length,
+      };
+    } catch {
+      return undefined;
+    }
   }
 }
 

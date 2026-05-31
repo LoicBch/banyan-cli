@@ -46,7 +46,6 @@ export interface DashboardService {
 
 export interface DashboardProject {
   name: string;
-  layoutScript?: string;
   deployCommand?: string;
   sessionRunning: boolean;
   repos: DashboardRepo[];
@@ -101,7 +100,6 @@ export async function buildState(config: Config): Promise<DashboardState> {
 
     projects.push({
       name: project.name,
-      layoutScript: project.layoutScript,
       deployCommand: project.deployCommand,
       sessionRunning,
       repos,

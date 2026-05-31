@@ -8,42 +8,42 @@ describe("claudeContext — projectParentDirs", () => {
     const project: ProjectConfig = {
       name: "demo",
       repos: [
-        { name: "front", path: "/home/u/Dev/Front" },
-        { name: "back", path: "/home/u/Dev/Back" },
+        { name: "front", path: "/repos/Dev/Front" },
+        { name: "back", path: "/repos/Dev/Back" },
       ],
     };
     const dirs = projectParentDirs(project).sort();
-    assert.deepEqual(dirs, ["/home/u/Dev"]);
+    assert.deepEqual(dirs, ["/repos/Dev"]);
   });
 
   it("deduplicates parent dirs when multiple repos share one", () => {
     const project: ProjectConfig = {
       name: "demo",
       repos: [
-        { name: "a", path: "/home/u/Dev/Foo" },
-        { name: "b", path: "/home/u/Dev/Bar" },
-        { name: "c", path: "/home/u/Dev/Baz" },
+        { name: "a", path: "/repos/Dev/Foo" },
+        { name: "b", path: "/repos/Dev/Bar" },
+        { name: "c", path: "/repos/Dev/Baz" },
       ],
     };
     const dirs = projectParentDirs(project);
     assert.equal(dirs.length, 1);
-    assert.equal(dirs[0], "/home/u/Dev");
+    assert.equal(dirs[0], "/repos/Dev");
   });
 
   it("returns multiple parent dirs when repos live in separate trees", () => {
     const project: ProjectConfig = {
       name: "demo",
       repos: [
-        { name: "front", path: "/home/u/Documents/Dev/MyApp/Front" },
-        { name: "back", path: "/home/u/Documents/Dev/MyApp/Spring/Back" },
-        { name: "app", path: "/home/u/AndroidStudio/Mobile" },
+        { name: "front", path: "/repos/Documents/Dev/MyApp/Front" },
+        { name: "back", path: "/repos/Documents/Dev/MyApp/Spring/Back" },
+        { name: "app", path: "/repos/AndroidStudio/Mobile" },
       ],
     };
     const dirs = projectParentDirs(project).sort();
     assert.deepEqual(dirs, [
-      "/home/u/AndroidStudio",
-      "/home/u/Documents/Dev/MyApp",
-      "/home/u/Documents/Dev/MyApp/Spring",
+      "/repos/AndroidStudio",
+      "/repos/Documents/Dev/MyApp",
+      "/repos/Documents/Dev/MyApp/Spring",
     ]);
   });
 
@@ -51,19 +51,19 @@ describe("claudeContext — projectParentDirs", () => {
     const project: ProjectConfig = {
       name: "demo",
       repos: [
-        { name: "back", path: "/home/u/Dev/Back" },
-        { name: "infra", type: "compose", path: "/home/u/Dev/Back" },
+        { name: "back", path: "/repos/Dev/Back" },
+        { name: "infra", type: "compose", path: "/repos/Dev/Back" },
       ],
     };
     const dirs = projectParentDirs(project);
-    assert.deepEqual(dirs, ["/home/u/Dev"]);
+    assert.deepEqual(dirs, ["/repos/Dev"]);
   });
 
   it("returns an empty array when project has no git repos", () => {
     const project: ProjectConfig = {
       name: "demo",
       repos: [
-        { name: "infra", type: "compose", path: "/home/u/Dev/Back" },
+        { name: "infra", type: "compose", path: "/repos/Dev/Back" },
       ],
     };
     assert.deepEqual(projectParentDirs(project), []);

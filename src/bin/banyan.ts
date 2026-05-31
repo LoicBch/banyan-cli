@@ -9,9 +9,9 @@ const RESERVED = new Set(["banyan", "bn", "banyan.js", "bn.js"]);
 const TOPLEVEL_CMDS = new Set([
   "ls",
   "init",
-  "sidebar",
-  "whereami",
   "serve",
+  "install-tmux",
+  "_autopilot-tick",
   "help",
   "-h",
   "--help",
@@ -58,9 +58,16 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   if (err instanceof BanyanError) {
-    logger.error(err.message);
+    if (err.details) {
+      logger.fail(err.details.title ?? err.message, {
+        ...(err.details.cause ? { cause: err.details.cause } : { cause: err.message }),
+        ...(err.details.fix ? { fix: err.details.fix } : {}),
+      });
+    } else {
+      logger.error(err.message);
+    }
   } else {
-    logger.error(err instanceof Error ? err.message : String(err));
+    logger.fail("unexpected error", { cause: err instanceof Error ? err.message : String(err) });
   }
   process.exit(1);
 });

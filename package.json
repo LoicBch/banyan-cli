@@ -36,7 +36,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/src/dashboard && cp -R src/dashboard/static dist/src/dashboard/ && chmod +x dist/src/bin/banyan.js",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/src/dashboard dist/tmux && cp -R src/dashboard/static dist/src/dashboard/ && cp -R tmux/. dist/tmux/ && chmod +x dist/src/bin/banyan.js",
+    "prepare": "npm run build",
     "dev": "tsc -p tsconfig.json --watch",
     "test": "node --test 'dist/test/**/*.test.js'",
     "clean": "rm -rf dist"
@@ -44,15 +45,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/express": "^5.0.6",
+    "@xhayper/discord-rpc": "^1.3.4",
     "commander": "^12.1.0",
     "express": "^5.2.1",
-    "ink": "^7.0.1",
-    "react": "^19.2.5",
+    "qrcode-terminal": "^0.12.0",
     "yaml": "^2.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/react": "^19.2.14",
     "typescript": "^5.5.0"
   }
 }

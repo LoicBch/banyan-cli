@@ -21,11 +21,13 @@ import { getProject, type Config } from "../config.js";
 import * as git from "../git.js";
 import * as naming from "../naming.js";
 import * as state from "../state.js";
+import { readAgentState } from "../agentState.js";
 import { buildContext } from "../context.js";
-import { start } from "./start.js";
+import { ensureWorkspace } from "./start.js";
 import { wtAll } from "./wtAll.js";
 import { test as testCmd } from "./test.js";
 import { logger } from "../logger.js";
+import * as tmux from "../tmux.js";
 
 export async function resume(config: Config, projectName: string): Promise<void> {
   const project = getProject(config, projectName);
@@ -46,22 +48,42 @@ export async function resume(config: Config, projectName: string): Promise<void>
     `resuming '${projectName}': ${features.size > 0 ? `${features.size} feature${features.size > 1 ? "s" : ""} found` : "no active features"}`,
   );
 
-  // ── Step 2: Launch the workspace (orchestrator + terminal) ──────────────
-  // start() runs the layoutScript or default layout. Idempotent — if the
-  // workspace window already exists it will just attach.
-  // Note: start() returns an exit code and may attach to tmux. To avoid that
-  // here we skip the actual workspace start when there's nothing to resume,
-  // but otherwise we must defer to the user — running start() inline would
-  // attach and prevent the rest of resume from running.
-  // So: we call wtAll + testCmd FIRST (which create panes in the session),
-  // then call start() last so it attaches to the now-fully-restored session.
+  const ctx = await buildContext(config, projectName);
+
+  // ── Step 2: Build the workspace FIRST so it lands as window 1 ───────────
+  // Done before any wtAll/testCmd calls — otherwise the workspace window
+  // would end up after agents-<proj> / test-<feature> windows in the
+  // session's window list. ensureWorkspace is idempotent and does NOT
+  // attach, so the rest of resume can keep running.
+  logger.info("");
+  logger.info(`── building workspace ──`);
+  await ensureWorkspace(ctx);
 
   // ── Step 3: Recreate agent panes per feature ────────────────────────────
+  // For each feature, look up the persisted launch options (mode +
+  // requireApproval) from <project>.<feature>.agent.json. If absent
+  // (feature predates this state file), fall back to the legacy default —
+  // 'interactive' since that's what resume used to do, with a warning so
+  // the user knows the agent isn't in its original mode.
   for (const feature of features) {
     logger.info("");
-    logger.info(`── recreating agent pane for '${feature}' ──`);
+    const agentSt = readAgentState(projectName, feature);
+    const modeLabel = agentSt
+      ? `${agentSt.mode}${agentSt.requireApproval ? " + plan-review" : ""}`
+      : "interactive (no recorded mode — original mode unknown)";
+    logger.info(`── recreating agent pane for '${feature}' (${modeLabel}) ──`);
+    if (!agentSt) {
+      logger.warn(
+        `no recorded agent state for '${feature}'; resuming as interactive. ` +
+          `if this feature was originally autopilot/autonomous, run ` +
+          `\`bn ${projectName} cleanup ${feature}\` and recreate it explicitly.`,
+      );
+    }
     try {
-      await wtAll(config, projectName, feature);
+      await wtAll(config, projectName, feature, {
+        ...(agentSt ? { mode: agentSt.mode } : {}),
+        ...(agentSt?.requireApproval ? { requireApproval: true } : {}),
+      });
     } catch (err) {
       logger.warn(
         `failed to recreate agent pane for '${feature}': ${(err as Error).message}`,
@@ -87,9 +109,10 @@ export async function resume(config: Config, projectName: string): Promise<void>
     }
   }
 
-  // ── Step 5: Launch the workspace (will attach if running interactively) ─
+  // ── Step 5: Attach to the fully-restored session on the workspace ──────
   logger.info("");
-  logger.info(`── launching workspace ──`);
-  const code = await start(buildContext(config, projectName));
+  logger.info(`── attaching ──`);
+  await tmux.selectWindow(ctx.naming.session, "workspace");
+  const code = await tmux.attach(ctx.naming.session);
   if (code !== 0) process.exit(code);
 }

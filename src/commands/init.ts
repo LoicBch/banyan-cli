@@ -8,9 +8,12 @@ import { UsageError, ConfigError } from "../errors.js";
 export interface InitOpts {
   repoName?: string;
   path?: string;
-  layout?: string;
 }
 
+/** Register a new project in the banyan config. Does NOT launch the
+ *  workspace — that's `bn <project> start`. The two-step model keeps
+ *  `init` predictable (it's just a config write) and lets the user add
+ *  more repos via `bn <project> add-repo` before starting. */
 export async function init(
   config: Config,
   projectName: string,
@@ -26,10 +29,6 @@ export async function init(
   }
 
   const repoName = opts.repoName ?? path.basename(repoPath);
-  const layout = opts.layout ? path.resolve(expandHome(opts.layout)) : undefined;
-  if (layout && !existsSync(layout)) {
-    throw new UsageError(`layout script not found: ${layout}`);
-  }
 
   const next: Config = {
     ...config,
@@ -37,7 +36,6 @@ export async function init(
       ...config.projects,
       {
         name: projectName,
-        layoutScript: layout,
         repos: [{ name: repoName, path: repoPath }],
       },
     ],
@@ -45,11 +43,9 @@ export async function init(
 
   await saveConfig(next);
   logger.ok(`created project "${projectName}" with repo "${repoName}" → ${repoPath}`);
-  if (!layout) {
-    logger.info(
-      `no layoutScript set. add one later with: bn ${projectName} set-layout <path>`,
-    );
-  }
-  logger.info(`add more repos with: bn ${projectName} add-repo <name> [path]`);
+  logger.info(``);
+  logger.info(`next steps:`);
+  logger.info(`  bn ${projectName} add-repo <name> [path]   # for each additional repo`);
+  logger.info(`  bn ${projectName} start                    # launch the workspace`);
   return next;
 }

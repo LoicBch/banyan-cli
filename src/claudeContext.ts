@@ -16,24 +16,35 @@ import path from "node:path";
 import type { ProjectConfig } from "./config.js";
 
 const BANYAN_DIR = path.join(homedir(), ".config", "banyan");
-const MCP_CONFIG_PATH = path.join(BANYAN_DIR, "orchestrator-mcp.json");
 
 /**
- * Ensure ~/.config/banyan/orchestrator-mcp.json exists and points at
- * `banyan mcp-serve`. Idempotent. Returns the absolute path.
+ * Scope of the MCP server spawned by a caller. The MCP server filters its
+ * registered tools by this scope at boot, so we can hand each surface only
+ * the tools it actually uses:
+ *   - orchestrator: every tool (~21k tokens of definitions)
+ *   - feature: just what a per-feature agent calls (~3-4k tokens)
+ *   - resolver: just cross-feature awareness (~1-2k tokens)
+ * Omit for the legacy "everything" behaviour (orchestrator default).
  */
-export function ensureBanyanMcpConfig(): string {
+export type McpScope = "orchestrator" | "feature" | "resolver";
+
+/**
+ * Ensure ~/.config/banyan/<scope>-mcp.json exists and points at
+ * `banyan mcp-serve --scope <scope>` (or no scope for the unscoped default).
+ * Idempotent. Returns the absolute path.
+ */
+export function ensureBanyanMcpConfig(scope?: McpScope): string {
   mkdirSync(BANYAN_DIR, { recursive: true });
+  const name = scope ?? "orchestrator";
+  const configPath = path.join(BANYAN_DIR, `${name}-mcp.json`);
+  const args = scope ? ["mcp-serve", "--scope", scope] : ["mcp-serve"];
   const cfg = {
     mcpServers: {
-      banyan: {
-        command: "banyan",
-        args: ["mcp-serve"],
-      },
+      banyan: { command: "banyan", args },
     },
   };
-  writeFileSync(MCP_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
-  return MCP_CONFIG_PATH;
+  writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
+  return configPath;
 }
 
 /**

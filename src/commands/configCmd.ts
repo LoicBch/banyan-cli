@@ -1,22 +1,16 @@
 import type { Context } from "../context.js";
 import { contractHome } from "../config.js";
 
-export async function info(ctx: Context): Promise<void> {
+export async function configShow(ctx: Context): Promise<void> {
   ctx.logger.info(`project: ${ctx.project.name}`);
-  if (ctx.project.layoutScript) {
-    ctx.logger.info(`layout:  ${contractHome(ctx.project.layoutScript)}`);
-  } else {
-    ctx.logger.info(
-      `layout:  (none — set with: bn ${ctx.project.name} set-layout <path>)`,
-    );
-  }
   if (ctx.project.deployCommand) {
     ctx.logger.info(`deploy:  ${ctx.project.deployCommand}`);
   }
   ctx.logger.info(`repos:`);
   for (const r of ctx.project.repos) {
     const base = r.baseBranch ? ` (base: ${r.baseBranch})` : "";
-    ctx.logger.info(`  ${r.name.padEnd(10)} ${contractHome(r.path)}${base}`);
+    const strat = r.mergeStrategy ? ` (merge: ${r.mergeStrategy})` : "";
+    ctx.logger.info(`  ${r.name.padEnd(10)} ${contractHome(r.path)}${base}${strat}`);
     if (r.run) {
       if (r.run.setup) {
         ctx.logger.info(`    setup:  ${r.run.setup}`);

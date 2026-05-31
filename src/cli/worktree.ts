@@ -12,6 +12,11 @@ import { wtLs } from "../commands/wtLs.js";
 import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
+import { assignTask } from "../commands/assignTask.js";
+import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
+import { generateSlug } from "../slug.js";
+import { UsageError } from "../errors.js";
+
 
 export function register(
   projectCmd: Command,
@@ -19,25 +24,173 @@ export function register(
   config: Config,
 ): void {
   projectCmd
-    .command("wt <feature> [repos...]")
-    .description("spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those.")
-    .action(async (feature: string, repos: string[]) => {
-      await wtAll(
-        config,
-        project.name,
-        feature,
-        repos.length > 0 ? { only: repos } : {},
-      );
+    .command("wt [branch] [repos...]")
+    .description(
+      "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
+        "no branch = create a draft worktree (branch named draft-<ts>); the agent must call banyan_finalize_feature_name " +
+        "after your first prompt to pick the real name. " +
+        "agent mode controls autonomy: interactive (plain claude, you drive), assisted (asks on big decisions), " +
+        "autonomous (decides everything, documents hesitations), autopilot (autonomous + works through TODO list, " +
+        "loops until banyan_report_done).",
+    )
+    .option(
+      "-p, --prompt <prompt>",
+      "first message sent to the per-feature claude agent (only on a fresh session). implies --mode autonomous unless overridden.",
+    )
+    .option(
+      "--prefix <prefix>",
+      "branch prefix instead of the default 'feature' (e.g. --prefix fix → fix/<branch>). pass '' for no prefix.",
+    )
+    .option(
+      "-m, --mode <mode>",
+      `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
+    )
+    .option(
+      "--review-plan",
+      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <branch>`. orthogonal to --mode (combine with autonomous or autopilot).",
+    )
+    .action(
+      async (
+        feature: string | undefined,
+        repos: string[],
+        opts: {
+          prompt?: string;
+          prefix?: string;
+          mode?: string;
+          reviewPlan?: boolean;
+        },
+      ) => {
+        let mode: AgentMode | undefined;
+        if (opts.mode !== undefined) {
+          if (!isAgentMode(opts.mode)) {
+            throw new UsageError(
+              `unknown mode '${opts.mode}'. valid: ${ALL_AGENT_MODES.join(", ")}`,
+            );
+          }
+          mode = opts.mode;
+        }
+        // Feature naming flow, in priority order:
+        //   1. explicit name → use it as-is
+        //   2. `--prompt "..."` + no name → infer slug from prompt, create wt
+        //      at the proper name from the start (slug-first, no draft)
+        //   3. no name + no prompt → create a DRAFT worktree, launch claude
+        //      directly in it. The agent calls banyan_finalize_feature_name
+        //      after the first user message; docker stacks are deferred until
+        //      then so they start with the real name.
+        let effectiveFeature = feature;
+        if (!effectiveFeature) {
+          if (opts.prompt) {
+            logger.info(`inferring feature name from prompt…`);
+            effectiveFeature = await generateSlug(opts.prompt);
+            logger.ok(`feature name: ${effectiveFeature}`);
+          } else {
+            const { generateDraftFeature } = await import("../naming.js");
+            effectiveFeature = generateDraftFeature();
+            logger.info(
+              `no prompt — opening claude in a draft worktree (${effectiveFeature}).`,
+            );
+            logger.info(
+              `tell the agent what you want; it will pick the real feature name and rename everything.`,
+            );
+          }
+        }
+        if (!effectiveFeature) {
+          // Unreachable in practice — earlier branches either set it or
+          // returned early. Belt-and-suspenders for TS narrowing.
+          throw new UsageError("could not determine feature name");
+        }
+        await wtAll(config, project.name, effectiveFeature, {
+          ...(repos.length > 0 ? { only: repos } : {}),
+          ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
+          ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+          ...(mode !== undefined ? { mode } : {}),
+          ...(opts.reviewPlan ? { requireApproval: true } : {}),
+        });
+      },
+    );
+
+  // Hidden subcommand wired by `bn wt` when the user is inside tmux. The
+  // interactive "describe your task" pane runs banyan as a SUBPROCESS (not
+  // exec) to:
+  //   1. Infer the slug from the typed prompt
+  //   2. Create the worktrees + state files + launch script
+  //   3. Print the launch script path to stdout
+  // The bash caller then captures the printed path and `exec bash <path>` —
+  // the pane's bash IS replaced by claude, no banyan process to suicide.
+  projectCmd
+    .command("_wt-stage-from-prompt <prompt>", { hidden: true })
+    .description("(internal) infer slug + prep wt + write launch script. prints script path on stdout.")
+    .option("--repos <repos...>", "limit to these repos")
+    .option("--prefix <prefix>", "branch prefix")
+    .option("-m, --mode <mode>", "agent mode")
+    .option("--review-plan", "require plan approval before work starts")
+    .action(
+      async (
+        prompt: string,
+        opts: {
+          repos?: string[];
+          prefix?: string;
+          mode?: string;
+          reviewPlan?: boolean;
+        },
+      ) => {
+        const paneId = process.env.TMUX_PANE;
+        if (!paneId) {
+          throw new UsageError("_wt-stage-from-prompt must be run from within a tmux pane");
+        }
+        let mode: AgentMode | undefined;
+        if (opts.mode && isAgentMode(opts.mode)) mode = opts.mode;
+
+        // logger writes go to stderr by default — keep stdout clean for the
+        // launch-script path the bash caller will capture.
+        process.stderr.write("inferring feature name from prompt…\n");
+        const feature = await generateSlug(prompt);
+        process.stderr.write(`feature name: ${feature}\n`);
+
+        const { launchScriptPath } = await wtAll(config, project.name, feature, {
+          ...(opts.repos && opts.repos.length > 0 ? { only: opts.repos } : {}),
+          initialPrompt: prompt,
+          ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+          ...(mode !== undefined ? { mode } : {}),
+          ...(opts.reviewPlan ? { requireApproval: true } : {}),
+          inheritPaneId: paneId,
+          stagedLaunch: true,
+        });
+
+        if (!launchScriptPath) {
+          throw new UsageError("staged launch produced no script path — bug");
+        }
+        // ONLY emit the path on stdout. The bash caller does `SCRIPT=$(...)`.
+        process.stdout.write(launchScriptPath + "\n");
+      },
+    );
+
+  projectCmd
+    .command("task <branch> <prompt>")
+    .description("send a prompt to the per-feature claude agent (paste-and-submit into the existing pane)")
+    .option("-f, --force", "send even if claude isn't detected as running in the pane")
+    .action(async (feature: string, prompt: string, opts: { force?: boolean }) => {
+      const { paneId } = await assignTask(config, project.name, feature, prompt, {
+        force: opts.force,
+      });
+      logger.ok(`prompt sent to ${feature} (${paneId})`);
     });
 
   projectCmd
-    .command("wt-rm <feature> [repo]")
-    .description("remove worktree (keep branch) and close pane. omit repo to act on all worktrees of this feature")
-    .action(async (feature: string, repo: string | undefined) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+    .command("wt-rm <branch> [repo]")
+    .description("remove worktree (keep branch local + remote) and close pane. omit repo to act on all worktrees of this feature")
+    .option(
+      "-f, --force",
+      "remove worktree even with uncommitted changes (branch is still kept)",
+    )
+    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
+      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
-        await wtRm(buildContext(config, project.name, { feature, repoName: r }));
+        await wtRm(
+          await buildContext(config, project.name, { feature, repoName: r }),
+          { force: opts.force },
+        );
       }
     });
 
@@ -45,44 +198,39 @@ export function register(
     .command("wt-ls")
     .description("list worktrees across all repos")
     .action(async () => {
-      await wtLs(buildContext(config, project.name));
+      await wtLs(await buildContext(config, project.name));
     });
 
   projectCmd
-    .command("rebase <feature> [repo]")
-    .description("fetch + rebase worktree on base branch. omit repo to rebase all worktrees of this feature")
+    .command("rebase <branch> [repo]")
+    .description("fetch + rebase the worktree on its base branch. omit repo to rebase all worktrees of this branch.")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .action(async (feature: string, repo: string | undefined, opts: { base?: string }) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await rebase(
-          buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature, repoName: r }),
           { base: opts.base },
         );
       }
     });
 
   projectCmd
-    .command("merge <feature> [repo]")
-    .description("push + create MR/PR + merge (GitLab/GitHub). --local to skip the MR flow.")
+    .command("merge <branch> [repo]")
+    .description(
+      "push + create MR/PR + merge (GitLab/GitHub). always pre-flights a local rebase first " +
+        "and runs the headless claude resolver on conflicts (cross-feature aware). " +
+        "--local for the offline path, --no-resolve to opt out of auto-resolution.",
+    )
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .option("--local", "skip the MR/PR flow, merge locally as before")
     .option("--wait", "wait for CI to pass, then auto-merge")
     .option("--draft", "create MR as draft (don't attempt to merge)")
     .option("--open", "open the MR/PR in the browser after creating")
     .option(
-      "--strategy <strategy>",
-      "merge strategy: squash | merge | rebase (default: squash)",
-      "squash",
-    )
-    .option(
-      "--skip-preflight",
-      "skip the local rebase / conflict preview before pushing",
-    )
-    .option(
-      "--auto-resolve",
-      "on conflict, launch the claude resolver without asking",
+      "--no-resolve",
+      "on conflict during pre-flight, don't run the claude resolver — pause for manual fix",
     )
     .action(
       async (
@@ -94,25 +242,22 @@ export function register(
           wait?: boolean;
           draft?: boolean;
           open?: boolean;
-          strategy?: "squash" | "merge" | "rebase";
-          skipPreflight?: boolean;
-          autoResolve?: boolean;
+          resolve?: boolean;
         },
       ) => {
-        const repos = resolveRepos(getProject(config, project.name), feature, repo);
+        const repos = await resolveRepos(getProject(config, project.name), feature, repo);
         for (const r of repos) {
           if (repos.length > 1) logger.info(`=== ${r} ===`);
           await merge(
-            buildContext(config, project.name, { feature, repoName: r }),
+            await buildContext(config, project.name, { feature, repoName: r }),
             {
               base: opts.base,
               local: opts.local,
               wait: opts.wait,
               draft: opts.draft,
               open: opts.open,
-              strategy: opts.strategy,
-              skipPreflight: opts.skipPreflight,
-              autoResolve: opts.autoResolve,
+              // commander turns --no-resolve into opts.resolve === false
+              noResolve: opts.resolve === false,
             },
           );
         }
@@ -120,13 +265,30 @@ export function register(
     );
 
   projectCmd
-    .command("cleanup <feature> [repo]")
-    .description("remove worktree + delete branch (safe) + close pane. omit repo to cleanup all worktrees of this feature")
-    .action(async (feature: string, repo: string | undefined) => {
-      const repos = resolveRepos(getProject(config, project.name), feature, repo);
+    .command("cleanup <branch> [repo]")
+    .description(
+      "full teardown of a feature: remove worktree(s) + delete branch (safe) + close pane + " +
+        "stop compose stack and drop volumes. omit repo to cleanup everything across the project.",
+    )
+    .option(
+      "-f, --force",
+      "remove worktree even with uncommitted changes; force-delete branch even with unmerged commits",
+    )
+    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
+      // Full project cleanup also includes compose stacks. With an explicit
+      // repo, we only act on that one (the user knows what they're doing).
+      const repos = await resolveRepos(
+        getProject(config, project.name),
+        feature,
+        repo,
+        { includeCompose: !repo },
+      );
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
-        await cleanup(buildContext(config, project.name, { feature, repoName: r }));
+        await cleanup(
+          await buildContext(config, project.name, { feature, repoName: r }),
+          { force: opts.force },
+        );
       }
     });
 }

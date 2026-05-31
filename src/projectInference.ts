@@ -8,7 +8,7 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
 import type { Config } from "./config.js";
-import { resolveLocation } from "./commands/whereami.js";
+import { resolveLocation } from "./location.js";
 
 /**
  * Returns the project name to prepend to argv when none was given.

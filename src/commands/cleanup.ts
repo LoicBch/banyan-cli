@@ -5,8 +5,20 @@ import * as docker from "../docker.js";
 import * as naming from "../naming.js";
 import { UsageError } from "../errors.js";
 import { runHook, buildHookEnv } from "../hooks.js";
+import { removeAutopilotSettings } from "../autopilot.js";
+import { deleteApproval } from "../approval.js";
+import { deleteReportApproval } from "../reportApproval.js";
+import { deleteAgentState } from "../agentState.js";
+import { deleteFeaturePrompt, deleteFeatureLaunchScript } from "../claude.js";
+import { appendHistoryEvent } from "../history.js";
 
-export async function cleanup(ctx: Context): Promise<void> {
+export interface CleanupOpts {
+  /** Force-remove the worktree even if it has modified or untracked files,
+   *  and force-delete the branch even if it has unmerged commits. */
+  force?: boolean;
+}
+
+export async function cleanup(ctx: Context, opts: CleanupOpts = {}): Promise<void> {
   if (!ctx.repo || !ctx.feature) {
     throw new UsageError(`usage: bn ${ctx.project.name} cleanup <feature> <repo>`);
   }
@@ -38,8 +50,12 @@ export async function cleanup(ctx: Context): Promise<void> {
     }),
   );
 
-  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath);
-  ctx.logger.ok(`worktree removed: ${ctx.naming.worktreePath}`);
+  await git.worktreeRemove(ctx.repo.path, ctx.naming.worktreePath, {
+    force: opts.force,
+  });
+  ctx.logger.ok(
+    `worktree removed: ${ctx.naming.worktreePath}${opts.force ? " (forced)" : ""}`,
+  );
 
   await runHook(
     ctx.repo.path,
@@ -53,13 +69,13 @@ export async function cleanup(ctx: Context): Promise<void> {
   );
 
   const base = await git.defaultBranch(ctx.repo.path, ctx.repo.baseBranch);
-  const res = await git.safeDeleteBranch(
-    ctx.repo.path,
-    ctx.naming.branchName,
-    base,
-  );
+  const res = opts.force
+    ? await git.forceDeleteBranch(ctx.repo.path, ctx.naming.branchName)
+    : await git.safeDeleteBranch(ctx.repo.path, ctx.naming.branchName, base);
   if (res.deleted) {
-    ctx.logger.ok(`branch deleted: ${ctx.naming.branchName}`);
+    ctx.logger.ok(
+      `branch deleted: ${ctx.naming.branchName}${opts.force ? " (forced)" : ""}`,
+    );
   } else if (res.message) {
     ctx.logger.warn(res.message);
   }
@@ -87,5 +103,31 @@ export async function cleanup(ctx: Context): Promise<void> {
     }
     // Silent when not found: this is normal on subsequent iterations
     // when multiple repos of the same feature share one pane.
+  }
+
+  // Drop the autopilot settings file if one was generated. Idempotent —
+  // no-op if the feature wasn't run in autopilot mode.
+  removeAutopilotSettings(ctx.project.name, ctx.feature);
+  // Drop the plan-approval state file. Idempotent.
+  deleteApproval(ctx.project.name, ctx.feature);
+  // Drop the report-approval state file. Idempotent.
+  deleteReportApproval(ctx.project.name, ctx.feature);
+  // Drop the recorded agent launch options. Idempotent.
+  deleteAgentState(ctx.project.name, ctx.feature);
+  // Drop the on-disk feature system prompt + launch script (used by launchClaude
+  // to keep the pane shell history clean). Idempotent.
+  deleteFeaturePrompt(ctx.project.name, ctx.feature);
+  deleteFeatureLaunchScript(ctx.project.name, ctx.feature);
+
+  try {
+    appendHistoryEvent({
+      kind: "cleanup",
+      project: ctx.project.name,
+      feature: ctx.feature,
+      repo: ctx.repo.name,
+      ...(opts.force ? { forced: true } : {}),
+    });
+  } catch (err) {
+    ctx.logger.warn(`history log write failed (non-fatal): ${(err as Error).message}`);
   }
 }

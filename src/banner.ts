@@ -12,6 +12,8 @@
  * the terminal does not support color (NO_COLOR) or output is not a TTY.
  */
 
+import { packageVersion } from "./version.js";
+
 const RESET = "\x1b[0m";
 const FOLIAGE_DARK = "\x1b[38;5;22m"; // very dark green — edges, shadows
 const FOLIAGE = "\x1b[38;5;28m"; // dark green — main body
@@ -22,7 +24,7 @@ const GROUND = "\x1b[2;38;5;240m"; // dim grey ground
 const TEXT = "\x1b[38;5;42m"; // banyan name in lively green
 const DIM = "\x1b[2m";
 
-const VERSION = "0.1.0";
+const VERSION = packageVersion();
 
 function noColor(): boolean {
   return Boolean(process.env.NO_COLOR) || !process.stdout.isTTY;

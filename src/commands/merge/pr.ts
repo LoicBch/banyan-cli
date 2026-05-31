@@ -10,6 +10,14 @@ import { detectProvider } from "../../pr/detect.js";
 import type { PRProvider, MRStatus } from "../../pr/types.js";
 import { runPreflightRebase } from "./preflight.js";
 import { humanizeFeatureTitle, type MergeOpts } from "./types.js";
+import { appendHistoryEvent } from "../../history.js";
+
+/** Best-effort MR/PR number extraction from a provider URL (last numeric segment). */
+function parseMrNumber(url: string | undefined): number | undefined {
+  if (!url) return undefined;
+  const m = url.match(/(\d+)(?:\?.*)?$/);
+  return m ? parseInt(m[1]!, 10) : undefined;
+}
 
 export async function mergeViaPR(
   ctx: Context,
@@ -34,9 +42,7 @@ export async function mergeViaPR(
   if (notReady) throw new UsageError(notReady);
 
   // 2. Pre-flight local rebase: catch conflicts BEFORE touching origin.
-  if (!opts.skipPreflight) {
-    await runPreflightRebase(ctx, base, opts);
-  }
+  await runPreflightRebase(ctx, base, opts);
 
   // 2b. If the branch now has no commits or diff vs origin/<base>, the feature
   //     is effectively already on base (likely absorbed by a sibling merge).
@@ -57,7 +63,28 @@ export async function mergeViaPR(
     { cwd: worktreePath },
   );
   if (push.code !== 0) {
-    throw new UsageError(`git push failed:\n${push.stderr.trim()}`);
+    const stderr = push.stderr.trim();
+    // "stale info" almost always means the remote branch was removed by an
+    // earlier merge (squash + removeSourceBranch). The feature is effectively
+    // already merged — the user just needs to clean up.
+    if (/stale info|fetch first/i.test(stderr)) {
+      throw new UsageError(
+        `push of ${branch} rejected — remote branch missing (likely already merged + auto-deleted)`,
+        {
+          title: `merge skipped for ${ctx.repo!.name}`,
+          cause:
+            `The remote branch '${branch}' no longer exists on origin. The most likely reason is that ` +
+            `a previous merge of this feature already happened (squash merge with removeSourceBranch=true ` +
+            `deletes the remote branch). Local commits added afterwards (e.g. auto-commits, hook checkpoints) ` +
+            `can't be pushed onto a deleted branch.`,
+          fix: [
+            `bn ${ctx.project.name} cleanup ${ctx.feature} ${ctx.repo!.name} --force   # if you're sure the feature is merged`,
+            `or inspect: git -C ${worktreePath} log origin/${base}..HEAD --oneline`,
+          ],
+        },
+      );
+    }
+    throw new UsageError(`git push failed:\n${stderr}`);
   }
   ctx.logger.ok(`pushed ${branch}`);
 
@@ -128,11 +155,45 @@ async function handleMergeAttempt(
   opts: MergeOpts,
   mrUrl: string,
 ): Promise<void> {
+  const strategy = ctx.repo!.mergeStrategy ?? "squash";
   switch (status.state) {
     case "mergeable":
-      ctx.logger.info(`mergeable — merging with strategy=${opts.strategy ?? "squash"}…`);
+      ctx.logger.info(`mergeable — merging with strategy=${strategy}…`);
       await mergeWithRetry(ctx, provider, repoPath, branch, opts);
       ctx.logger.ok(`merged into ${base} via ${provider.name}`);
+      try {
+        const mrNumber = parseMrNumber(mrUrl);
+        const knownProvider =
+          provider.name === "github" || provider.name === "gitlab" ? provider.name : undefined;
+        // Best-effort: fetch MR title/body/diff stats from the provider so
+        // the History view shows them next to the MR number. A failure here
+        // (provider down, branch already deleted, etc.) doesn't break anything.
+        let mrMeta = undefined as Awaited<ReturnType<typeof provider.metadata>>;
+        try {
+          mrMeta = await provider.metadata(repoPath, branch);
+        } catch {
+          mrMeta = undefined;
+        }
+        appendHistoryEvent({
+          kind: "merge",
+          project: ctx.project.name,
+          feature: ctx.feature!,
+          repo: ctx.repo!.name,
+          base,
+          strategy,
+          mrUrl,
+          ...(mrNumber !== undefined ? { mrNumber } : {}),
+          ...(knownProvider ? { provider: knownProvider } : {}),
+          ...(mrMeta?.title ? { mrTitle: mrMeta.title } : {}),
+          ...(mrMeta?.body ? { mrBody: mrMeta.body } : {}),
+          ...(mrMeta?.author ? { mrAuthor: mrMeta.author } : {}),
+          ...(mrMeta?.filesChanged !== undefined ? { filesChanged: mrMeta.filesChanged } : {}),
+          ...(mrMeta?.additions !== undefined ? { additions: mrMeta.additions } : {}),
+          ...(mrMeta?.deletions !== undefined ? { deletions: mrMeta.deletions } : {}),
+        });
+      } catch (err) {
+        ctx.logger.warn(`history log write failed (non-fatal): ${(err as Error).message}`);
+      }
       ctx.logger.info(`cleanup with: bn ${ctx.project.name} cleanup ${ctx.feature} ${ctx.repo!.name}`);
       break;
 
@@ -140,7 +201,7 @@ async function handleMergeAttempt(
       if (opts.wait) {
         ctx.logger.info(`CI running, --wait set → scheduling auto-merge when green…`);
         await provider.merge(repoPath, branch, {
-          strategy: opts.strategy ?? "squash",
+          strategy,
           waitForCI: true,
           removeSourceBranch: true,
         });
@@ -191,14 +252,14 @@ async function mergeWithRetry(
   provider: PRProvider,
   repoPath: string,
   branch: string,
-  opts: MergeOpts,
+  _opts: MergeOpts,
 ): Promise<void> {
   const delays = [1500, 3000, 5000, 8000]; // ~17s total
   let lastErr: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
       await provider.merge(repoPath, branch, {
-        strategy: opts.strategy ?? "squash",
+        strategy: ctx.repo!.mergeStrategy ?? "squash",
         removeSourceBranch: true,
       });
       return;

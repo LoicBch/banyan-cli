@@ -44,6 +44,23 @@ export interface MRResult {
   url: string;
 }
 
+/**
+ * Provider-agnostic MR/PR metadata captured at merge time and stored in the
+ * history log. Best-effort — every field is optional because providers/CLIs
+ * vary in what they expose. Used by the dashboard's History tab to show
+ * MR titles next to numbers and surface body excerpts on hover.
+ */
+export interface MRMetadata {
+  title?: string;
+  body?: string;
+  /** Author login/username (GitHub: `author.login`, GitLab: `author.username`). */
+  author?: string;
+  /** Total files changed in the diff. */
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
+}
+
 export interface PRProvider {
   readonly name: ProviderName;
   readonly cli: string;                     // "glab" or "gh"
@@ -65,4 +82,8 @@ export interface PRProvider {
 
   /** Open the MR/PR in the default browser. */
   openInBrowser(repoPath: string, branch: string): Promise<void>;
+
+  /** Fetch human-friendly metadata about the MR (title, body, diff stats).
+   *  Best-effort: returns undefined on any failure — callers must handle. */
+  metadata(repoPath: string, branch: string): Promise<MRMetadata | undefined>;
 }
