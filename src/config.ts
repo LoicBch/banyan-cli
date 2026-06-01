@@ -76,6 +76,11 @@ export interface RepoConfig {
   /** Strategy to use when merging via the PR/MR flow. Defaults to "squash"
    *  if not set. Per-repo because conventions vary across teams. */
   mergeStrategy?: "squash" | "merge" | "rebase";
+  /** Tech profile id picked at creation time (node, spring-boot, android,
+   *  django, custom). Free-form string in the schema so the dashboard can
+   *  evolve its profile list without a config migration. Today purely
+   *  informational; future banyan features may specialize behavior on it. */
+  tech?: string;
   /** Files to copy from the main checkout into a freshly-created worktree.
    *  Paths are relative to the repo root, may include subdirectories, and
    *  must not contain `..`. Missing source files are skipped silently; the
@@ -190,6 +195,7 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
         path: contractHome(r.path),
         ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
         ...(r.mergeStrategy ? { mergeStrategy: r.mergeStrategy } : {}),
+        ...(r.tech ? { tech: r.tech } : {}),
         ...(r.copyOnWorktree && r.copyOnWorktree.length > 0
           ? { copyOnWorktree: r.copyOnWorktree }
           : {}),
@@ -299,6 +305,16 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
           );
         }
         mergeStrategy = r.mergeStrategy as RepoConfig["mergeStrategy"];
+      }
+
+      let tech: string | undefined;
+      if (r.tech !== undefined && r.tech !== null && r.tech !== "") {
+        if (typeof r.tech !== "string") {
+          throw new ConfigError(
+            `${sourcePath}: projects[${i}].repos[${j}].tech must be a string`,
+          );
+        }
+        tech = r.tech;
       }
 
       const validateRelPaths = (
@@ -515,6 +531,7 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         path: rPath,
         ...(baseBranch ? { baseBranch } : {}),
         ...(mergeStrategy ? { mergeStrategy } : {}),
+        ...(tech ? { tech } : {}),
         ...(copyOnWorktree ? { copyOnWorktree } : {}),
         ...(loadEnvFiles ? { loadEnvFiles } : {}),
         ...(run ? { run } : {}),
