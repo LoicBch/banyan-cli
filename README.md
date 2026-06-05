@@ -195,7 +195,7 @@ bn <project> wt-ls                      list worktrees across repos
 bn <project> task <feature> <prompt>    paste a prompt into the feature's agent pane
 bn <project> rebase <feature> [repo]    rebase on origin/<base>
 bn <project> merge <feature> [repo]     push + create MR/PR + merge (auto-resolve)
-bn <project> cleanup <feature> [repo]   remove worktree + delete branch + close pane
+bn <project> cleanup <feature> [repo]   stop tests + remove worktree + delete branch + close pane
 bn <project> sync                       rebase every active feature on its base branch
 bn <project> pulse [--watch <s>]        conflict-risk dashboard (file × feature)
 bn <project> todo <feature>             todo list for the feature's agent
