@@ -90,6 +90,21 @@ export interface RepoConfig {
    *      - src/main/resources/application-local.yml
    */
   copyOnWorktree?: string[];
+  /** `.env`-style files to parse and inject into the run command's
+   *  environment at spawn time. Paths are relative to the *worktree* (so
+   *  per-feature customizations apply). Same path safety rules as
+   *  `copyOnWorktree`. Banyan's dynamic values (port allocation,
+   *  composePorts, declared `run.env`) take precedence — they're applied
+   *  AFTER, so the shell uses them.
+   *
+   *  Useful for stacks that don't auto-load `.env` (Spring Boot, Django,
+   *  plain Node, Go). Pair with `copyOnWorktree` to seed the file first.
+   *
+   *  Example:
+   *    loadEnvFiles:
+   *      - .env.local
+   */
+  loadEnvFiles?: string[];
   run?: RunConfig;
   deployCommand?: string;
   // For type=compose only:
@@ -177,6 +192,9 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
         ...(r.mergeStrategy ? { mergeStrategy: r.mergeStrategy } : {}),
         ...(r.copyOnWorktree && r.copyOnWorktree.length > 0
           ? { copyOnWorktree: r.copyOnWorktree }
+          : {}),
+        ...(r.loadEnvFiles && r.loadEnvFiles.length > 0
+          ? { loadEnvFiles: r.loadEnvFiles }
           : {}),
         ...(r.run
           ? {
@@ -283,31 +301,35 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         mergeStrategy = r.mergeStrategy as RepoConfig["mergeStrategy"];
       }
 
-      let copyOnWorktree: string[] | undefined;
-      if (r.copyOnWorktree !== undefined && r.copyOnWorktree !== null) {
-        if (!Array.isArray(r.copyOnWorktree)) {
+      const validateRelPaths = (
+        raw: unknown,
+        fieldName: "copyOnWorktree" | "loadEnvFiles",
+      ): string[] | undefined => {
+        if (raw === undefined || raw === null) return undefined;
+        if (!Array.isArray(raw)) {
           throw new ConfigError(
-            `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree must be a list of strings`,
+            `${sourcePath}: projects[${i}].repos[${j}].${fieldName} must be a list of strings`,
           );
         }
         const cleaned: string[] = [];
-        for (const [k, entry] of r.copyOnWorktree.entries()) {
+        for (const [k, entry] of raw.entries()) {
           if (typeof entry !== "string" || entry === "") {
             throw new ConfigError(
-              `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree[${k}] must be a non-empty string`,
+              `${sourcePath}: projects[${i}].repos[${j}].${fieldName}[${k}] must be a non-empty string`,
             );
           }
-          // Block absolute paths and traversal at the schema level so a bad
-          // value can never reach the copy implementation.
           if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes("..")) {
             throw new ConfigError(
-              `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree[${k}] '${entry}' must be a relative path without '..'`,
+              `${sourcePath}: projects[${i}].repos[${j}].${fieldName}[${k}] '${entry}' must be a relative path without '..'`,
             );
           }
           cleaned.push(entry);
         }
-        if (cleaned.length > 0) copyOnWorktree = cleaned;
-      }
+        return cleaned.length > 0 ? cleaned : undefined;
+      };
+
+      const copyOnWorktree = validateRelPaths(r.copyOnWorktree, "copyOnWorktree");
+      const loadEnvFiles = validateRelPaths(r.loadEnvFiles, "loadEnvFiles");
 
       let run: RunConfig | undefined;
       if (r.run !== undefined && r.run !== null) {
@@ -494,6 +516,7 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         ...(baseBranch ? { baseBranch } : {}),
         ...(mergeStrategy ? { mergeStrategy } : {}),
         ...(copyOnWorktree ? { copyOnWorktree } : {}),
+        ...(loadEnvFiles ? { loadEnvFiles } : {}),
         ...(run ? { run } : {}),
         ...(deployCommand ? { deployCommand } : {}),
         ...(composeFile ? { composeFile } : {}),
