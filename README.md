@@ -307,6 +307,31 @@ Edit the file directly or via `bn ... add-repo / set-run / set-base`. Paths are 
 
 If a repo's `command` invokes `adb` (heuristic: any Android install/run), banyan auto-prepends `adb reverse tcp:<canonical> tcp:<allocated>` for every other repo with a port. Your app code can hardcode `http://localhost:8080/api/` (canonical port) and it tunnels to the dynamic backend port via USB. No app-side config needed.
 
+### Seeding gitignored files into worktrees
+
+Most stacks depend on at least one gitignored file (a `.env`, a `local.properties`, a `application-local.yml`) that lives in the main checkout but not in version control. Fresh worktrees start without them, which breaks `bn start` until you copy them by hand.
+
+Declare them once per repo and banyan will copy them into every new worktree:
+
+```yaml
+repos:
+  - name: back
+    path: ~/Documents/Dev/EasyUrbex/back
+    copyOnWorktree:
+      - .env
+      - .env.local
+      - src/main/resources/application-local.yml
+```
+
+Behavior:
+- Paths are relative to the repo root. Subdirectories are honored — banyan `mkdir -p`s as needed.
+- Absolute paths and `..` are rejected at config-load time.
+- A missing source file is skipped silently (so a typo or a deleted file doesn't block `bn wt`).
+- An existing destination is never overwritten — the worktree's customization wins.
+- The copy runs **before** the `worktree_created` hook, so a hook can still inspect or extend what was copied.
+
+For more elaborate setups (templated configs, secret managers, hardlinks), keep using a `worktree_created` hook — see the [Hooks](#hooks) section.
+
 ## Web dashboard
 
 `bn serve` opens a local browser dashboard (default port 4242):
@@ -347,7 +372,7 @@ pre_test / post_test   wrap a test launch
 
 Each hook receives `BANYAN_PROJECT`, `BANYAN_FEATURE`, `BANYAN_REPO`, `BANYAN_REPO_PATH`, `BANYAN_WORKTREE_PATH`, `BANYAN_BRANCH`, `BANYAN_BASE_BRANCH` plus the parent process env.
 
-Useful pattern: a `worktree_created` hook that copies gitignored config files (`.env`, `local.properties`, `application-local.yml`) from the main checkout to the new worktree. See `examples/hooks/worktree_created` (if present in your install).
+For the common case of seeding gitignored files (`.env`, `local.properties`, …) into a fresh worktree, prefer the declarative [`copyOnWorktree`](#seeding-gitignored-files-into-worktrees) field — no hook needed. Reach for `worktree_created` when you need templating, secret-manager calls, hardlinks, or any logic the declarative field doesn't cover.
 
 ## MCP integration
 
