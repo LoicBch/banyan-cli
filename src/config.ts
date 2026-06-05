@@ -76,6 +76,20 @@ export interface RepoConfig {
   /** Strategy to use when merging via the PR/MR flow. Defaults to "squash"
    *  if not set. Per-repo because conventions vary across teams. */
   mergeStrategy?: "squash" | "merge" | "rebase";
+  /** Files to copy from the main checkout into a freshly-created worktree.
+   *  Paths are relative to the repo root, may include subdirectories, and
+   *  must not contain `..`. Missing source files are skipped silently; the
+   *  destination is never overwritten if it already exists.
+   *
+   *  Typical use: gitignored dev secrets that every worktree still needs.
+   *
+   *  Example:
+   *    copyOnWorktree:
+   *      - .env
+   *      - .env.local
+   *      - src/main/resources/application-local.yml
+   */
+  copyOnWorktree?: string[];
   run?: RunConfig;
   deployCommand?: string;
   // For type=compose only:
@@ -161,6 +175,9 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
         path: contractHome(r.path),
         ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
         ...(r.mergeStrategy ? { mergeStrategy: r.mergeStrategy } : {}),
+        ...(r.copyOnWorktree && r.copyOnWorktree.length > 0
+          ? { copyOnWorktree: r.copyOnWorktree }
+          : {}),
         ...(r.run
           ? {
               run: {
@@ -264,6 +281,32 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
           );
         }
         mergeStrategy = r.mergeStrategy as RepoConfig["mergeStrategy"];
+      }
+
+      let copyOnWorktree: string[] | undefined;
+      if (r.copyOnWorktree !== undefined && r.copyOnWorktree !== null) {
+        if (!Array.isArray(r.copyOnWorktree)) {
+          throw new ConfigError(
+            `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree must be a list of strings`,
+          );
+        }
+        const cleaned: string[] = [];
+        for (const [k, entry] of r.copyOnWorktree.entries()) {
+          if (typeof entry !== "string" || entry === "") {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree[${k}] must be a non-empty string`,
+            );
+          }
+          // Block absolute paths and traversal at the schema level so a bad
+          // value can never reach the copy implementation.
+          if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes("..")) {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].copyOnWorktree[${k}] '${entry}' must be a relative path without '..'`,
+            );
+          }
+          cleaned.push(entry);
+        }
+        if (cleaned.length > 0) copyOnWorktree = cleaned;
       }
 
       let run: RunConfig | undefined;
@@ -450,6 +493,7 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         path: rPath,
         ...(baseBranch ? { baseBranch } : {}),
         ...(mergeStrategy ? { mergeStrategy } : {}),
+        ...(copyOnWorktree ? { copyOnWorktree } : {}),
         ...(run ? { run } : {}),
         ...(deployCommand ? { deployCommand } : {}),
         ...(composeFile ? { composeFile } : {}),
