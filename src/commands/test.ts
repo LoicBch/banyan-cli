@@ -7,6 +7,8 @@ import { shellQuote } from "../shell.js";
 import { findFreePort } from "../util/port.js";
 import { logger } from "../logger.js";
 import { UsageError } from "../errors.js";
+import { readEnvFile } from "../envFile.js";
+import path from "node:path";
 
 interface RepoPlan {
   repo: RepoConfig;
@@ -171,16 +173,40 @@ export async function test(
   }
 
   // --- Pass 3: build final plans with env prefixes ---
+  //
+  // Shell precedence: when the same VAR appears twice as `VAR=a VAR=b cmd`,
+  // bash uses the LAST one. So the order below matters — entries later in the
+  // list override earlier ones:
+  //   1. loadEnvFiles (lowest prio — gives the static baseline)
+  //   2. port allocation + composePorts (banyan-managed, dynamic per feature)
+  //   3. declared run.env (with cross-repo templating)
+  // This way, a `.env.local` can ship a default `SERVER_PORT=8080` and banyan
+  // still overrides it with the dynamically-allocated port for parallel runs.
   const plans: RepoPlan[] = [];
   for (const pp of partials) {
     const envPairs: string[] = [];
+
+    // (1) loadEnvFiles — read from the WORKTREE so per-feature edits apply.
+    for (const rel of pp.repo.loadEnvFiles ?? []) {
+      const filePath = path.join(pp.worktreePath, rel);
+      const vars = readEnvFile(filePath, {
+        onWarn: (msg) => logger.warn(`loadEnvFiles[${pp.repo.name}/${rel}]: ${msg}`),
+      });
+      for (const [k, v] of Object.entries(vars)) {
+        envPairs.push(`${k}=${shellQuote(v)}`);
+      }
+    }
+
+    // (2) port + composePorts — banyan-managed, must beat anything in the file.
     if (pp.port !== undefined && pp.portEnv) envPairs.push(`${pp.portEnv}=${pp.port}`);
     for (const cp of pp.composePorts ?? []) envPairs.push(`${cp.envVar}=${cp.hostPort}`);
-    // User-declared env (with template substitution)
+
+    // (3) Explicit run.env with template substitution — highest prio.
     for (const [k, v] of Object.entries(pp.repo.run?.env ?? {})) {
       const resolved = substituteTemplates(v);
       envPairs.push(`${k}=${shellQuote(resolved)}`);
     }
+
     const commandPrefix = envPairs.length > 0 ? envPairs.join(" ") + " " : "";
     const runCommand = `${commandPrefix}${effectiveRunCommand(pp.repo.run!)}`;
     const fullCommand = pp.repo.run!.setup ? `${pp.repo.run!.setup} && ${runCommand}` : runCommand;

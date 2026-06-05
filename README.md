@@ -332,6 +332,38 @@ Behavior:
 
 For more elaborate setups (templated configs, secret managers, hardlinks), keep using a `worktree_created` hook — see the [Hooks](#hooks) section.
 
+### Auto-loading `.env` into the run process
+
+Copying the file into the worktree only works for stacks that read it themselves (Next.js, Vite, NestJS, …). Plenty of others don't: **Spring Boot, Django, plain Node, Go** all expect the values as actual environment variables.
+
+`loadEnvFiles` parses `.env`-style files from the worktree and injects their contents into the run command's environment at spawn time:
+
+```yaml
+repos:
+  - name: back
+    path: ~/Documents/Dev/EasyUrbex/back
+    copyOnWorktree:
+      - .env.local                   # seed the file into the worktree
+    loadEnvFiles:
+      - .env.local                   # then export its contents to the JVM
+    run:
+      command: ./gradlew bootRun
+      port: 8080
+      portEnv: SERVER_PORT
+```
+
+Behavior:
+- The file is read from the **worktree** (so per-feature edits apply), not the main checkout.
+- Supports `KEY=value`, double and single quoted values, the optional `export` prefix, and `#` comments. No interpolation, no multi-line values.
+- Missing files are skipped with a warning.
+- Process isolation is automatic: each feature's run command gets its own env block — no overlap between parallel worktrees.
+- Banyan's dynamic values **override** the file. If your `.env.local` declares `SERVER_PORT=8080` but banyan allocated port `8081` for this feature, the spawned process sees `8081`. Order of precedence (highest wins):
+  1. `run.env` (declared, with cross-repo `{{repo.port}}` templating)
+  2. Allocated `portEnv` + `composePorts`
+  3. `loadEnvFiles` content
+
+Common pair: `copyOnWorktree` to seed the file, `loadEnvFiles` to export it. Use just `loadEnvFiles` if a `worktree_created` hook produces the file by other means.
+
 ## Web dashboard
 
 `bn serve` opens a local browser dashboard (default port 4242):
