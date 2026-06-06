@@ -34,6 +34,21 @@
 
 ---
 
+## The problem
+
+Running multiple AI agents in parallel on the same project means each one needs:
+
+- its own dev ports — agent B can't bind `:8080` if agent A already did
+- its own git worktree per repo so branches don't fight each other
+- its own DB / compose stack — you don't want agent B writing to agent A's MySQL
+- its own `.env` values (auth tokens, feature flags) and the run process actually loading them
+- a Claude session with `--add-dir` wired to every repo of the project, not just one
+- and eventually, merging N branches across N repos without stepping on each other
+
+That's 20–30 minutes of plumbing per agent, every time. So in practice most people just don't — they switch context, one feature at a time, with the rest of the stack idle.
+
+---
+
 ## One command. Whole stack.
 
 ```bash
