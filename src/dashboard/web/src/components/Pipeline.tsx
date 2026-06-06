@@ -18,9 +18,11 @@ import { fetchState, type DashboardState, type FeatureState, type ProjectState }
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
+import { confirm } from "@/lib/confirm";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface PipelineProps {
   projectName: string | null;
@@ -62,19 +64,31 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
 
   if (features.length === 0) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-12 text-center space-y-3">
-          <div className="mx-auto w-fit rounded-full bg-muted p-3">
-            <FolderPlus className="size-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-base font-medium">No active features</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Spin up a feature with{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">bn {project.name} wt &lt;name&gt;</code>{" "}
-            or click "New feature" above.
-          </p>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={FolderPlus}
+        title="No active features"
+        description={
+          <>
+            Each feature spawns isolated worktrees in every repo of{" "}
+            <span className="font-mono text-foreground">{project.name}</span>, with its own
+            Claude agent and dynamically-allocated ports.
+          </>
+        }
+        action={
+          <Button onClick={() => openWorktreeDialog(project.name)} className="gap-1.5">
+            <Plus className="size-4" />
+            New feature
+          </Button>
+        }
+        hint={
+          <>
+            Or via CLI:{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+              bn {project.name} wt &lt;name&gt;
+            </code>
+          </>
+        }
+      />
     );
   }
 
@@ -118,9 +132,26 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
 
   const onStart = () => runAction("Start", () => actions.testStart(project.name, feature.feature));
   const onStop = () => runAction("Stop", () => actions.testStop(project.name, feature.feature));
-  const onMerge = () => runAction("Merge", () => actions.merge(project.name, feature.feature));
-  const onCleanup = () => {
-    if (!window.confirm(`Cleanup '${feature.feature}'? This removes worktrees + deletes the branch + stops tests.`)) return;
+  const onMerge = async () => {
+    const ok = await confirm({
+      title: `Merge '${feature.feature}'?`,
+      description:
+        "Banyan will rebase on the base branch, push, open an MR/PR, auto-resolve conflicts if any, then merge.",
+      consequences: buildMergeConsequences(project, reposTouched),
+      confirmLabel: "Merge feature",
+    });
+    if (!ok) return;
+    runAction("Merge", () => actions.merge(project.name, feature.feature));
+  };
+  const onCleanup = async () => {
+    const ok = await confirm({
+      title: `Cleanup '${feature.feature}'?`,
+      description: "Full teardown of the feature. This can't be undone.",
+      consequences: buildCleanupConsequences(project, feature.feature, reposTouched),
+      destructive: true,
+      confirmLabel: "Delete everything",
+    });
+    if (!ok) return;
     runAction("Cleanup", () => actions.cleanup(project.name, feature.feature));
   };
 
@@ -204,6 +235,43 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
       </CardContent>
     </Card>
   );
+}
+
+// ── Consequence builders for confirm dialogs ──────────────────────────────
+
+function buildCleanupConsequences(
+  project: ProjectState,
+  feature: string,
+  reposTouched: string[],
+): string[] {
+  const out: string[] = [];
+  if (reposTouched.length > 0) {
+    out.push(
+      `${reposTouched.length} worktree${reposTouched.length === 1 ? "" : "s"} removed (${reposTouched.join(", ")})`,
+    );
+    out.push(`branch feature/${feature} deleted in each repo`);
+    out.push("agent pane closed");
+  } else {
+    out.push("worktrees removed across the project");
+    out.push("feature branch deleted");
+  }
+  const hasCompose = project.repos.some((r) => r.type === "compose");
+  if (hasCompose) {
+    out.push("compose stack destroyed (volumes dropped — DB data lost)");
+  }
+  out.push("running test processes stopped");
+  return out;
+}
+
+function buildMergeConsequences(project: ProjectState, reposTouched: string[]): string[] {
+  const repos = reposTouched.length > 0
+    ? reposTouched
+    : project.repos.filter((r) => r.type !== "compose").map((r) => r.name);
+  return [
+    `${repos.length} repo${repos.length === 1 ? "" : "s"} rebased + pushed (${repos.join(", ")})`,
+    "MR/PR created and merged with the repo's configured strategy",
+    "uncommitted changes in the worktree are auto-committed before push",
+  ];
 }
 
 // ── Derive features from /api/state when /api/pipeline isn't joined in ────
@@ -313,24 +381,27 @@ function ErrorState({ message }: { message: string }): React.JSX.Element {
 
 function NoProjectsState(): React.JSX.Element {
   return (
-    <div className="mx-auto max-w-2xl p-6 mt-12 animate-fade-in">
-      <Card className="border-dashed">
-        <CardContent className="py-12 text-center space-y-4">
-          <div className="mx-auto w-fit rounded-full bg-primary/10 p-4">
-            <FolderPlus className="size-8 text-primary" />
-          </div>
-          <div className="space-y-1.5">
-            <h2 className="text-lg font-semibold">No projects yet</h2>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-              Get started by creating one — banyan will write the config and detect tech for each repo.
-            </p>
-          </div>
-          <Button className="gap-2" onClick={openProjectWizard}>
+    <div className="mx-auto max-w-2xl p-6 mt-12">
+      <EmptyState
+        icon={FolderPlus}
+        iconTone="accent"
+        title="No projects yet"
+        description="A banyan project groups the repos that ship together. The wizard scans each repo, detects the tech (Node, Spring Boot, Android, …), and writes the config for you."
+        action={
+          <Button onClick={openProjectWizard} className="gap-2">
             <Plus className="size-4" />
-            Create project
+            Create your first project
           </Button>
-        </CardContent>
-      </Card>
+        }
+        hint={
+          <>
+            Or via CLI:{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+              cd my-front && bn init my-project
+            </code>
+          </>
+        }
+      />
     </div>
   );
 }

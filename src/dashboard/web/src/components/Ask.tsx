@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 interface AskRecord {
@@ -208,13 +209,18 @@ export function Ask({ projectName }: AskProps): React.JSX.Element {
       ) : null}
 
       {history.length === 0 && streaming === null ? (
-        <Card className="border-dashed">
-          <CardContent className="py-10 text-center space-y-2">
-            <MessageSquare className="size-6 mx-auto text-muted-foreground" />
-            <h3 className="text-base font-medium">No questions asked yet</h3>
-            <p className="text-sm text-muted-foreground">Past Q&A will appear here.</p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={MessageSquare}
+          title="Ask something about this project"
+          description="banyan reads past end-of-task reports, recent git history, and agent transcripts to answer. Filter by feature when you want a focused answer."
+          hint={
+            <>
+              Try:{" "}
+              <span className="text-foreground italic">"what changed on auth this month?"</span>{" "}
+              · <span className="text-foreground italic">"what's still pending on the login feature?"</span>
+            </>
+          }
+        />
       ) : null}
 
       {history.map((r, i) => <Record key={i} record={r} />)}
