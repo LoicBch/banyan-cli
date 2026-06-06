@@ -7,14 +7,18 @@
  * other sections show a placeholder pointing at the legacy `/legacy/` URL.
  */
 import * as React from "react";
-import { ThemeProvider } from "@/lib/theme";
+import { Toaster } from "sonner";
+import { ThemeProvider, useTheme } from "@/lib/theme";
 import { Sidebar, type SectionId } from "@/components/Sidebar";
 import { Pipeline } from "@/components/Pipeline";
+import { Shortcuts } from "@/components/Shortcuts";
+import { Inbox } from "@/components/Inbox";
+import { History } from "@/components/History";
+import { Config } from "@/components/Config";
+import { Ask } from "@/components/Ask";
+import { CommandPalette } from "@/components/CommandPalette";
 import { fetchState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
 
 const STORAGE_SECTION = "banyan.web.section";
 const STORAGE_PROJECT = "banyan.web.project";
@@ -23,7 +27,23 @@ export default function App(): React.JSX.Element {
   return (
     <ThemeProvider>
       <Shell />
+      <ThemedToaster />
     </ThemeProvider>
+  );
+}
+
+function ThemedToaster(): React.JSX.Element {
+  const { theme } = useTheme();
+  return (
+    <Toaster
+      theme={theme}
+      position="bottom-right"
+      richColors
+      closeButton
+      toastOptions={{
+        style: { fontFamily: '"Geist", system-ui, sans-serif' },
+      }}
+    />
   );
 }
 
@@ -63,51 +83,23 @@ function Shell(): React.JSX.Element {
         onProject={setProject}
       />
       <main className="flex-1 overflow-y-auto">
-        {section === "pipeline" ? (
-          <Pipeline projectName={activeProject} />
-        ) : (
-          <LegacyRedirect section={section} />
-        )}
+        {section === "pipeline" ? <Pipeline projectName={activeProject} /> : null}
+        {section === "shortcuts" ? <Shortcuts /> : null}
+        {section === "inbox" ? <Inbox /> : null}
+        {section === "history" ? <History projectName={activeProject} /> : null}
+        {section === "config" ? <Config /> : null}
+        {section === "ask" ? <Ask projectName={activeProject} /> : null}
       </main>
+      <CommandPalette
+        section={section}
+        onSection={setSection}
+        projects={projects}
+        onProject={setProject}
+      />
     </div>
   );
 }
 
 function isSection(s: string): s is SectionId {
   return ["pipeline", "inbox", "history", "ask", "config", "shortcuts"].includes(s);
-}
-
-/**
- * Placeholder for sections not yet migrated. Tells the user the view is
- * still available on the legacy dashboard, with a one-click hop. Keeps the
- * incremental-migration story honest.
- */
-function LegacyRedirect({ section }: { section: SectionId }): React.JSX.Element {
-  const labels: Record<SectionId, string> = {
-    pipeline: "Pipeline",
-    inbox: "Inbox",
-    history: "History",
-    ask: "Ask",
-    config: "Config",
-    shortcuts: "Shortcuts",
-  };
-  return (
-    <div className="mx-auto max-w-2xl p-6 mt-12 animate-fade-in">
-      <Card className="border-dashed">
-        <CardContent className="py-12 text-center space-y-4">
-          <h2 className="text-lg font-semibold">{labels[section]} — coming soon</h2>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            This view hasn't been migrated to the new UI yet. The old version is still
-            available on the legacy dashboard.
-          </p>
-          <Button asChild variant="outline" className="gap-2">
-            <a href="/legacy/" target="_self">
-              <ExternalLink className="size-4" />
-              Open legacy dashboard
-            </a>
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
 }

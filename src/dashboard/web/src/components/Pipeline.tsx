@@ -9,13 +9,17 @@
  * features → onboarding hint.
  */
 import * as React from "react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Play, GitMerge, Trash2, ExternalLink, Plus, FolderPlus } from "lucide-react";
+import { Play, GitMerge, Trash2, ExternalLink, Plus, FolderPlus, Square } from "lucide-react";
 import { fetchState, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
+import * as actions from "@/lib/actions";
+import { openProjectWizard } from "@/components/ProjectWizard";
+import { openWorktreeDialog } from "@/components/WorktreeDialog";
 
 interface PipelineProps {
   projectName: string | null;
@@ -40,7 +44,7 @@ export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
             Pipeline · {project.repos.length} {project.repos.length === 1 ? "repo" : "repos"}
           </p>
         </div>
-        <Button size="sm" className="gap-2">
+        <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
           <Plus className="size-4" />
           New feature
         </Button>
@@ -88,6 +92,36 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
   const todosPct = feature.todos && feature.todos.total > 0
     ? Math.round((feature.todos.done / feature.todos.total) * 100)
     : null;
+  const isRunning = ports.length > 0;
+  const [busy, setBusy] = React.useState(false);
+
+  // Each action wraps the corresponding /api/actions/* call with toast feedback.
+  // `busy` disables all buttons while one is in flight to avoid spamming the
+  // backend (cleanup in particular is destructive).
+  async function runAction(label: string, fn: () => Promise<actions.ActionResult>) {
+    setBusy(true);
+    const p = fn();
+    toast.promise(p, {
+      loading: `${label}…`,
+      success: (r) => (r.ok ? `${label} ✓` : `${label} failed`),
+      error: () => `${label} failed`,
+    });
+    const r = await p;
+    setBusy(false);
+    if (!r.ok && r.error) {
+      // Append a second toast with the actual error message — sonner's
+      // success/error already shows the headline.
+      toast.error(label, { description: r.error });
+    }
+  }
+
+  const onStart = () => runAction("Start", () => actions.testStart(project.name, feature.feature));
+  const onStop = () => runAction("Stop", () => actions.testStop(project.name, feature.feature));
+  const onMerge = () => runAction("Merge", () => actions.merge(project.name, feature.feature));
+  const onCleanup = () => {
+    if (!window.confirm(`Cleanup '${feature.feature}'? This removes worktrees + deletes the branch + stops tests.`)) return;
+    runAction("Cleanup", () => actions.cleanup(project.name, feature.feature));
+  };
 
   return (
     <Card className="hover:border-primary/40 hover:shadow-md transition-all">
@@ -95,13 +129,18 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="size-2 rounded-full bg-emerald-500 shrink-0" aria-label="active" />
+              <span
+                className={cn(
+                  "size-2 rounded-full shrink-0",
+                  isRunning ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
+                aria-label={isRunning ? "running" : "idle"}
+              />
               <h3 className="font-mono text-sm font-medium truncate">{feature.feature}</h3>
               {feature.mode ? <Badge variant="muted">{feature.mode}</Badge> : null}
               {feature.stage && feature.stage !== "in-progress" ? <Badge variant="info">{feature.stage}</Badge> : null}
             </div>
 
-            {/* Repo + port row */}
             <div className="flex items-center gap-3 flex-wrap text-xs">
               {reposTouched.length > 0 ? (
                 reposTouched.map((r) => {
@@ -118,7 +157,6 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
               )}
             </div>
 
-            {/* TODO progress */}
             {todosPct !== null && feature.todos ? (
               <div className="flex items-center gap-2 text-xs">
                 <div className="h-1 w-32 rounded-full bg-muted overflow-hidden">
@@ -137,18 +175,27 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
             ) : null}
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon" title="Open agent pane">
+            <Button variant="ghost" size="icon" title="Open agent pane (attach tmux)"
+              onClick={() => toast.info("Attach to the project session in your terminal", {
+                description: `bn ${project.name} attach`,
+              })}
+              disabled={busy}>
               <ExternalLink className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" title="Start run processes">
-              <Play className="size-4" />
-            </Button>
-            <Button variant="ghost" size="icon" title="Merge feature">
+            {isRunning ? (
+              <Button variant="ghost" size="icon" title="Stop run processes" onClick={onStop} disabled={busy}>
+                <Square className="size-4" />
+              </Button>
+            ) : (
+              <Button variant="ghost" size="icon" title="Start run processes" onClick={onStart} disabled={busy}>
+                <Play className="size-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" title="Merge feature" onClick={onMerge} disabled={busy}>
               <GitMerge className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" title="Cleanup feature">
+            <Button variant="ghost" size="icon" title="Cleanup feature" onClick={onCleanup} disabled={busy}>
               <Trash2 className="size-4" />
             </Button>
           </div>
@@ -237,7 +284,7 @@ function NoProjectsState(): React.JSX.Element {
               Get started by creating one — banyan will write the config and detect tech for each repo.
             </p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={openProjectWizard}>
             <Plus className="size-4" />
             Create project
           </Button>
