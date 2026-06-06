@@ -838,8 +838,11 @@ export async function startServer(
     },
   );
 
-  // Static SPA
-  app.use(express.static(path.join(__dirname, "static")));
+  // Static SPA — the new React build is served at the root path, the legacy
+  // vanilla-JS dashboard remains accessible at /legacy/ during the migration.
+  // Both share the same /api/* backend.
+  app.use("/legacy", express.static(path.join(__dirname, "static")));
+  app.use(express.static(path.join(__dirname, "web")));
 
   const port = opts.port ?? (await findFreePort(4242));
 
