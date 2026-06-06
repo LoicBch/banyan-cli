@@ -1368,7 +1368,13 @@ function render(state) {
   }
 
   if (!state.projects || state.projects.length === 0) {
-    root.appendChild(h("p", { class: "text-neutral-500" }, ["no projects configured. edit ~/.config/banyan/config.yaml"]));
+    root.appendChild(h("div", { class: "border border-neutral-800 rounded-lg p-8 text-center bg-neutral-900/50 space-y-3" }, [
+      h("p", { class: "text-neutral-300 text-base" }, ["No projects yet."]),
+      h("p", { class: "text-neutral-500 text-sm" }, ["Get started by creating one — banyan will write the config and detect tech for each repo."]),
+      h("div", { class: "pt-2" }, [
+        btn("+ Create project", { variant: "primary", onClick: openNewProjectWizard }),
+      ]),
+    ]));
     return;
   }
 
@@ -3094,3 +3100,563 @@ try {
 // Ask once on first load — non-blocking.
 maybeRequestNotificationPermission();
 loop();
+
+// ── new-project wizard ────────────────────────────────────────────────────
+// 3-step modal (name → repos → review). Calls /api/projects on submit and
+// refreshes the dashboard on success.
+
+async function openNewProjectWizard() {
+  // Tech profiles are tiny and rarely change — fetch once per wizard open.
+  let profiles;
+  try {
+    const r = await fetch("/api/tech-profiles");
+    const data = await r.json();
+    profiles = data.profiles;
+  } catch {
+    toast("error", "could not load tech profiles");
+    return;
+  }
+  if (!Array.isArray(profiles) || profiles.length === 0) {
+    toast("error", "no tech profiles available");
+    return;
+  }
+
+  // Wizard state — single source of truth for the 3 steps.
+  const state = {
+    step: 1,
+    name: "",
+    repos: [],         // { name, path, baseBranch, tech, run: {command, port, portEnv, setup, stopCommand} }
+  };
+
+  const overlay = h("div", {
+    class: "fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4",
+    onclick: (e) => { if (e.target === overlay) close(); },
+  });
+  const card = h("div", {
+    class: "bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl w-[min(95vw,42rem)] max-h-[90vh] flex flex-col",
+  });
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  function close() { overlay.remove(); }
+  function rerender() { card.innerHTML = ""; card.appendChild(renderStep()); }
+
+  function renderStep() {
+    if (state.step === 1) return renderStepName();
+    if (state.step === 2) return renderStepRepos();
+    return renderStepReview();
+  }
+
+  function header(title, subtitle) {
+    return h("div", { class: "px-4 py-3 border-b border-neutral-800 flex items-center justify-between" }, [
+      h("div", {}, [
+        h("div", { class: "text-base font-semibold" }, [title]),
+        subtitle ? h("div", { class: "text-xs text-neutral-500 mt-0.5" }, [subtitle]) : null,
+      ]),
+      h("div", { class: "text-xs text-neutral-500" }, [`step ${state.step} / 3`]),
+    ]);
+  }
+
+  function footer(actions) {
+    return h("div", { class: "px-4 py-3 border-t border-neutral-800 flex items-center justify-end gap-2" }, actions);
+  }
+
+  // ── Step 1 — project name ──────────────────────────────────────────────
+  function renderStepName() {
+    const nameEl = h("input", {
+      type: "text",
+      value: state.name,
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "myproject",
+    });
+    nameEl.addEventListener("input", () => { state.name = nameEl.value.trim(); });
+
+    const next = btn("next →", {
+      variant: "primary",
+      onClick: () => {
+        if (!state.name) { toast("error", "project name is required"); return; }
+        if (!/^[A-Za-z0-9_.-]+$/.test(state.name)) {
+          toast("error", "project name must match [A-Za-z0-9_.-]+");
+          return;
+        }
+        state.step = 2;
+        rerender();
+      },
+    });
+
+    return h("div", { class: "flex flex-col" }, [
+      header("New project", "Give your project a short, file-system-safe name."),
+      h("div", { class: "p-4 space-y-3 overflow-y-auto" }, [
+        h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Project name"]),
+        nameEl,
+        h("p", { class: "text-xs text-neutral-500" }, [
+          "This is the identifier you'll use everywhere: ",
+          h("code", { class: "text-neutral-300" }, [`bn ${state.name || "<name>"} start`]),
+        ]),
+      ]),
+      footer([
+        btn("cancel", { onClick: close }),
+        next,
+      ]),
+    ]);
+  }
+
+  // ── Step 2 — repos ─────────────────────────────────────────────────────
+  function renderStepRepos() {
+    const list = h("div", { class: "space-y-2" }, state.repos.map((r, i) => renderRepoRow(r, i)));
+
+    return h("div", { class: "flex flex-col min-h-0" }, [
+      header(`Repos for '${state.name}'`, "Add the repos this project spans. Detect tech from the path."),
+      h("div", { class: "p-4 space-y-3 overflow-y-auto" }, [
+        list,
+        h("div", { class: "flex justify-center" }, [
+          btn("+ add repo", { onClick: () => openAddRepoDialog((repo) => {
+            state.repos.push(repo);
+            rerender();
+          }) }),
+        ]),
+        state.repos.length === 0
+          ? h("p", { class: "text-xs text-neutral-500 text-center" }, ["No repos yet — add at least one to continue."])
+          : null,
+      ]),
+      footer([
+        btn("← back", { onClick: () => { state.step = 1; rerender(); } }),
+        btn("review →", {
+          variant: "primary",
+          onClick: () => {
+            if (state.repos.length === 0) { toast("error", "add at least one repo"); return; }
+            state.step = 3;
+            rerender();
+          },
+        }),
+      ]),
+    ]);
+  }
+
+  function renderRepoRow(repo, idx) {
+    const techLabel = profiles.find((p) => p.id === repo.tech)?.label ?? repo.tech ?? "—";
+    return h("div", { class: "border border-neutral-800 rounded p-3 bg-neutral-950/50" }, [
+      h("div", { class: "flex items-start justify-between gap-3" }, [
+        h("div", { class: "min-w-0 flex-1" }, [
+          h("div", { class: "flex items-center gap-2" }, [
+            h("span", { class: "text-sm font-mono text-neutral-100" }, [repo.name]),
+            pill(techLabel, "blue"),
+          ]),
+          h("div", { class: "text-xs text-neutral-500 mt-1 font-mono truncate" }, [repo.path]),
+          repo.run?.command
+            ? h("div", { class: "text-xs text-neutral-400 mt-1 font-mono truncate" }, ["$ " + repo.run.command])
+            : null,
+        ]),
+        h("div", { class: "flex gap-1" }, [
+          btn("edit", { onClick: () => openAddRepoDialog((updated) => {
+            state.repos[idx] = updated;
+            rerender();
+          }, repo) }),
+          btn("remove", { variant: "danger", onClick: () => {
+            state.repos.splice(idx, 1);
+            rerender();
+          } }),
+        ]),
+      ]),
+    ]);
+  }
+
+  // ── Step 3 — review + submit ───────────────────────────────────────────
+  function renderStepReview() {
+    const submit = btn("Create project", {
+      variant: "primary",
+      onClick: async () => {
+        submit.disabled = true;
+        const body = {
+          name: state.name,
+          repos: state.repos.map((r) => ({
+            name: r.name,
+            path: r.path,
+            ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
+            ...(r.tech ? { tech: r.tech } : {}),
+            ...(r.run?.command ? { run: r.run } : {}),
+          })),
+        };
+        try {
+          const r = await fetch("/api/projects", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok && data.ok) {
+            toast("success", `project '${data.name}' created`);
+            close();
+            scheduleRefresh(true);
+          } else {
+            toast("error", "create failed", [data.error || `${r.status}`]);
+            submit.disabled = false;
+          }
+        } catch (err) {
+          toast("error", "create failed", [String(err)]);
+          submit.disabled = false;
+        }
+      },
+    });
+
+    return h("div", { class: "flex flex-col min-h-0" }, [
+      header("Review", "config.yaml will be updated. Comments and other projects are preserved."),
+      h("div", { class: "p-4 space-y-3 overflow-y-auto" }, [
+        h("div", { class: "text-xs text-neutral-400" }, ["Project"]),
+        h("div", { class: "font-mono text-sm" }, [state.name]),
+        h("div", { class: "text-xs text-neutral-400 mt-3" }, [`Repos (${state.repos.length})`]),
+        ...state.repos.map((repo) => h("div", { class: "border border-neutral-800 rounded p-2 bg-neutral-950/50 text-xs" }, [
+          h("div", { class: "flex items-center gap-2" }, [
+            h("span", { class: "font-mono text-neutral-100" }, [repo.name]),
+            pill(profiles.find((p) => p.id === repo.tech)?.label ?? "custom", "blue"),
+          ]),
+          h("div", { class: "text-neutral-500 font-mono mt-0.5" }, [repo.path]),
+          repo.run?.command ? h("div", { class: "text-neutral-400 font-mono mt-0.5" }, ["$ " + repo.run.command]) : null,
+        ])),
+      ]),
+      footer([
+        btn("← back", { onClick: () => { state.step = 2; rerender(); } }),
+        submit,
+      ]),
+    ]);
+  }
+
+  rerender();
+}
+
+// ── add-repo dialog (step 2 sub-flow) ─────────────────────────────────────
+// Nested overlay (z-50 so it stacks above the wizard) that lets the user
+// pick a path, name it, choose a tech profile, and optionally tweak the
+// run command before adding the repo to the wizard's draft state.
+
+async function openAddRepoDialog(onSubmit, initial) {
+  const profiles = await (async () => {
+    const r = await fetch("/api/tech-profiles").catch(() => null);
+    if (!r || !r.ok) return [];
+    const data = await r.json();
+    return data.profiles ?? [];
+  })();
+
+  const draft = initial
+    ? JSON.parse(JSON.stringify(initial))
+    : { name: "", path: "", baseBranch: "", tech: "custom", run: { command: "", port: null, portEnv: "", setup: "", stopCommand: "" } };
+
+  const overlay = h("div", {
+    class: "fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4",
+    onclick: (e) => { if (e.target === overlay) overlay.remove(); },
+  });
+  const card = h("div", {
+    class: "bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl w-[min(95vw,40rem)] max-h-[90vh] flex flex-col",
+  });
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  function rerender() { card.innerHTML = ""; card.appendChild(renderBody()); }
+
+  function renderBody() {
+    const pathInput = h("input", {
+      type: "text",
+      value: draft.path,
+      class: "flex-1 bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "~/Documents/Dev/MyApp/Front",
+    });
+    pathInput.addEventListener("input", () => { draft.path = pathInput.value; });
+
+    const browseBtn = btn("Browse…", {
+      onClick: () => openFsBrowser((picked) => {
+        draft.path = picked;
+        pathInput.value = picked;
+        if (!draft.name) {
+          // Default repo name = basename — user can override after probe.
+          draft.name = picked.split("/").filter(Boolean).pop() ?? "";
+        }
+        runProbe();
+      }),
+    });
+
+    const probeBtn = btn("Detect", { onClick: runProbe });
+
+    const nameInput = h("input", {
+      type: "text",
+      value: draft.name,
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "front, back, app, …",
+    });
+    nameInput.addEventListener("input", () => { draft.name = nameInput.value.trim(); });
+
+    const techSelect = h("select", {
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm",
+    }, profiles.map((p) =>
+      h("option", { value: p.id, ...(p.id === draft.tech ? { selected: "selected" } : {}) }, [`${p.label} — ${p.hint}`]),
+    ));
+    techSelect.addEventListener("change", () => {
+      draft.tech = techSelect.value;
+      // Re-apply defaults from the new profile, but only overwrite empty
+      // fields so we don't clobber a custom command the user just typed.
+      const profile = profiles.find((p) => p.id === draft.tech);
+      if (profile) applyProfileDefaults(draft, profile, { overwrite: true });
+      rerender();
+    });
+
+    const baseInput = h("input", {
+      type: "text",
+      value: draft.baseBranch,
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "main, develop, …",
+    });
+    baseInput.addEventListener("input", () => { draft.baseBranch = baseInput.value.trim(); });
+
+    const commandInput = h("input", {
+      type: "text",
+      value: draft.run.command,
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "npm run dev",
+    });
+    commandInput.addEventListener("input", () => { draft.run.command = commandInput.value; });
+
+    const portInput = h("input", {
+      type: "number",
+      value: draft.run.port ?? "",
+      class: "w-24 bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "3000",
+    });
+    portInput.addEventListener("input", () => {
+      const n = parseInt(portInput.value, 10);
+      draft.run.port = Number.isFinite(n) ? n : null;
+    });
+
+    const portEnvInput = h("input", {
+      type: "text",
+      value: draft.run.portEnv,
+      class: "flex-1 bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "PORT, SERVER_PORT, …",
+    });
+    portEnvInput.addEventListener("input", () => { draft.run.portEnv = portEnvInput.value.trim(); });
+
+    const stopInput = h("input", {
+      type: "text",
+      value: draft.run.stopCommand,
+      class: "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-700",
+      placeholder: "(optional) ./gradlew --stop",
+    });
+    stopInput.addEventListener("input", () => { draft.run.stopCommand = stopInput.value.trim(); });
+
+    async function runProbe() {
+      const target = draft.path.trim();
+      if (!target) return;
+      try {
+        const r = await fetch("/api/fs/probe", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: target }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          toast("error", "probe failed", [data.error || `${r.status}`]);
+          return;
+        }
+        if (!data.valid) {
+          toast("error", "invalid path", [data.error || "path rejected"]);
+          return;
+        }
+        // Normalize the path so what we persist matches what the server accepted.
+        draft.path = data.path;
+        if (!draft.name) draft.name = data.suggestedName;
+        if (data.suggestedTech) draft.tech = data.suggestedTech;
+        const profile = profiles.find((p) => p.id === draft.tech);
+        // When the probe filled run defaults, prefer those (richer than the
+        // generic profile defaults — they may include the actual app id, etc).
+        if (data.suggestedRun) {
+          draft.run = { ...draft.run, ...data.suggestedRun };
+        } else if (profile) {
+          applyProfileDefaults(draft, profile, { overwrite: true });
+        }
+        toast("info", "detected", [data.stackLabel || "tech: " + (draft.tech || "custom")]);
+        rerender();
+      } catch (err) {
+        toast("error", "probe failed", [String(err)]);
+      }
+    }
+
+    const submit = btn(initial ? "Save" : "Add repo", {
+      variant: "primary",
+      onClick: () => {
+        if (!draft.name) { toast("error", "repo name is required"); return; }
+        if (!draft.path) { toast("error", "repo path is required"); return; }
+        if (draft.tech !== "custom" && !draft.run.command) {
+          // Profile defaults should have filled this — but guard anyway.
+          toast("error", "run command is empty");
+          return;
+        }
+        // Strip empties before handing off so the wizard state stays clean.
+        const out = {
+          name: draft.name,
+          path: draft.path,
+          ...(draft.baseBranch ? { baseBranch: draft.baseBranch } : {}),
+          tech: draft.tech,
+          run: draft.run.command ? {
+            command: draft.run.command,
+            ...(draft.run.port ? { port: draft.run.port } : {}),
+            ...(draft.run.portEnv ? { portEnv: draft.run.portEnv } : {}),
+            ...(draft.run.setup ? { setup: draft.run.setup } : {}),
+            ...(draft.run.stopCommand ? { stopCommand: draft.run.stopCommand } : {}),
+          } : null,
+        };
+        overlay.remove();
+        onSubmit(out);
+      },
+    });
+
+    return h("div", { class: "flex flex-col min-h-0" }, [
+      h("div", { class: "px-4 py-3 border-b border-neutral-800" }, [
+        h("div", { class: "text-base font-semibold" }, [initial ? "Edit repo" : "Add repo"]),
+      ]),
+      h("div", { class: "p-4 space-y-3 overflow-y-auto" }, [
+        h("div", {}, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Path"]),
+          h("div", { class: "flex gap-2" }, [pathInput, browseBtn, probeBtn]),
+          h("p", { class: "text-xs text-neutral-500 mt-1" }, ["Pick a directory and detect, or type the path manually."]),
+        ]),
+        h("div", {}, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Repo name"]),
+          nameInput,
+        ]),
+        h("div", {}, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Tech"]),
+          techSelect,
+        ]),
+        h("div", {}, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Base branch (optional)"]),
+          baseInput,
+        ]),
+        h("div", { class: "pt-2 border-t border-neutral-800" }, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Run command"]),
+          commandInput,
+        ]),
+        h("div", { class: "flex gap-2" }, [
+          h("div", { class: "flex-shrink-0" }, [
+            h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Port"]),
+            portInput,
+          ]),
+          h("div", { class: "flex-1" }, [
+            h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Port env"]),
+            portEnvInput,
+          ]),
+        ]),
+        h("div", {}, [
+          h("label", { class: "block text-xs text-neutral-400 mb-1" }, ["Stop command (optional)"]),
+          stopInput,
+        ]),
+      ]),
+      h("div", { class: "px-4 py-3 border-t border-neutral-800 flex items-center justify-end gap-2" }, [
+        btn("cancel", { onClick: () => overlay.remove() }),
+        submit,
+      ]),
+    ]);
+  }
+
+  rerender();
+}
+
+function applyProfileDefaults(draft, profile, { overwrite }) {
+  const d = profile.defaults || {};
+  if (overwrite || !draft.run.command) draft.run.command = d.command ?? "";
+  if (overwrite || draft.run.port == null) draft.run.port = d.port ?? null;
+  if (overwrite || !draft.run.portEnv) draft.run.portEnv = d.portEnv ?? "";
+  if (overwrite || !draft.run.setup) draft.run.setup = d.setup ?? "";
+  if (overwrite || !draft.run.stopCommand) draft.run.stopCommand = d.stopCommand ?? "";
+}
+
+// ── filesystem browser modal ──────────────────────────────────────────────
+async function openFsBrowser(onPick) {
+  const overlay = h("div", {
+    class: "fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4",
+    onclick: (e) => { if (e.target === overlay) overlay.remove(); },
+  });
+  const card = h("div", {
+    class: "bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl w-[min(95vw,38rem)] max-h-[85vh] flex flex-col",
+  });
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  let currentPath = null; // server-canonicalised after the first fetch
+
+  async function fetchAndRender(targetPath) {
+    card.innerHTML = "";
+    card.appendChild(h("div", { class: "px-4 py-3 border-b border-neutral-800 text-base font-semibold" }, ["Pick a directory"]));
+    const body = h("div", { class: "p-4 space-y-2 overflow-y-auto flex-1" });
+    card.appendChild(body);
+
+    body.appendChild(h("p", { class: "text-xs text-neutral-500" }, ["loading…"]));
+    let data;
+    try {
+      const url = "/api/fs/list" + (targetPath ? "?path=" + encodeURIComponent(targetPath) : "");
+      const r = await fetch(url);
+      data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `${r.status}`);
+    } catch (err) {
+      body.innerHTML = "";
+      body.appendChild(h("p", { class: "text-rose-400 text-sm" }, [String(err)]));
+      return;
+    }
+
+    currentPath = data.path;
+    body.innerHTML = "";
+
+    body.appendChild(h("div", { class: "text-xs text-neutral-400 font-mono break-all" }, [currentPath]));
+
+    if (data.parent) {
+      body.appendChild(rowEl("..", "go up", () => fetchAndRender(data.parent)));
+    }
+
+    if (data.entries.length === 0) {
+      body.appendChild(h("p", { class: "text-xs text-neutral-500 italic" }, ["(empty)"]));
+    } else {
+      for (const entry of data.entries) {
+        body.appendChild(rowEl(
+          entry.name,
+          entry.isGitRepo ? "git repo" : "",
+          () => fetchAndRender(currentPath + "/" + entry.name),
+        ));
+      }
+    }
+
+    card.appendChild(h("div", { class: "px-4 py-3 border-t border-neutral-800 flex items-center justify-end gap-2" }, [
+      btn("cancel", { onClick: () => overlay.remove() }),
+      btn("pick this folder", {
+        variant: "primary",
+        onClick: () => {
+          if (currentPath) {
+            overlay.remove();
+            onPick(currentPath);
+          }
+        },
+      }),
+    ]));
+  }
+
+  function rowEl(name, badge, onClick) {
+    return h("button", {
+      class: "w-full text-left flex items-center justify-between px-3 py-2 rounded hover:bg-neutral-800 text-sm font-mono",
+      onclick: onClick,
+    }, [
+      h("span", { class: "text-neutral-200" }, [name]),
+      badge ? h("span", { class: "text-xs text-emerald-400" }, [badge]) : null,
+    ]);
+  }
+
+  fetchAndRender(null);
+}
+
+// Add a "+ new project" button next to the project selector so users can
+// reach the wizard from anywhere, not just the empty state.
+(function installSelectorCta() {
+  const headerLeft = document.querySelector("header .flex.items-center.gap-3");
+  if (!headerLeft) return;
+  const button = h("button", {
+    class: "px-2 py-1 text-xs rounded ring-1 transition font-medium bg-sky-900 hover:bg-sky-800 text-sky-100 ring-sky-700",
+    title: "Create a new project",
+    onclick: openNewProjectWizard,
+  }, ["+ new project"]);
+  headerLeft.appendChild(button);
+})();
