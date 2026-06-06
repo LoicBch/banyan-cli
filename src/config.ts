@@ -76,6 +76,40 @@ export interface RepoConfig {
   /** Strategy to use when merging via the PR/MR flow. Defaults to "squash"
    *  if not set. Per-repo because conventions vary across teams. */
   mergeStrategy?: "squash" | "merge" | "rebase";
+  /** Tech profile id picked at creation time (node, spring-boot, android,
+   *  django, custom). Free-form string in the schema so the dashboard can
+   *  evolve its profile list without a config migration. Today purely
+   *  informational; future banyan features may specialize behavior on it. */
+  tech?: string;
+  /** Files to copy from the main checkout into a freshly-created worktree.
+   *  Paths are relative to the repo root, may include subdirectories, and
+   *  must not contain `..`. Missing source files are skipped silently; the
+   *  destination is never overwritten if it already exists.
+   *
+   *  Typical use: gitignored dev secrets that every worktree still needs.
+   *
+   *  Example:
+   *    copyOnWorktree:
+   *      - .env
+   *      - .env.local
+   *      - src/main/resources/application-local.yml
+   */
+  copyOnWorktree?: string[];
+  /** `.env`-style files to parse and inject into the run command's
+   *  environment at spawn time. Paths are relative to the *worktree* (so
+   *  per-feature customizations apply). Same path safety rules as
+   *  `copyOnWorktree`. Banyan's dynamic values (port allocation,
+   *  composePorts, declared `run.env`) take precedence — they're applied
+   *  AFTER, so the shell uses them.
+   *
+   *  Useful for stacks that don't auto-load `.env` (Spring Boot, Django,
+   *  plain Node, Go). Pair with `copyOnWorktree` to seed the file first.
+   *
+   *  Example:
+   *    loadEnvFiles:
+   *      - .env.local
+   */
+  loadEnvFiles?: string[];
   run?: RunConfig;
   deployCommand?: string;
   // For type=compose only:
@@ -161,6 +195,13 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
         path: contractHome(r.path),
         ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
         ...(r.mergeStrategy ? { mergeStrategy: r.mergeStrategy } : {}),
+        ...(r.tech ? { tech: r.tech } : {}),
+        ...(r.copyOnWorktree && r.copyOnWorktree.length > 0
+          ? { copyOnWorktree: r.copyOnWorktree }
+          : {}),
+        ...(r.loadEnvFiles && r.loadEnvFiles.length > 0
+          ? { loadEnvFiles: r.loadEnvFiles }
+          : {}),
         ...(r.run
           ? {
               run: {
@@ -265,6 +306,46 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         }
         mergeStrategy = r.mergeStrategy as RepoConfig["mergeStrategy"];
       }
+
+      let tech: string | undefined;
+      if (r.tech !== undefined && r.tech !== null && r.tech !== "") {
+        if (typeof r.tech !== "string") {
+          throw new ConfigError(
+            `${sourcePath}: projects[${i}].repos[${j}].tech must be a string`,
+          );
+        }
+        tech = r.tech;
+      }
+
+      const validateRelPaths = (
+        raw: unknown,
+        fieldName: "copyOnWorktree" | "loadEnvFiles",
+      ): string[] | undefined => {
+        if (raw === undefined || raw === null) return undefined;
+        if (!Array.isArray(raw)) {
+          throw new ConfigError(
+            `${sourcePath}: projects[${i}].repos[${j}].${fieldName} must be a list of strings`,
+          );
+        }
+        const cleaned: string[] = [];
+        for (const [k, entry] of raw.entries()) {
+          if (typeof entry !== "string" || entry === "") {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].${fieldName}[${k}] must be a non-empty string`,
+            );
+          }
+          if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes("..")) {
+            throw new ConfigError(
+              `${sourcePath}: projects[${i}].repos[${j}].${fieldName}[${k}] '${entry}' must be a relative path without '..'`,
+            );
+          }
+          cleaned.push(entry);
+        }
+        return cleaned.length > 0 ? cleaned : undefined;
+      };
+
+      const copyOnWorktree = validateRelPaths(r.copyOnWorktree, "copyOnWorktree");
+      const loadEnvFiles = validateRelPaths(r.loadEnvFiles, "loadEnvFiles");
 
       let run: RunConfig | undefined;
       if (r.run !== undefined && r.run !== null) {
@@ -450,6 +531,9 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         path: rPath,
         ...(baseBranch ? { baseBranch } : {}),
         ...(mergeStrategy ? { mergeStrategy } : {}),
+        ...(tech ? { tech } : {}),
+        ...(copyOnWorktree ? { copyOnWorktree } : {}),
+        ...(loadEnvFiles ? { loadEnvFiles } : {}),
         ...(run ? { run } : {}),
         ...(deployCommand ? { deployCommand } : {}),
         ...(composeFile ? { composeFile } : {}),

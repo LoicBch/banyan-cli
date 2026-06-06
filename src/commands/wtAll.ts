@@ -11,6 +11,7 @@ import { buildAgentPrompt, resolveMode, type AgentMode } from "../agentPrompt.js
 import { generateAutopilotSettings, needsSupervisorHook } from "../autopilot.js";
 import { writeAgentState } from "../agentState.js";
 import { ensureBanyanMcpConfig } from "../claudeContext.js";
+import { copyDeclaredFiles } from "../worktreeFiles.js";
 
 /**
  * Spin up a feature environment for a project:
@@ -138,6 +139,14 @@ export async function wtAll(
     await git.worktreeAdd(r.path, wtPath, branch, startPoint);
     logger.ok(`worktree: ${wtPath} (${branch}${startPoint ? ` ← ${startPoint}` : ""})`);
     worktreePaths.push(wtPath);
+
+    // Seed declared gitignored files (typically .env) from the main checkout.
+    // Runs before the worktree_created hook so a hook can still override or
+    // extend the result.
+    if (r.copyOnWorktree && r.copyOnWorktree.length > 0) {
+      copyDeclaredFiles(r.path, wtPath, r.copyOnWorktree, logger);
+    }
+
     await runHook(
       mainRepoPath,
       "worktree_created",

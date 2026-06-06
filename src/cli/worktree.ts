@@ -12,6 +12,7 @@ import { wtLs } from "../commands/wtLs.js";
 import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
+import { testStop } from "../commands/testStop.js";
 import { assignTask } from "../commands/assignTask.js";
 import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
 import { generateSlug } from "../slug.js";
@@ -267,8 +268,8 @@ export function register(
   projectCmd
     .command("cleanup <branch> [repo]")
     .description(
-      "full teardown of a feature: remove worktree(s) + delete branch (safe) + close pane + " +
-        "stop compose stack and drop volumes. omit repo to cleanup everything across the project.",
+      "full teardown of a feature: stop running tests + remove worktree(s) + delete branch (safe) + " +
+        "close pane + stop compose stack and drop volumes. omit repo to cleanup everything across the project.",
     )
     .option(
       "-f, --force",
@@ -283,6 +284,30 @@ export function register(
         repo,
         { includeCompose: !repo },
       );
+
+      // Stop the feature's run processes BEFORE removing worktrees. testStop
+      // kills the test-<feature> window and runs each repo's stopCommand
+      // (e.g. ./gradlew --stop) from within its worktree — so the worktree
+      // must still exist when this runs. We only do this for whole-feature
+      // cleanups; with an explicit `repo` arg, the user is doing surgery on
+      // one repo and the other panes should keep running.
+      const isFullCleanup = !repo && repos.length > 0;
+      if (isFullCleanup) {
+        try {
+          await testStop(
+            await buildContext(config, project.name),
+            feature,
+          );
+        } catch (err) {
+          // Best-effort: if test-stop fails (no window, stopCommand errors,
+          // etc.), keep going with the cleanup — the user wants the
+          // worktrees gone either way.
+          logger.warn(
+            `auto test-stop before cleanup failed (continuing): ${(err as Error).message}`,
+          );
+        }
+      }
+
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await cleanup(
