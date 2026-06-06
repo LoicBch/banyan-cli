@@ -16,6 +16,7 @@ import { RefreshCw, Sparkles, X, ExternalLink, Archive } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface InboxTask {
   id: string;
@@ -84,7 +85,7 @@ export function Inbox(): React.JSX.Element {
   }
 
   if (error) return <ErrorPanel msg={error} />;
-  if (!data) return <Skeleton />;
+  if (!data) return <InboxSkeleton />;
 
   const active = data.entries.filter((e) => !e.dismissedAt && !e.spawnedAt);
   const archived = data.entries.filter((e) => e.dismissedAt || e.spawnedAt);
@@ -286,13 +287,44 @@ function EmptyInbox(): React.JSX.Element {
   );
 }
 
-function Skeleton(): React.JSX.Element {
+function InboxSkeleton(): React.JSX.Element {
   return (
-    <div className="mx-auto max-w-3xl p-6 space-y-3">
-      <div className="h-8 w-24 rounded bg-muted animate-pulse" />
-      <div className="space-y-3">
+    <div className="mx-auto max-w-3xl p-6 space-y-4">
+      <header className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-3.5 w-48" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-28" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </header>
+      <div className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-32 rounded-lg bg-muted/50 animate-pulse" />
+          <Card key={i}>
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-12" />
+                </div>
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+              <div className="flex items-end justify-between gap-3 pt-2 border-t border-border">
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-32" />
+                  <Skeleton className="h-8 w-28" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-20" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>

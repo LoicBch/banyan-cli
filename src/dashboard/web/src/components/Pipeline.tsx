@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface PipelineProps {
   projectName: string | null;
@@ -28,7 +29,7 @@ interface PipelineProps {
 export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
   const { data, error, loading } = usePolling<DashboardState>(fetchState, 2000);
 
-  if (loading && !data) return <Skeleton />;
+  if (loading && !data) return <PipelineSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
   if (!data || data.projects.length === 0) return <NoProjectsState />;
 
@@ -244,17 +245,57 @@ function collectPortsFromRepos(project: ProjectState, feature: string): Array<{ 
 
 // ── States ───────────────────────────────────────────────────────────────
 
-function Skeleton(): React.JSX.Element {
+function PipelineSkeleton(): React.JSX.Element {
   return (
-    <div className="mx-auto max-w-5xl p-6 space-y-3">
-      <div className="h-8 w-48 rounded bg-muted animate-pulse" />
-      <div className="h-4 w-32 rounded bg-muted animate-pulse" />
-      <div className="space-y-3 mt-6">
+    <div className="mx-auto max-w-5xl p-6 space-y-4">
+      <header className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-3.5 w-32" />
+        </div>
+        <Skeleton className="h-8 w-28" />
+      </header>
+      <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-24 rounded-lg bg-muted/50 animate-pulse" />
+          <FeatureCardSkeleton key={i} />
         ))}
       </div>
     </div>
+  );
+}
+
+function FeatureCardSkeleton(): React.JSX.Element {
+  // Mirror the shape of <FeatureCard> so the layout doesn't jump when data
+  // arrives: status dot, feature name, mode badge, repo+port row, actions.
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-2 rounded-full" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 w-16" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-1 w-32 rounded-full" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Skeleton className="size-9" />
+            <Skeleton className="size-9" />
+            <Skeleton className="size-9" />
+            <Skeleton className="size-9" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

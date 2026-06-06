@@ -14,6 +14,7 @@ import { RotateCcw, Save } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Action {
   id: string;
@@ -88,7 +89,7 @@ export function Shortcuts(): React.JSX.Element {
   }
 
   if (error) return <ErrorPanel msg={error} />;
-  if (!state) return <Skeleton />;
+  if (!state) return <ShortcutsSkeleton />;
 
   const dirty = JSON.stringify(bindings) !== JSON.stringify(state.bindings);
 
@@ -151,11 +152,29 @@ export function Shortcuts(): React.JSX.Element {
   );
 }
 
-function Skeleton(): React.JSX.Element {
+function ShortcutsSkeleton(): React.JSX.Element {
   return (
-    <div className="mx-auto max-w-3xl p-6 space-y-3">
-      <div className="h-8 w-32 rounded bg-muted animate-pulse" />
-      <div className="h-72 rounded-lg bg-muted/50 animate-pulse" />
+    <div className="mx-auto max-w-3xl p-6 space-y-4">
+      <header className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-3.5 w-64" />
+        </div>
+        <Skeleton className="h-8 w-32" />
+      </header>
+      <Card>
+        <CardContent className="p-0 divide-y divide-border">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4 px-4 py-2.5">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-56" />
+              </div>
+              <Skeleton className="h-8 w-20" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

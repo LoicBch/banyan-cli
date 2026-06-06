@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface RepoConfig {
   name: string;
@@ -134,7 +135,7 @@ export function Config(): React.JSX.Element {
   }
 
   if (error) return <ErrorPanel msg={error} />;
-  if (!data) return <Skeleton />;
+  if (!data) return <ConfigSkeleton />;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6 animate-fade-in">
@@ -319,11 +320,39 @@ function PresetsEditor({
   );
 }
 
-function Skeleton(): React.JSX.Element {
+function ConfigSkeleton(): React.JSX.Element {
   return (
-    <div className="mx-auto max-w-4xl p-6 space-y-3">
-      <div className="h-8 w-24 rounded bg-muted animate-pulse" />
-      {[0, 1, 2].map((i) => <div key={i} className="h-40 rounded-lg bg-muted/50 animate-pulse" />)}
+    <div className="mx-auto max-w-4xl p-6 space-y-6">
+      <header className="space-y-2">
+        <Skeleton className="h-7 w-24" />
+        <Skeleton className="h-3.5 w-96" />
+      </header>
+      {[0, 1].map((p) => (
+        <section key={p} className="space-y-3">
+          <Skeleton className="h-6 w-32" />
+          {[0, 1].map((r) => (
+            <Card key={r}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                  <Skeleton className="h-8 w-20" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
