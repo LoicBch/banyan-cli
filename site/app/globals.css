@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Force dark — this is a dark-mode-only marketing site. */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 7%;
+    --card-foreground: 0 0% 98%;
+    --primary: 158 64% 52%;             /* emerald-400 */
+    --primary-foreground: 240 10% 3.9%;
+    --secondary: 240 4% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 4% 14%;
+    --accent-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 158 64% 52%;
+    --radius: 0.5rem;
+  }
+
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* Subtle radial accent that anchors the dark page */
+    background-image:
+      radial-gradient(circle at 20% 0%, hsl(158 64% 12% / 0.4), transparent 50%),
+      radial-gradient(circle at 80% 0%, hsl(158 64% 8% / 0.3), transparent 40%);
+    background-attachment: fixed;
+  }
+
+  /* Selection color matches the emerald accent */
+  ::selection {
+    background-color: hsl(var(--primary) / 0.3);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer utilities {
+  /* Gradient text used in hero */
+  .text-gradient {
+    background: linear-gradient(
+      90deg,
+      hsl(0 0% 100%) 0%,
+      hsl(0 0% 100%) 40%,
+      hsl(158 64% 60%) 70%,
+      hsl(158 64% 70%) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 8s ease infinite;
+  }
+
+  /* Grid background, ultra-subtle, used behind hero */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(0 0% 100% / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(0 0% 100% / 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(circle at 50% 0%, black 0%, transparent 70%);
+  }
+
+  /* Glow effect for the primary CTA */
+  .glow-primary {
+    box-shadow:
+      0 0 0 1px hsl(158 64% 40% / 0.3),
+      0 8px 32px -8px hsl(158 64% 40% / 0.4),
+      0 0 60px -10px hsl(158 64% 40% / 0.2);
+  }
+}
