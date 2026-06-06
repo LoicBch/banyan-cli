@@ -17,6 +17,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Inbox as InboxIcon, Plug } from "lucide-react";
 
 interface InboxTask {
   id: string;
@@ -263,27 +265,31 @@ function TaskCard({
 
 function EmptySources(): React.JSX.Element {
   return (
-    <Card className="border-dashed">
-      <CardContent className="py-10 text-center space-y-2">
-        <h3 className="text-base font-medium">No integration sources configured</h3>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Add a source to <code className="text-foreground">~/.config/banyan/integrations.yaml</code> to start pulling tasks (ClickUp, etc.)
-        </p>
-      </CardContent>
-    </Card>
+    <EmptyState
+      icon={Plug}
+      title="No integration sources configured"
+      description="Connect ClickUp, Linear, or Jira to pull tasks straight into your inbox — accept one and banyan spawns the feature with the task description as the agent's first prompt."
+      hint={
+        <>
+          Edit{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+            ~/.config/banyan/integrations.yaml
+          </code>{" "}
+          and click "Poll now" once a source is configured.
+        </>
+      }
+    />
   );
 }
 
 function EmptyInbox(): React.JSX.Element {
   return (
-    <Card className="border-dashed">
-      <CardContent className="py-10 text-center space-y-2">
-        <h3 className="text-base font-medium">Inbox empty</h3>
-        <p className="text-sm text-muted-foreground">
-          No matching tasks in any source. Click "Poll now" to refresh.
-        </p>
-      </CardContent>
-    </Card>
+    <EmptyState
+      icon={InboxIcon}
+      title="Inbox empty"
+      description="No matching tasks in the configured sources right now. Tasks appear here once your filters in integrations.yaml match an open ClickUp/Linear/Jira ticket."
+      hint={<>Click <span className="font-medium text-foreground">Poll now</span> to force a refresh.</>}
+    />
   );
 }
 
