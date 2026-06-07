@@ -349,7 +349,7 @@ bn mcp-serve                             MCP server over stdio
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
 bn <project> close                       close the tmux session (worktrees on disk kept)
-bn <project> attach / detach / status / resume / ls-features / ports
+bn <project> attach / status / resume / ls-features / ports
 bn <project> deploy [repo] [args...]
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
@@ -370,7 +370,7 @@ bn <project> approve <feature>           approve a pending plan or report
 
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]
 
-bn <project> add-repo / remove-repo / remove / set-base / set-run / infer-run / config
+bn <project> add-repo / remove-repo / remove / set-base / set-run / infer-run
 ```
 
 If you're inside a configured repo (or its worktree), drop the project name — banyan infers it from cwd. Or symlink `banyan` to your project name to skip the project arg entirely.

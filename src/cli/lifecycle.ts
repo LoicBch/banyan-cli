@@ -7,11 +7,9 @@ import type { Config, ProjectConfig } from "../config.js";
 import { buildContext } from "../context.js";
 import { logger } from "../logger.js";
 import { resolveLocation } from "../location.js";
-import { configShow } from "../commands/configCmd.js";
 import { start } from "../commands/start.js";
 import { stop } from "../commands/stop.js";
 import { attach } from "../commands/attach.js";
-import { detach } from "../commands/detach.js";
 import { status } from "../commands/status.js";
 import { test as testCmd } from "../commands/test.js";
 import { testStop } from "../commands/testStop.js";
@@ -21,7 +19,6 @@ import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
 import { deploy } from "../commands/deploy.js";
 import { reportsLs } from "../commands/reportsLs.js";
-import { agentPrompt } from "../commands/agentPrompt.js";
 import { todoCmd } from "../commands/todo.js";
 import { approveCmd } from "../commands/approve.js";
 
@@ -30,13 +27,6 @@ export function register(
   project: ProjectConfig,
   config: Config,
 ): void {
-  projectCmd
-    .command("config")
-    .description("show the project's static config (repos, run commands, base branches) — what's stored in ~/.config/banyan/config.yaml")
-    .action(async () => {
-      await configShow(await buildContext(config, project.name));
-    });
-
   projectCmd
     .command("start [branch] [repos...]")
     .description(
@@ -91,13 +81,6 @@ export function register(
     .action(async () => {
       const code = await attach(await buildContext(config, project.name));
       process.exit(code);
-    });
-
-  projectCmd
-    .command("detach")
-    .description("detach clients from the tmux session")
-    .action(async () => {
-      await detach(await buildContext(config, project.name));
     });
 
   projectCmd
@@ -215,32 +198,6 @@ export function register(
         },
       ) => {
         await todoCmd(config, project.name, feature, opts);
-      },
-    );
-
-  projectCmd
-    .command("agent-prompt")
-    .description(
-      "view or edit the per-mode agent system prompt for this project. " +
-        "stored at ~/.config/banyan/<project>.agentprompt.<mode>.md (per-mode override), " +
-        "falls back to the baked-in default for that mode. " +
-        "interactive mode has no prompt (banyan injects nothing).",
-    )
-    .option(
-      "-m, --mode <mode>",
-      "which mode's prompt: assisted | autonomous | autopilot (default: autonomous)",
-    )
-    .option("-e, --edit", "open the per-project per-mode file in $EDITOR")
-    .option("--default", "print the baked-in default instead of the per-project file")
-    .option("--rendered", "substitute {{project}}/{{feature}} placeholders for preview")
-    .action(
-      async (opts: {
-        mode?: string;
-        edit?: boolean;
-        default?: boolean;
-        rendered?: boolean;
-      }) => {
-        await agentPrompt(project.name, opts);
       },
     );
 
