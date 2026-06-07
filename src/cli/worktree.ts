@@ -8,7 +8,6 @@ import { getProject } from "../config.js";
 import { logger } from "../logger.js";
 import { wtAll } from "../commands/wtAll.js";
 import { wtRm } from "../commands/wtRm.js";
-import { wtLs } from "../commands/wtLs.js";
 import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
@@ -195,13 +194,6 @@ export function register(
           { force: opts.force },
         );
       }
-    });
-
-  projectCmd
-    .command("wt-ls")
-    .description("list worktrees across all repos")
-    .action(async () => {
-      await wtLs(await buildContext(config, project.name));
     });
 
   projectCmd

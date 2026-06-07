@@ -148,9 +148,12 @@ $ bn myproject start profile-page
 $ bn myproject wt tag-filter -p "fix infinite loop on tag filter"
   ✓ feature/tag-filter worktrees, agent, stack on :8082
 
-$ bn myproject ls-features
-  profile-page  running  3 panes  :3001 :8081
-  tag-filter    running  2 panes  :3002 :8082
+$ bn myproject status
+  session 'banyan-myproject': running
+  features:
+    profile-page  autopilot  agent: live  stack: running
+    tag-filter    autonomous agent: live  stack: running
+  …
 
 $ bn myproject merge tag-filter && bn myproject cleanup tag-filter
   ✓ rebase clean · pushed · MR merged · stack destroyed · worktrees removed
@@ -167,7 +170,7 @@ $ bn myproject resume
 <details>
 <summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, config editor, conflict pulse, remote mode with QR</summary>
 
-`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
+`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
 
 `bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds, approve plans, accept tasks from your phone.
 
@@ -348,7 +351,7 @@ bn serve [--remote]                      web dashboard
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
 bn <project> close                       close the tmux session (worktrees on disk kept)
-bn <project> status / resume / ls-features / ports
+bn <project> status / resume / ports
 bn <project> deploy [repo] [args...]
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
@@ -358,13 +361,11 @@ bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
   --prefix <p>    branch prefix (default 'feature')
 bn <project> task <feature> <prompt>     paste into the feature's agent pane
 bn <project> wt-rm <feature> [repo]
-bn <project> wt-ls
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
 
 bn <project> todo <feature>
-bn <project> reports [feature]
 bn <project> approve <feature>           approve a pending plan or report
 
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]

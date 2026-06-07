@@ -1,6 +1,6 @@
 /**
  * Per-project lifecycle commands: workspace + feature start/stop, status,
- * resume, ports, ls-features, deploy.
+ * resume, ports, deploy.
  */
 import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
@@ -12,12 +12,10 @@ import { stop } from "../commands/stop.js";
 import { status } from "../commands/status.js";
 import { test as testCmd } from "../commands/test.js";
 import { testStop } from "../commands/testStop.js";
-import { testLs } from "../commands/testLs.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
 import { deploy } from "../commands/deploy.js";
-import { reportsLs } from "../commands/reportsLs.js";
 import { todoCmd } from "../commands/todo.js";
 import { approveCmd } from "../commands/approve.js";
 
@@ -104,13 +102,6 @@ export function register(
     });
 
   projectCmd
-    .command("ls-features")
-    .description("list features that currently have a running test window")
-    .action(async () => {
-      await testLs(await buildContext(config, project.name));
-    });
-
-  projectCmd
     .command("ports [branch]")
     .description(
       "show port allocations: run ports (back/front/...) from the last `bn start` and live compose ports (DB/PMA/...). " +
@@ -119,33 +110,6 @@ export function register(
     .action(async (feature: string | undefined) => {
       await portsCmd(config, project.name, feature);
     });
-
-  projectCmd
-    .command("reports [branch]")
-    .description(
-      "show end-of-task reports submitted by per-feature agents (timeline). " +
-        "no branch: all reports. with <branch>: just that branch's history.",
-    )
-    .option("--latest", "one entry per branch (the latest), useful as a status snapshot")
-    .option("--json", "emit raw JSON (one record per line in --watch mode)")
-    .option("-w, --watch", "tail new reports as they arrive (Ctrl+C to stop)")
-    .action(
-      async (
-        feature: string | undefined,
-        opts: {
-          latest?: boolean;
-          json?: boolean;
-          watch?: boolean;
-        },
-      ) => {
-        await reportsLs(config, project.name, {
-          feature,
-          latestOnly: opts.latest,
-          json: opts.json,
-          watch: opts.watch,
-        });
-      },
-    );
 
   projectCmd
     .command("approve [branch]")
