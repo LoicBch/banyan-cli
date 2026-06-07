@@ -28,6 +28,7 @@ import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
 import { confirm } from "@/lib/confirm";
+import { useKeyboard } from "@/lib/useKeyboard";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,6 +72,133 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
   // Derive features from worktrees if /api/pipeline isn't surfaced in state.
   const features = deriveFeatures(project);
 
+  // List nav: which card is "selected" (visible keyboard cursor).
+  // Reset selection when the feature set changes (a feature gets removed by
+  // cleanup, etc.) so we don't keep pointing at a stale index.
+  const [selectedIdx, setSelectedIdx] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (selectedIdx !== null && selectedIdx >= features.length) {
+      setSelectedIdx(features.length > 0 ? features.length - 1 : null);
+    }
+  }, [features.length, selectedIdx]);
+
+  // Per-feature in-flight flag so two actions on the same card don't race
+  // each other, while letting different cards run in parallel.
+  const [busyByFeature, setBusyByFeature] = React.useState<Record<string, boolean>>({});
+
+  async function runFeatureAction(
+    feature: string,
+    label: string,
+    fn: () => Promise<actions.ActionResult>,
+  ): Promise<void> {
+    setBusyByFeature((s) => ({ ...s, [feature]: true }));
+    const p = fn();
+    toast.promise(p, {
+      loading: `${label}…`,
+      success: (r) => (r.ok ? `${label} ✓` : `${label} failed`),
+      error: () => `${label} failed`,
+    });
+    const r = await p;
+    setBusyByFeature((s) => ({ ...s, [feature]: false }));
+    if (!r.ok && r.error) {
+      toast.error(label, { description: r.error });
+    }
+  }
+
+  function isFeatureRunning(f: FeatureState): boolean {
+    const ports = f.ports ?? collectPortsFromRepos(project, f.feature);
+    return ports.length > 0;
+  }
+
+  async function dispatchStart(f: FeatureState): Promise<void> {
+    await runFeatureAction(f.feature, "Start", () =>
+      actions.testStart(project.name, f.feature),
+    );
+  }
+  async function dispatchStop(f: FeatureState): Promise<void> {
+    await runFeatureAction(f.feature, "Stop", () =>
+      actions.testStop(project.name, f.feature),
+    );
+  }
+  async function dispatchMerge(f: FeatureState): Promise<void> {
+    const repos = f.reposActive ?? reposWithWorktree(project, f.feature);
+    const ok = await confirm({
+      title: `Merge '${f.feature}'?`,
+      description:
+        "Banyan will rebase on the base branch, push, open an MR/PR, auto-resolve conflicts if any, then merge.",
+      consequences: buildMergeConsequences(project, repos),
+      confirmLabel: "Merge feature",
+    });
+    if (!ok) return;
+    await runFeatureAction(f.feature, "Merge", () =>
+      actions.merge(project.name, f.feature),
+    );
+  }
+  async function dispatchCleanup(f: FeatureState): Promise<void> {
+    const repos = f.reposActive ?? reposWithWorktree(project, f.feature);
+    const ok = await confirm({
+      title: `Cleanup '${f.feature}'?`,
+      description: "Full teardown of the feature. This can't be undone.",
+      consequences: buildCleanupConsequences(project, f.feature, repos),
+      destructive: true,
+      confirmLabel: "Delete everything",
+    });
+    if (!ok) return;
+    await runFeatureAction(f.feature, "Cleanup", () =>
+      actions.cleanup(project.name, f.feature),
+    );
+  }
+
+  // ── Keyboard navigation (Tier 1) ──────────────────────────────────────
+  // Pipeline-scoped bindings — registered only while this component is
+  // mounted, so they don't fight other views' bindings. The `n` shortcut
+  // (new feature) is App-level so it works from any view.
+  useKeyboard({
+    j: () => moveSelection(1),
+    arrowdown: () => moveSelection(1),
+    k: () => moveSelection(-1),
+    arrowup: () => moveSelection(-1),
+    escape: () => setSelectedIdx(null),
+    s: () => {
+      const f = selectedFeature();
+      if (!f) return;
+      if (busyByFeature[f.feature]) return;
+      if (isFeatureRunning(f)) void dispatchStop(f);
+      else void dispatchStart(f);
+    },
+    m: () => {
+      const f = selectedFeature();
+      if (!f || busyByFeature[f.feature]) return;
+      void dispatchMerge(f);
+    },
+    c: () => {
+      const f = selectedFeature();
+      if (!f || busyByFeature[f.feature]) return;
+      void dispatchCleanup(f);
+    },
+    a: () => {
+      const f = selectedFeature();
+      if (!f) return;
+      onAttach(project.name);
+    },
+  });
+
+  function moveSelection(delta: 1 | -1): void {
+    setSelectedIdx((cur) => {
+      if (features.length === 0) return null;
+      if (cur === null) return delta > 0 ? 0 : features.length - 1;
+      const next = cur + delta;
+      if (next < 0) return 0;
+      if (next >= features.length) return features.length - 1;
+      return next;
+    });
+  }
+
+  function selectedFeature(): FeatureState | null {
+    if (selectedIdx === null) return null;
+    return features[selectedIdx] ?? null;
+  }
+
   if (features.length === 0) {
     return (
       <EmptyState
@@ -103,69 +231,69 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
 
   return (
     <div className="space-y-3">
-      {features.map((f) => (
-        <FeatureCard key={f.feature} feature={f} project={project} />
+      {features.map((f, i) => (
+        <FeatureCard
+          key={f.feature}
+          feature={f}
+          project={project}
+          selected={i === selectedIdx}
+          busy={!!busyByFeature[f.feature]}
+          isRunning={isFeatureRunning(f)}
+          onSelect={() => setSelectedIdx(i)}
+          onStart={() => dispatchStart(f)}
+          onStop={() => dispatchStop(f)}
+          onMerge={() => dispatchMerge(f)}
+          onCleanup={() => dispatchCleanup(f)}
+          onAttach={() => onAttach(project.name)}
+        />
       ))}
     </div>
   );
 }
 
-function FeatureCard({ feature, project }: { feature: FeatureState; project: ProjectState }): React.JSX.Element {
+interface FeatureCardProps {
+  feature: FeatureState;
+  project: ProjectState;
+  selected: boolean;
+  busy: boolean;
+  isRunning: boolean;
+  onSelect: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  onMerge: () => void;
+  onCleanup: () => void;
+  onAttach: () => void;
+}
+
+function FeatureCard({
+  feature,
+  project,
+  selected,
+  busy,
+  isRunning,
+  onSelect,
+  onStart,
+  onStop,
+  onMerge,
+  onCleanup,
+  onAttach,
+}: FeatureCardProps): React.JSX.Element {
   const ports = feature.ports ?? collectPortsFromRepos(project, feature.feature);
   const reposTouched = feature.reposActive ?? reposWithWorktree(project, feature.feature);
   const todosPct = feature.todos && feature.todos.total > 0
     ? Math.round((feature.todos.done / feature.todos.total) * 100)
     : null;
-  const isRunning = ports.length > 0;
-  const [busy, setBusy] = React.useState(false);
-
-  // Each action wraps the corresponding /api/actions/* call with toast feedback.
-  // `busy` disables all buttons while one is in flight to avoid spamming the
-  // backend (cleanup in particular is destructive).
-  async function runAction(label: string, fn: () => Promise<actions.ActionResult>) {
-    setBusy(true);
-    const p = fn();
-    toast.promise(p, {
-      loading: `${label}…`,
-      success: (r) => (r.ok ? `${label} ✓` : `${label} failed`),
-      error: () => `${label} failed`,
-    });
-    const r = await p;
-    setBusy(false);
-    if (!r.ok && r.error) {
-      // Append a second toast with the actual error message — sonner's
-      // success/error already shows the headline.
-      toast.error(label, { description: r.error });
-    }
-  }
-
-  const onStart = () => runAction("Start", () => actions.testStart(project.name, feature.feature));
-  const onStop = () => runAction("Stop", () => actions.testStop(project.name, feature.feature));
-  const onMerge = async () => {
-    const ok = await confirm({
-      title: `Merge '${feature.feature}'?`,
-      description:
-        "Banyan will rebase on the base branch, push, open an MR/PR, auto-resolve conflicts if any, then merge.",
-      consequences: buildMergeConsequences(project, reposTouched),
-      confirmLabel: "Merge feature",
-    });
-    if (!ok) return;
-    runAction("Merge", () => actions.merge(project.name, feature.feature));
-  };
-  const onCleanup = async () => {
-    const ok = await confirm({
-      title: `Cleanup '${feature.feature}'?`,
-      description: "Full teardown of the feature. This can't be undone.",
-      consequences: buildCleanupConsequences(project, feature.feature, reposTouched),
-      destructive: true,
-      confirmLabel: "Delete everything",
-    });
-    if (!ok) return;
-    runAction("Cleanup", () => actions.cleanup(project.name, feature.feature));
-  };
 
   return (
-    <Card className="hover:border-primary/40 hover:shadow-md transition-all">
+    <Card
+      onClick={onSelect}
+      className={cn(
+        "transition-all cursor-default",
+        selected
+          ? "border-primary/60 ring-2 ring-primary/30 shadow-md"
+          : "hover:border-primary/40 hover:shadow-md",
+      )}
+    >
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -256,7 +384,7 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={() => onAttach(project.name)}>
+                <DropdownMenuItem onSelect={onAttach}>
                   <Terminal className="size-4" />
                   <span>Copy attach command</span>
                 </DropdownMenuItem>

@@ -17,8 +17,11 @@ import { History } from "@/components/History";
 import { Config } from "@/components/Config";
 import { Ask } from "@/components/Ask";
 import { CommandPalette } from "@/components/CommandPalette";
+import { openKeyboardCheatsheet } from "@/components/KeyboardCheatsheet";
+import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { fetchState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
+import { useKeyboard } from "@/lib/useKeyboard";
 
 const STORAGE_SECTION = "banyan.web.section";
 const STORAGE_PROJECT = "banyan.web.project";
@@ -72,6 +75,16 @@ function Shell(): React.JSX.Element {
 
   // Default project: persisted choice, else first available.
   const activeProject = project && projects.includes(project) ? project : projects[0] ?? null;
+
+  // App-level keyboard bindings. View-specific bindings (j/k/s/m/c/a)
+  // live in their owning component (Pipeline) — useKeyboard handles the
+  // suppression rules so they don't fight.
+  useKeyboard({
+    "?": () => openKeyboardCheatsheet(),
+    n: () => {
+      if (activeProject) openWorktreeDialog(activeProject);
+    },
+  });
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
