@@ -348,7 +348,7 @@ bn mcp-serve                             MCP server over stdio
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
-bn <project> kill                        full session teardown
+bn <project> close                       close the tmux session (worktrees on disk kept)
 bn <project> attach / detach / status / resume / ls-features / ports
 bn <project> deploy [repo] [args...]
 

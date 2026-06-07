@@ -66,18 +66,20 @@ export function register(
     .description(
       "stop a branch's run processes (kills its test-<branch> window). " +
         "the agent pane and the project session are left running. " +
-        "use `bn <project> kill` to tear down the whole session.",
+        "use `bn <project> close` to tear down the whole session.",
     )
     .action(async (feature: string) => {
       await testStop(await buildContext(config, project.name), feature);
     });
 
   projectCmd
-    .command("kill")
+    .command("close")
     .description(
-      "tear down the entire project tmux session — orchestrator, agents, " +
-        "all running stacks. destructive, use when you want a clean slate. " +
-        "worktrees, reports, todos, etc. on disk are untouched.",
+      "close the project tmux session — orchestrator, agents, all running " +
+        "test windows. worktrees, branches, agent state, reports, todos, " +
+        "and compose volumes on disk are kept; `bn <project> start` brings " +
+        "everything back. for full teardown of a feature use " +
+        "`bn <project> cleanup <feature>`.",
     )
     .action(async () => {
       await stop(await buildContext(config, project.name));
