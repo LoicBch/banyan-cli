@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
 import { buildContext } from "../context.js";
 import { logger } from "../logger.js";
-import { resolveLocation } from "../location.js";
+import { resolveLocation, resolveFeatureFromCwd } from "../location.js";
 import { start } from "../commands/start.js";
 import { stop } from "../commands/stop.js";
 import { status } from "../commands/status.js";
@@ -51,14 +51,16 @@ export function register(
     });
 
   projectCmd
-    .command("stop <branch>")
+    .command("stop [branch]")
     .description(
       "stop a branch's run processes (kills its test-<branch> window). " +
+        "branch is inferred from cwd when omitted in a worktree. " +
         "the agent pane and the project session are left running. " +
         "use `bn <project> close` to tear down the whole session.",
     )
-    .action(async (feature: string) => {
-      await testStop(await buildContext(config, project.name), feature);
+    .action(async (feature: string | undefined) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "stop");
+      await testStop(await buildContext(config, project.name), feat);
     });
 
   projectCmd
@@ -146,27 +148,28 @@ export function register(
     );
 
   projectCmd
-    .command("approve <branch>")
+    .command("approve [branch]")
     .description(
       "approve (or reject) whatever's pending for this branch — the plan if a plan-review gate is open, " +
-        "otherwise the latest report. without flags: approve. with --reject: reject (agent revises). " +
-        "with --show: read current state, no mutation.",
+        "otherwise the latest report. branch is inferred from cwd when omitted in a worktree. " +
+        "without flags: approve. with --reject: reject (agent revises). with --show: read current state, no mutation.",
     )
     .option("--reject [reason]", "reject (the plan or report — whichever is pending) instead of approving")
     .option("--show", "show plan + report state without mutating")
     .action(
       async (
-        feature: string,
+        feature: string | undefined,
         opts: { reject?: string | boolean; show?: boolean },
       ) => {
-        await approveCmd(config, project.name, feature, opts);
+        const feat = resolveFeatureFromCwd(config, project.name, feature, "approve");
+        await approveCmd(config, project.name, feat, opts);
       },
     );
 
   projectCmd
-    .command("todo <branch>")
+    .command("todo [branch]")
     .description(
-      "view or edit the TODO list for a feature. " +
+      "view or edit the TODO list for a feature. branch is inferred from cwd when omitted in a worktree. " +
         "no flags = show. --set replaces the list, --add appends, --done/--undone toggles by id, --rm deletes. " +
         "ids are auto-assigned (1..N) and never reused.",
     )
@@ -178,7 +181,7 @@ export function register(
     .option("--json", "emit raw JSON")
     .action(
       async (
-        feature: string,
+        feature: string | undefined,
         opts: {
           set?: string[];
           add?: string[];
@@ -188,7 +191,8 @@ export function register(
           json?: boolean;
         },
       ) => {
-        await todoCmd(config, project.name, feature, opts);
+        const feat = resolveFeatureFromCwd(config, project.name, feature, "todo");
+        await todoCmd(config, project.name, feat, opts);
       },
     );
 

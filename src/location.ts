@@ -17,6 +17,7 @@ import path from "node:path";
 import { realpathSync } from "node:fs";
 import type { Config, ProjectConfig, RepoConfig } from "./config.js";
 import * as naming from "./naming.js";
+import { UsageError } from "./errors.js";
 
 export interface LocationContext {
   project: ProjectConfig;
@@ -82,6 +83,31 @@ export function resolveLocation(cfg: Config, cwd: string): LocationContext | und
     worktreePath: wtPath,
     inMainRepo: false,
   };
+}
+
+/**
+ * Resolve the feature arg of a per-project command, falling back to the
+ * worktree the user is currently in. Used by lifecycle/worktree/env
+ * subcommands that take `<branch>` — pass `[branch]` to commander, then
+ * call this to either use what they typed or infer it from cwd.
+ *
+ * Throws UsageError if no feature is provided and cwd isn't inside a
+ * worktree of `projectName`. The error message names the command so the
+ * user knows what's missing.
+ */
+export function resolveFeatureFromCwd(
+  cfg: Config,
+  projectName: string,
+  provided: string | undefined,
+  commandHint: string,
+): string {
+  if (provided) return provided;
+  const loc = resolveLocation(cfg, process.cwd());
+  if (loc?.feature && loc.project.name === projectName) return loc.feature;
+  throw new UsageError(
+    `no <feature> given and cwd isn't in a worktree of '${projectName}'. ` +
+      `pass it explicitly: bn ${projectName} ${commandHint} <feature>`,
+  );
 }
 
 /** Resolve path and follow symlinks (e.g. /tmp → /private/tmp on macOS). */
