@@ -7,7 +7,6 @@
  *
  * Implementation is split across:
  *   - tools.ts — registry of MCP tool specs + handlers
- *   - log.ts   — audit log + CLI-equivalent translation
  *   - api.ts   — banyan operations (used by both MCP and dashboard)
  *
  * Usage from the user's MCP client config:
@@ -25,7 +24,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import path from "node:path";
 import { tools, type ToolScope } from "./tools.js";
-import { logToolCall } from "./log.js";
 import { isDraftFeature } from "../naming.js";
 
 /**
@@ -72,7 +70,6 @@ const DRAFT_ALLOWED_TOOLS = new Set([
   "banyan_finalize_feature_name",
 ]);
 
-export { MCP_LOG_PATH } from "./log.js";
 
 export async function runMcpServer(): Promise<void> {
   // Quiet stdout so logger output goes to stderr, leaving stdout clean for
@@ -98,7 +95,6 @@ export async function runMcpServer(): Promise<void> {
     const name = request.params.name;
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     const tool = exposedTools.find((t) => t.spec.name === name);
-    const start = Date.now();
 
     // Draft guard rail — see detectDraftFeature(). An agent in a draft
     // worktree must finalize its feature name before doing anything else.
@@ -109,13 +105,6 @@ export async function runMcpServer(): Promise<void> {
         `Call banyan_finalize_feature_name({ name: "<kebab-case>" }) first with a short ` +
         `slug describing the user's task, then retry. ` +
         `Allowed tools in draft state: ${[...DRAFT_ALLOWED_TOOLS].join(", ")}.`;
-      logToolCall({
-        tool: name,
-        args,
-        status: "error",
-        durationMs: 0,
-        errorMsg: "blocked by draft guard",
-      });
       return {
         isError: true,
         content: [{ type: "text", text: msg }],
@@ -123,13 +112,6 @@ export async function runMcpServer(): Promise<void> {
     }
 
     if (!tool) {
-      logToolCall({
-        tool: name,
-        args,
-        status: "error",
-        durationMs: 0,
-        errorMsg: "unknown tool",
-      });
       return {
         isError: true,
         content: [{ type: "text", text: `unknown tool: ${name}` }],
@@ -137,24 +119,11 @@ export async function runMcpServer(): Promise<void> {
     }
     try {
       const result = await tool.handler(args);
-      logToolCall({
-        tool: name,
-        args,
-        status: "ok",
-        durationMs: Date.now() - start,
-      });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logToolCall({
-        tool: name,
-        args,
-        status: "error",
-        durationMs: Date.now() - start,
-        errorMsg: msg,
-      });
       return {
         isError: true,
         content: [{ type: "text", text: msg }],
