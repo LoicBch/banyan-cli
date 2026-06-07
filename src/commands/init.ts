@@ -4,6 +4,7 @@ import type { Config } from "../config.js";
 import { saveConfig, expandHome } from "../config.js";
 import { logger } from "../logger.js";
 import { UsageError, ConfigError } from "../errors.js";
+import { setupTmuxOnInit } from "../tmuxSetup.js";
 
 export interface InitOpts {
   repoName?: string;
@@ -43,6 +44,12 @@ export async function init(
 
   await saveConfig(next);
   logger.ok(`created project "${projectName}" with repo "${repoName}" → ${repoPath}`);
+
+  // Tmux shortcut bootstrap. Idempotent: re-renders only when stale; prompts
+  // to wire `~/.tmux.conf` only on first init (when the source-file line is
+  // missing). Subsequent inits / banyan upgrades stay silent.
+  await setupTmuxOnInit();
+
   logger.info(``);
   logger.info(`next steps:`);
   logger.info(`  bn ${projectName} add-repo <name> [path]   # for each additional repo`);

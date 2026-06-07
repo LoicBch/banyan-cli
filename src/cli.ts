@@ -9,7 +9,6 @@ import { packageVersion } from "./version.js";
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
 import { serve } from "./commands/serve.js";
-import { installTmux } from "./commands/installTmux.js";
 import { autopilotTick } from "./autopilot.js";
 
 import { registerProjectCommands } from "./cli/project.js";
@@ -47,7 +46,6 @@ export async function run(argv: string[]): Promise<number> {
     "ls",
     "init",
     "serve",
-    "install-tmux",
     "_autopilot-tick",
     "mcp-serve",
     "help",
@@ -129,14 +127,6 @@ export async function run(argv: string[]): Promise<number> {
         await init(config, project, opts);
       },
     );
-
-  program
-    .command("install-tmux")
-    .description("render the banyan tmux config to ~/.config/banyan/banyan.tmux.conf")
-    .option("-f, --force", "overwrite an existing rendered config")
-    .action(async (opts: { force?: boolean }) => {
-      await installTmux({ force: opts.force });
-    });
 
   // Hidden internal command — invoked by claude as a Stop hook for features
   // launched in autopilot mode. Reads stdin (claude hook payload), checks

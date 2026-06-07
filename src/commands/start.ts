@@ -13,10 +13,14 @@ import type { Context } from "../context.js";
 import * as tmux from "../tmux.js";
 import { buildOrchestratorClaudeCommand } from "../orchestratorAgent.js";
 import { UsageError } from "../errors.js";
+import { refreshTmuxConfSilently } from "../tmuxSetup.js";
 
 const WORKSPACE_WINDOW = "workspace";
 
 export async function start(ctx: Context): Promise<number> {
+  // Keeps the rendered tmux conf in sync if banyan was upgraded since the
+  // last `bn init`. Silent unless the file actually changed; never blocks.
+  refreshTmuxConfSilently();
   await ensureWorkspace(ctx);
   await tmux.selectWindow(ctx.naming.session, WORKSPACE_WINDOW);
   return await tmux.attach(ctx.naming.session);

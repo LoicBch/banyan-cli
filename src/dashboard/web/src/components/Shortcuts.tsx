@@ -99,7 +99,7 @@ export function Shortcuts(): React.JSX.Element {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Shortcuts</h1>
           <p className="text-sm text-muted-foreground">
-            Tmux key bindings installed by <code className="text-foreground">bn install-tmux</code>
+            Tmux key bindings (installed during <code className="text-foreground">bn init</code>)
           </p>
         </div>
         <div className="flex gap-2">

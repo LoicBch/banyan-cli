@@ -106,8 +106,9 @@ Different worktrees, different ports, different DBs, different agents. An orches
 ```bash
 git clone https://github.com/LoicBch/banyan-cli
 cd banyan-cli && npm install && npm run build && npm link
-bn install-tmux
 ```
+
+`bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
 
 Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges), `$OPENROUTER_API_KEY` (faster LLM-named features).
 
@@ -343,7 +344,6 @@ bn ls                                    list projects
 bn init <project>                        create a project
 bn ask "<question>"                      answer from project memory
 bn serve [--remote]                      web dashboard
-bn install-tmux [-f]                     render tmux config
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
