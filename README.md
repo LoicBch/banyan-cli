@@ -255,7 +255,7 @@ End-of-task reports (`banyan_report_done`) and per-feature TODO lists feed `bn a
 { "mcpServers": { "banyan": { "command": "banyan", "args": ["mcp-serve"] } } }
 ```
 
-Tools cover the full lifecycle: `banyan_create_feature`, `banyan_merge_feature`, `banyan_list_features`, `banyan_get_stack_ports`, todos, reports, and dispatch to per-feature agents. The orchestrator gets these wired in automatically. `bn mcp-log -f` tails every tool call with the equivalent CLI command.
+Tools cover the full lifecycle: `banyan_create_feature`, `banyan_merge_feature`, `banyan_list_features`, `banyan_get_stack_ports`, todos, reports, and dispatch to per-feature agents. The orchestrator gets these wired in automatically.
 
 </details>
 
@@ -345,7 +345,6 @@ bn ask "<question>"                      answer from project memory
 bn serve [--remote]                      web dashboard
 bn install-tmux [-f]                     render tmux config
 bn mcp-serve                             MCP server over stdio
-bn mcp-log [-f] [-n N]                   tail recent MCP tool calls
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
@@ -364,8 +363,6 @@ bn <project> wt-ls
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
-bn <project> sync
-bn <project> pulse [--watch <s>]
 
 bn <project> todo <feature>
 bn <project> reports [feature]
