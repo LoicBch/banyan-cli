@@ -89,12 +89,29 @@ export async function mergeViaPR(
   ctx.logger.ok(`pushed ${branch}`);
 
   // 4. Find existing MR or create one
+  //
+  // Workflow case we must handle: the user merged a feature, kept working on
+  // the same worktree without `bn cleanup`, pushed again, and re-runs merge.
+  // The previous MR is now CLOSED (squash-merged + auto-deleted source
+  // branch). If we reuse it, the upcoming merge call will hit "not open" and
+  // silently no-op while the new commits never reach the base branch.
+  //
+  // So: when `provider.status` finds a MR but it's already merged
+  // (`mergedAt` is set), treat it as "no existing MR" and create a new one
+  // for the follow-up commits.
   const existing = await provider.status(repoPath, branch);
+  const existingIsActionable =
+    existing.exists && !!existing.url && !existing.mergedAt;
   let mrUrl: string;
-  if (existing.exists && existing.url) {
-    mrUrl = existing.url;
+  if (existingIsActionable) {
+    mrUrl = existing.url!;
     ctx.logger.info(`found existing MR/PR: ${mrUrl}`);
   } else {
+    if (existing.mergedAt) {
+      ctx.logger.info(
+        `prior MR ${existing.url} already merged — opening a new one for the follow-up commits`,
+      );
+    }
     ctx.logger.info(`creating MR/PR…`);
     const title = humanizeFeatureTitle(ctx.feature!);
     const { url } = await provider.create(repoPath, branch, {
