@@ -13,7 +13,16 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Play, GitMerge, Trash2, ExternalLink, Plus, FolderPlus, Square } from "lucide-react";
+import {
+  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { fetchState, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
@@ -207,34 +216,85 @@ function FeatureCard({ feature, project }: { feature: FeatureState; project: Pro
             ) : null}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon" title="Open agent pane (attach tmux)"
-              onClick={() => toast.info("Attach to the project session in your terminal", {
-                description: `bn ${project.name} attach`,
-              })}
-              disabled={busy}>
-              <ExternalLink className="size-4" />
-            </Button>
+          {/* Action row: one primary (Start/Stop — the most-used) plus a
+              ⋮ dropdown for the heavier ops. Solves the original "4 icons
+              with equal weight" cramp where you couldn't tell from a glance
+              which button mattered. */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {isRunning ? (
-              <Button variant="ghost" size="icon" title="Stop run processes" onClick={onStop} disabled={busy}>
-                <Square className="size-4" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onStop}
+                disabled={busy}
+                className="gap-1.5"
+              >
+                <Square className="size-3.5" />
+                Stop
               </Button>
             ) : (
-              <Button variant="ghost" size="icon" title="Start run processes" onClick={onStart} disabled={busy}>
-                <Play className="size-4" />
+              <Button
+                size="sm"
+                onClick={onStart}
+                disabled={busy}
+                className="gap-1.5"
+              >
+                <Play className="size-3.5" />
+                Start
               </Button>
             )}
-            <Button variant="ghost" size="icon" title="Merge feature" onClick={onMerge} disabled={busy}>
-              <GitMerge className="size-4" />
-            </Button>
-            <Button variant="ghost" size="icon" title="Cleanup feature" onClick={onCleanup} disabled={busy}>
-              <Trash2 className="size-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-9"
+                  disabled={busy}
+                  aria-label="More actions"
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onSelect={() => onAttach(project.name)}>
+                  <Terminal className="size-4" />
+                  <span>Copy attach command</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={onMerge}>
+                  <GitMerge className="size-4" />
+                  <span>Merge feature…</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem destructive onSelect={onCleanup}>
+                  <Trash2 className="size-4" />
+                  <span>Cleanup feature…</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardContent>
     </Card>
   );
+}
+
+// ── Action helpers ─────────────────────────────────────────────────────────
+
+/** Copy the tmux attach command for the project to the clipboard. The
+ *  dashboard can't itself attach the user to tmux — they're in a browser —
+ *  so we give them the one-shot they need to paste in their terminal. */
+function onAttach(projectName: string): void {
+  const cmd = `bn ${projectName} attach`;
+  navigator.clipboard
+    .writeText(cmd)
+    .then(() => {
+      toast.success("Copied attach command", { description: cmd });
+    })
+    .catch(() => {
+      // Fallback for browsers without clipboard API access (rare in 2026):
+      // surface the command in the toast so the user can copy it manually.
+      toast.info("Run this in your terminal", { description: cmd });
+    });
 }
 
 // ── Consequence builders for confirm dialogs ──────────────────────────────
