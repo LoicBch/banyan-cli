@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
+import { useDialogMark } from "@/lib/imperative-dialog";
 import type { SectionId } from "@/components/Sidebar";
 
 interface CommandPaletteProps {
@@ -41,6 +42,10 @@ export function CommandPalette({ section: _section, onSection, projects, onProje
   const [selected, setSelected] = React.useState(0);
   const { theme, toggle } = useTheme();
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Mark this as an open dialog so the global keyboard hook stays quiet
+  // while the palette is on-screen.
+  useDialogMark(open);
 
   // Global hotkey: ⌘K / Ctrl+K toggles.
   React.useEffect(() => {
