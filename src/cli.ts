@@ -143,7 +143,7 @@ export async function run(argv: string[]): Promise<number> {
   // TODO + reports state, and either exits 0 (allow stop) or emits a block
   // directive to keep the agent looping.
   program
-    .command("_autopilot-tick <project> <feature>")
+    .command("_autopilot-tick <project> <feature>", { hidden: true })
     .description("[internal] Stop hook for autopilot mode")
     .action(async (proj: string, feat: string) => {
       const code = await autopilotTick(proj, feat);
@@ -151,8 +151,8 @@ export async function run(argv: string[]): Promise<number> {
     });
 
   program
-    .command("mcp-serve")
-    .description("run the banyan MCP server over stdio (used by claude --mcp-config)")
+    .command("mcp-serve", { hidden: true })
+    .description("[internal] MCP server over stdio (invoked by claude via --mcp-config; never run by hand)")
     .action(async () => {
       const { runMcpServer } = await import("./mcp/server.js");
       await runMcpServer();

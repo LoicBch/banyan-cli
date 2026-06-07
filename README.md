@@ -344,7 +344,6 @@ bn init <project>                        create a project
 bn ask "<question>"                      answer from project memory
 bn serve [--remote]                      web dashboard
 bn install-tmux [-f]                     render tmux config
-bn mcp-serve                             MCP server over stdio
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
