@@ -348,7 +348,7 @@ bn serve [--remote]                      web dashboard
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
 bn <project> close                       close the tmux session (worktrees on disk kept)
-bn <project> attach / status / resume / ls-features / ports
+bn <project> status / resume / ls-features / ports
 bn <project> deploy [repo] [args...]
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane

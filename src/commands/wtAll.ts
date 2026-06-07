@@ -303,6 +303,6 @@ export async function wtAll(
   logger.ok(
     `claude launched (pane: ${paneTitle}${dirsSuffix}) — ${gitRepos.length} worktree${gitRepos.length > 1 ? "s" : ""}${modeSuffix}`,
   );
-  logger.info(`attach with: bn ${projectName} attach`);
+  logger.info(`attach with: bn ${projectName} start`);
   return {};
 }

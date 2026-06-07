@@ -1,6 +1,6 @@
 /**
- * Per-project lifecycle commands: workspace + feature start/stop, attach,
- * detach, info, status, resume, ports, ls-features, deploy.
+ * Per-project lifecycle commands: workspace + feature start/stop, status,
+ * resume, ports, ls-features, deploy.
  */
 import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
@@ -9,7 +9,6 @@ import { logger } from "../logger.js";
 import { resolveLocation } from "../location.js";
 import { start } from "../commands/start.js";
 import { stop } from "../commands/stop.js";
-import { attach } from "../commands/attach.js";
 import { status } from "../commands/status.js";
 import { test as testCmd } from "../commands/test.js";
 import { testStop } from "../commands/testStop.js";
@@ -73,14 +72,6 @@ export function register(
     )
     .action(async () => {
       await stop(await buildContext(config, project.name));
-    });
-
-  projectCmd
-    .command("attach")
-    .description("attach to the tmux session")
-    .action(async () => {
-      const code = await attach(await buildContext(config, project.name));
-      process.exit(code);
     });
 
   projectCmd
