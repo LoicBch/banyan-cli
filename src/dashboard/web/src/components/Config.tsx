@@ -331,25 +331,14 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label>Setup (one-shot)</Label>
-                          <Input
-                            className="font-mono"
-                            value={draft.setup}
-                            onChange={(e) => updateDraft(p.name, repo.name, { setup: e.target.value })}
-                            placeholder="npm install"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Stop command</Label>
-                          <Input
-                            className="font-mono"
-                            value={draft.stopCommand}
-                            onChange={(e) => updateDraft(p.name, repo.name, { stopCommand: e.target.value })}
-                            placeholder="./gradlew --stop"
-                          />
-                        </div>
+                      <div className="space-y-1.5">
+                        <Label>Setup (one-shot)</Label>
+                        <Input
+                          className="font-mono"
+                          value={draft.setup}
+                          onChange={(e) => updateDraft(p.name, repo.name, { setup: e.target.value })}
+                          placeholder="npm install"
+                        />
                       </div>
 
                       <PresetsEditor
