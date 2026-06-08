@@ -534,7 +534,7 @@ export function RepoEditor({
        *  `origin/HEAD` → baseBranch); user just confirms. */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label>
+          <Label className="flex items-center gap-1.5 h-4">
             Repo name <span className="text-emerald-500">*</span>
           </Label>
           <Input
@@ -545,7 +545,7 @@ export function RepoEditor({
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="flex items-center gap-1.5">
+          <Label className="flex items-center gap-1.5 h-4">
             Base branch <span className="text-emerald-500">*</span>
             <HelpHint>
               Development branch that's the target of <code>bn merge</code> for
