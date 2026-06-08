@@ -13,6 +13,7 @@ import {
   Layers,
   Container,
   Folder,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,8 @@ function pickIcon(
       return Smartphone;
     case "django":
       return Layers;
+    case "custom":
+      return Wrench;
     default:
       return Folder;
   }

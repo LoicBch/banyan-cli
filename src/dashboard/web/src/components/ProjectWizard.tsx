@@ -29,8 +29,6 @@ import {
   X,
   Plus,
   Sparkles,
-  ChevronDown,
-  ChevronRight,
   Pencil,
   AlertCircle,
 } from "lucide-react";
@@ -49,6 +47,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog-shell";
 import { cn } from "@/lib/utils";
+import { TechIcon } from "@/components/TechIcon";
 
 export interface TechProfile {
   id: string;
@@ -372,7 +371,6 @@ export function RepoEditor({
   onSave: (d: RepoData) => void;
   mode: "add" | "edit";
 }): React.JSX.Element {
-  const [showAdvanced, setShowAdvanced] = React.useState(mode === "edit");
   const [probing, setProbing] = React.useState(false);
   const [probeResult, setProbeResult] = React.useState<"detected" | "unknown" | null>(
     // When editing an existing repo, treat it as "already detected" so we
@@ -382,8 +380,8 @@ export function RepoEditor({
 
   // Re-run probe whenever the user blurs the path field (or hits Enter).
   // Smart defaults: probe fills name + tech + run config when it detects
-  // something. Failing detection switches to manual mode (advanced fields
-  // auto-expand).
+  // something. The full form is shown unconditionally — every field is
+  // optional past the required trio (path / name / baseBranch).
   async function probe(target?: string): Promise<void> {
     const p = (target ?? draft.path).trim();
     if (!p) return;
@@ -417,13 +415,7 @@ export function RepoEditor({
           stopCommand: sug.stopCommand ?? draft.run.stopCommand,
         },
       });
-      if (data.suggestedTech) {
-        setProbeResult("detected");
-      } else {
-        setProbeResult("unknown");
-        // Auto-expand advanced so the user can fill manually.
-        setShowAdvanced(true);
-      }
+      setProbeResult(data.suggestedTech ? "detected" : "unknown");
     } catch (err) {
       setProbeResult("unknown");
       toast.error("Probe failed", { description: String(err) });
@@ -561,72 +553,48 @@ export function RepoEditor({
         </div>
       </div>
 
-      {/* Advanced toggle */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced((v) => !v)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {showAdvanced ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        Advanced fields
-      </button>
-
-      {/* Advanced (all optional). `portEnv` and `stopCommand` are intentionally
-       *  not exposed here — tech presets fill sensible defaults, advanced
-       *  users edit YAML directly. */}
-      {showAdvanced ? (
-        <div className="space-y-3 pt-1 border-t border-border">
-          <div className="space-y-1.5">
-            <Label>Tech preset</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {profiles.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectTech(p.id)}
-                  className={
-                    p.id === draft.tech
-                      ? "px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground"
-                      : "px-2.5 py-1 text-xs rounded-md bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  }
-                  title={p.hint}
-                  type="button"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Run command</Label>
-            <Input
-              value={draft.run.command}
-              onChange={(e) => onChange({ ...draft, run: { ...draft.run, command: e.target.value } })}
-              placeholder="npm run dev"
-              className="font-mono text-xs h-8"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5">
-              Preferred port
-              <HelpHint>
-                banyan finds a free port nearby per feature. Set this to give
-                each feature's run process a predictable port range (e.g. set
-                3000 → first feature gets :3000, second :3001, …).
-              </HelpHint>
-            </Label>
-            <Input
-              type="number"
-              value={draft.run.port ?? ""}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
-              }}
-              placeholder="3000"
-              className="font-mono text-xs h-8 w-32"
-            />
-          </div>
+      {/* All remaining fields are optional. Shown unconditionally — no
+       *  Advanced disclosure — because users repeatedly complained about
+       *  having to expand a section to see what banyan auto-detected. */}
+      <div className="space-y-3 pt-2 border-t border-border">
+        <div className="space-y-1.5">
+          <Label>Stack</Label>
+          <StackPicker
+            profiles={profiles}
+            selected={draft.tech}
+            onSelect={selectTech}
+          />
         </div>
-      ) : null}
+        <div className="space-y-1.5">
+          <Label>Run command</Label>
+          <Input
+            value={draft.run.command}
+            onChange={(e) => onChange({ ...draft, run: { ...draft.run, command: e.target.value } })}
+            placeholder="npm run dev"
+            className="font-mono text-xs h-8"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            Preferred port
+            <HelpHint>
+              banyan finds a free port nearby per feature. Set this to give
+              each feature's run process a predictable port range (e.g. set
+              3000 → first feature gets :3000, second :3001, …).
+            </HelpHint>
+          </Label>
+          <Input
+            type="number"
+            value={draft.run.port ?? ""}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
+            }}
+            placeholder="3000"
+            className="font-mono text-xs h-8 w-32"
+          />
+        </div>
+      </div>
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
@@ -636,6 +604,70 @@ export function RepoEditor({
       </div>
     </div>
   );
+}
+
+// ── Stack picker (square cards) ──────────────────────────────────────────
+
+/** Card grid for picking a tech stack. Each tile has a lucide icon
+ *  representing the stack, the label below, and animates on
+ *  selection (emerald ring + scale-105) and on click (brief scale-95
+ *  bounce). */
+function StackPicker({
+  profiles,
+  selected,
+  onSelect,
+}: {
+  profiles: TechProfile[];
+  selected: string;
+  onSelect: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+      {profiles.map((p) => {
+        const isSelected = p.id === selected;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onSelect(p.id)}
+            title={p.hint}
+            className={cn(
+              "group relative aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border bg-card/40 px-2 py-3",
+              "transition-all duration-200 ease-out active:scale-95",
+              isSelected
+                ? "border-emerald-500/60 bg-emerald-500/10 ring-2 ring-emerald-500/40 scale-[1.03] shadow-[0_0_0_4px_rgba(16,185,129,0.08)]"
+                : "border-border hover:border-primary/40 hover:bg-accent/40",
+            )}
+          >
+            <StackIcon
+              tech={p.id}
+              className={cn(
+                "size-7 transition-colors",
+                isSelected ? "text-emerald-500" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            />
+            <span
+              className={cn(
+                "text-[11px] font-medium transition-colors text-center leading-tight",
+                isSelected ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </span>
+            {isSelected ? (
+              <span className="absolute top-1 right-1 size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Wraps TechIcon but routes the wizard tech ids through the same icon
+ *  set used in the sidebar — adds a generic "Code" for custom/unknown. */
+function StackIcon({ tech, className }: { tech: string; className?: string }): React.JSX.Element {
+  return <TechIcon tech={tech} className={className} />;
 }
 
 // ── Detection summary card ──────────────────────────────────────────────
