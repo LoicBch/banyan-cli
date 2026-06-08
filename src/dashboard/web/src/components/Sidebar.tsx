@@ -6,10 +6,11 @@
  * a subtle primary-tinted background, not a hard accent.
  */
 import * as React from "react";
-import { LayoutDashboard, Inbox, History, MessageSquare, Settings, Keyboard, Sun, Moon, FolderTree } from "lucide-react";
+import { LayoutDashboard, Inbox, History, MessageSquare, Settings, Keyboard, Sun, Moon, FolderTree, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
+import { openProjectWizard } from "@/components/ProjectWizard";
 
 export type SectionId = "pipeline" | "inbox" | "history" | "ask" | "config" | "shortcuts";
 
@@ -70,8 +71,17 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
 
         {projects.length > 0 ? (
           <>
-            <div className="mt-4 mb-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Projects
+            <div className="mt-4 mb-1 flex items-center justify-between pl-2 pr-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Projects
+              </span>
+              <button
+                onClick={openProjectWizard}
+                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                title="New project"
+              >
+                <Plus className="size-3.5" />
+              </button>
             </div>
             {projects.map((p) => (
               <button
