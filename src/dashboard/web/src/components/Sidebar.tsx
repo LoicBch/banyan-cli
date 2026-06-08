@@ -77,10 +77,11 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
               </span>
               <button
                 onClick={openProjectWizard}
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                title="New project"
+                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-colors"
+                title="Create a new banyan project"
               >
-                <Plus className="size-3.5" />
+                <Plus className="size-3" />
+                New
               </button>
             </div>
             {projects.map((p) => (
