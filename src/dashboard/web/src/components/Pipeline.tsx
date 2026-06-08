@@ -108,7 +108,7 @@ function RepoChipRow({
         <button
           onClick={() => openAddRepoDialog(project.name)}
           title="Add a repo to this project"
-          className="flex items-center gap-1 rounded-md border border-dashed border-border/60 bg-transparent px-2 py-1 text-xs font-medium text-muted-foreground/70 hover:border-emerald-500/50 hover:text-emerald-500 hover:bg-emerald-500/5 transition-colors"
+          className="flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/60 hover:bg-emerald-500/20 transition-colors"
         >
           <FolderPlus className="size-3.5" />
           Add repo
