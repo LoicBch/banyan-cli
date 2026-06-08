@@ -12,7 +12,7 @@
  */
 import type { Express } from "express";
 import { spawn } from "node:child_process";
-import { defaultConfigPath } from "../../config.js";
+import { defaultConfigPath, loadConfig, type Config } from "../../config.js";
 import {
   updateRepoRun,
   updateRepoMeta,
@@ -21,6 +21,10 @@ import {
 import { requireFields } from "./shared.js";
 
 interface ConfigDeps {
+  /** Live config used by `/api/state` and other routes. We reload it
+   *  after every mutation so the sidebar / pipeline reflect the change
+   *  without waiting for a server restart. */
+  config: Config;
   /** True in local mode — gates routes that touch the user's machine
    *  beyond config-file mutation (specifically: opening the YAML in
    *  their editor). */
@@ -28,7 +32,16 @@ interface ConfigDeps {
 }
 
 export function register(app: Express, deps: ConfigDeps): void {
-  const { filesystemRoutesEnabled } = deps;
+  const { config, filesystemRoutesEnabled } = deps;
+
+  // Reload the live in-memory config from disk. Called after every
+  // mutation so `/api/state` (which reads from the passed-in object)
+  // sees the new values without a server restart.
+  async function reloadInMemoryConfig(): Promise<void> {
+    const fresh = await loadConfig();
+    config.projects.length = 0;
+    config.projects.push(...fresh.projects);
+  }
 
   app.get("/api/config/repos", async (_req, res) => {
     try {
@@ -72,6 +85,7 @@ export function register(app: Express, deps: ConfigDeps): void {
         return;
       }
       await updateRepoRun(project, repo, run);
+      await reloadInMemoryConfig();
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
@@ -90,6 +104,7 @@ export function register(app: Express, deps: ConfigDeps): void {
     };
     try {
       await updateRepoMeta(project, repo, { tech, baseBranch });
+      await reloadInMemoryConfig();
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
