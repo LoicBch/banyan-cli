@@ -119,7 +119,17 @@ export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.
 
   function updateDraft(project: string, repoName: string, patch: Partial<RepoDraft>) {
     const key = `${project}/${repoName}`;
-    setDrafts((d) => ({ ...d, [key]: { ...(d[key] ?? repoToDraft({} as RepoConfig)), ...patch } as RepoDraft }));
+    setDrafts((d) => {
+      if (d[key]) return { ...d, [key]: { ...d[key], ...patch } };
+      // First edit for this repo — seed the draft from the loaded config
+      // instead of an empty object. Without this, toggling a single field
+      // (e.g. clicking a preset radio) wiped command/setup/presets/etc.
+      const repo = data?.projects
+        .find((p) => p.name === project)
+        ?.repos.find((r) => r.name === repoName);
+      const seed = repo ? repoToDraft(repo) : ({} as RepoDraft);
+      return { ...d, [key]: { ...seed, ...patch } };
+    });
   }
 
   function resetDraft(project: string, repoName: string) {
@@ -250,6 +260,7 @@ export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.
                       </div>
 
                       <PresetsEditor
+                        repoKey={repoKey}
                         presets={draft.presets}
                         activePreset={draft.activePreset}
                         defaultCommand={draft.command}
@@ -269,12 +280,17 @@ export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.
 }
 
 function PresetsEditor({
+  repoKey,
   presets,
   activePreset,
   defaultCommand,
   onPresets,
   onActive,
 }: {
+  /** Stable id used as the radio-group `name` so the buttons in this
+   *  card are mutually exclusive in plain HTML (each repo card has its
+   *  own group). */
+  repoKey: string;
   presets: Record<string, string>;
   activePreset: string;
   defaultCommand: string;
@@ -283,6 +299,7 @@ function PresetsEditor({
 }): React.JSX.Element {
   const [newName, setNewName] = React.useState("");
   const entries = Object.entries(presets);
+  const groupName = `preset-${repoKey}`;
 
   function addPreset() {
     const name = newName.trim();
@@ -308,21 +325,25 @@ function PresetsEditor({
           <button
             className="text-xs text-muted-foreground hover:text-foreground"
             onClick={() => onActive("")}
+            title="Disable presets — use the Command field above"
           >
             (use default command)
           </button>
         ) : null}
       </div>
+      <p className="text-xs text-muted-foreground/80">
+        Alternative commands you can switch between (e.g. <code className="text-foreground">android</code> / <code className="text-foreground">ios</code>, <code className="text-foreground">dev</code> / <code className="text-foreground">staging</code>). The selected radio overrides the Command field above when banyan launches this repo.
+      </p>
 
       {entries.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No presets. Add one to switch commands without editing this field.</p>
+        <p className="text-xs text-muted-foreground/60 italic">No presets yet — type a name below and click Add to create one.</p>
       ) : (
         <div className="space-y-1.5">
           {entries.map(([name, cmd]) => (
             <div key={name} className="flex items-center gap-2">
               <input
                 type="radio"
-                name={`preset-${name}`}
+                name={groupName}
                 checked={activePreset === name}
                 onChange={() => onActive(name)}
                 className="size-3.5 accent-primary"
@@ -347,10 +368,10 @@ function PresetsEditor({
           className="font-mono text-xs"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="new preset name"
+          placeholder="add a new preset (e.g. staging, prod)"
           onKeyDown={(e) => { if (e.key === "Enter") addPreset(); }}
         />
-        <Button variant="outline" size="sm" onClick={addPreset} className="gap-1">
+        <Button variant="outline" size="sm" onClick={addPreset} disabled={!newName.trim()} className="gap-1">
           <Plus className="size-4" /> Add
         </Button>
       </div>
