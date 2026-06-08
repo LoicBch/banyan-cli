@@ -119,6 +119,10 @@ export interface ProbeResult {
   suggestedTech: string | null;
   /** Best-guess run defaults from inferRun, or null when nothing matched. */
   suggestedRun: Partial<RunConfig> | null;
+  /** Detected default base branch from `git symbolic-ref origin/HEAD`,
+   *  with fallback to `main`/`master` if either branch exists locally.
+   *  Null when the path isn't a git repo. */
+  suggestedBaseBranch: string | null;
   /** Human-readable label for the detected stack (e.g. "node + pnpm"). */
   stackLabel: string | null;
   /** Filled when valid=false to explain why. */
@@ -147,6 +151,7 @@ export function probePath(input: string): ProbeResult {
   const isGitRepo = hasGitDir(resolved);
   const inferred = inferRun(resolved);
   const tech = inferred ? matchStackToProfile(inferred.stack) : null;
+  const suggestedBaseBranch = isGitRepo ? detectBaseBranch(resolved) : null;
 
   return {
     path: resolved,
@@ -155,8 +160,49 @@ export function probePath(input: string): ProbeResult {
     suggestedName: path.basename(resolved),
     suggestedTech: tech,
     suggestedRun: inferred ? inferred.run : null,
+    suggestedBaseBranch,
     stackLabel: inferred ? inferred.stack : null,
   };
+}
+
+/** Resolve the repo's default branch from `git symbolic-ref origin/HEAD`,
+ *  falling back to `main` or `master` if either ref exists locally. Returns
+ *  null when no sensible default can be determined (uninitialised repo,
+ *  detached HEAD, etc.) — the wizard will then require an explicit choice. */
+function detectBaseBranch(repoPath: string): string | null {
+  // origin/HEAD is the symbolic ref pointing at the default branch on the
+  // remote. Set by `git clone` and by `git remote set-head origin -a`.
+  const symRef = execSyncSafe(
+    ["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+    repoPath,
+  );
+  if (symRef !== null) {
+    const short = symRef.split("/").pop();
+    if (short && short.length > 0) return short;
+  }
+  // No origin/HEAD — look for a local main/master.
+  for (const candidate of ["main", "master"]) {
+    const check = execSyncSafe(
+      ["git", "show-ref", "--verify", "--quiet", `refs/heads/${candidate}`],
+      repoPath,
+    );
+    if (check !== null) return candidate;
+  }
+  return null;
+}
+
+function execSyncSafe(argv: string[], cwd: string): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+    return execFileSync(argv[0]!, argv.slice(1), {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
 }
 
 function baseResult(p: string, partial: Partial<ProbeResult>): ProbeResult {
@@ -167,6 +213,7 @@ function baseResult(p: string, partial: Partial<ProbeResult>): ProbeResult {
     suggestedName: path.basename(p),
     suggestedTech: null,
     suggestedRun: null,
+    suggestedBaseBranch: null,
     stackLabel: null,
     ...partial,
   };
@@ -289,6 +336,10 @@ function validateRepoInput(repo: CreateRepoInput): void {
   }
   if (!statSync(resolvedPath).isDirectory()) {
     throw new ConfigError(`repo '${repo.name}' path is not a directory: ${repo.path}`);
+  }
+
+  if (!repo.baseBranch || typeof repo.baseBranch !== "string") {
+    throw new ConfigError(`repo '${repo.name}' is missing a baseBranch`);
   }
 
   if (repo.tech !== undefined && repo.tech !== "" && !isKnownTech(repo.tech)) {

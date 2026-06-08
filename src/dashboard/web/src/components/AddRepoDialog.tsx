@@ -140,7 +140,7 @@ function AddRepoBody({
         </Button>
         <Button
           onClick={() => submit(draft)}
-          disabled={submitting || !draft.path || !draft.name}
+          disabled={submitting || !draft.path || !draft.name || !draft.baseBranch}
           className="gap-1.5"
         >
           <CheckCircle2 className="size-4" />

@@ -158,7 +158,7 @@ describe("createProject", () => {
       {
         name: "demo",
         repos: [
-          { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev", port: 3000, portEnv: "PORT" } },
+          { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev", port: 3000, portEnv: "PORT" } },
         ],
       },
       configPath,
@@ -188,7 +188,7 @@ describe("createProject", () => {
     await createProject(
       {
         name: "demo",
-        repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }],
+        repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }],
       },
       configPath,
     );
@@ -202,12 +202,12 @@ describe("createProject", () => {
 
   it("rejects a duplicate project name", async () => {
     await createProject(
-      { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+      { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
       configPath,
     );
     await assert.rejects(
       () => createProject(
-        { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+        { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
         configPath,
       ),
       /already exists/,
@@ -217,7 +217,7 @@ describe("createProject", () => {
   it("rejects an invalid project name", async () => {
     await assert.rejects(
       () => createProject(
-        { name: "bad name with spaces", repos: [{ name: "f", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+        { name: "bad name with spaces", repos: [{ name: "f", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
         configPath,
       ),
       /must match/,
@@ -237,8 +237,8 @@ describe("createProject", () => {
         {
           name: "demo",
           repos: [
-            { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } },
-            { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } },
+            { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
+            { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
           ],
         },
         configPath,
@@ -263,16 +263,26 @@ describe("createProject", () => {
   it("rejects an unknown tech id", async () => {
     await assert.rejects(
       () => createProject(
-        { name: "demo", repos: [{ name: "f", path: repoPath, tech: "rust", run: { command: "cargo run" } }] },
+        { name: "demo", repos: [{ name: "f", path: repoPath, baseBranch: "main", tech: "rust", run: { command: "cargo run" } }] },
         configPath,
       ),
       /unknown tech/,
     );
   });
 
+  it("rejects a missing baseBranch", async () => {
+    await assert.rejects(
+      () => createProject(
+        { name: "demo", repos: [{ name: "f", path: repoPath, tech: "node", run: { command: "x" } }] },
+        configPath,
+      ),
+      /missing a baseBranch/,
+    );
+  });
+
   it("contracts the repo path with ~ on write", async () => {
     await createProject(
-      { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+      { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
       configPath,
     );
     const written = readFileSync(configPath, "utf8");
@@ -298,7 +308,7 @@ describe("addRepoToProject", () => {
       {
         name: "demo",
         repos: [
-          { name: "front", path: frontPath, tech: "node", run: { command: "npm run dev" } },
+          { name: "front", path: frontPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
         ],
       },
       configPath,
@@ -312,7 +322,7 @@ describe("addRepoToProject", () => {
   it("appends a repo to an existing project", async () => {
     await addRepoToProject(
       "demo",
-      { name: "back", path: backPath, tech: "node", run: { command: "node server.js", port: 8080 } },
+      { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "node server.js", port: 8080 } },
       configPath,
     );
     const written = readFileSync(configPath, "utf8");
@@ -341,7 +351,7 @@ describe("addRepoToProject", () => {
 
     await addRepoToProject(
       "demo",
-      { name: "back", path: backPath, tech: "node", run: { command: "node server.js" } },
+      { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "node server.js" } },
       configPath,
     );
 
@@ -358,7 +368,7 @@ describe("addRepoToProject", () => {
     await assert.rejects(
       () => addRepoToProject(
         "missing-project",
-        { name: "back", path: backPath, tech: "node", run: { command: "x" } },
+        { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
         configPath,
       ),
       /not found/,
@@ -369,7 +379,7 @@ describe("addRepoToProject", () => {
     await assert.rejects(
       () => addRepoToProject(
         "demo",
-        { name: "front", path: backPath, tech: "node", run: { command: "x" } },
+        { name: "front", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
         configPath,
       ),
       /already exists/,
@@ -380,10 +390,21 @@ describe("addRepoToProject", () => {
     await assert.rejects(
       () => addRepoToProject(
         "demo",
-        { name: "bad name", path: backPath, tech: "node", run: { command: "x" } },
+        { name: "bad name", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
         configPath,
       ),
       /must match/,
+    );
+  });
+
+  it("rejects a missing baseBranch", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "back", path: backPath, tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /missing a baseBranch/,
     );
   });
 
@@ -394,6 +415,7 @@ describe("addRepoToProject", () => {
         {
           name: "back",
           path: path.join(homedir(), ".banyan-test-wizard", "missing"),
+          baseBranch: "main",
           tech: "node",
           run: { command: "x" },
         },

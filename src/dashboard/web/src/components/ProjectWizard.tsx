@@ -383,6 +383,7 @@ export function RepoEditor({
         ...draft,
         path: data.path,
         name: draft.name || data.suggestedName,
+        baseBranch: draft.baseBranch || (data.suggestedBaseBranch ?? ""),
         tech,
         run: {
           command: sug.command ?? draft.run.command,
@@ -439,6 +440,10 @@ export function RepoEditor({
       toast.error(`A repo named '${draft.name}' already exists`);
       return;
     }
+    if (!draft.baseBranch) {
+      toast.error("Base branch is required");
+      return;
+    }
     onSave(draft);
   }
 
@@ -453,7 +458,9 @@ export function RepoEditor({
 
       {/* Path — the only required field for the happy path */}
       <div className="space-y-1.5">
-        <Label htmlFor="repo-path">Path</Label>
+        <Label htmlFor="repo-path">
+          Path <span className="text-emerald-500">*</span>
+        </Label>
         <div className="flex gap-2">
           <Input
             id="repo-path"
@@ -507,12 +514,16 @@ export function RepoEditor({
         Advanced fields
       </button>
 
-      {/* Advanced fields */}
+      {/* Advanced fields. `portEnv` and `stopCommand` are intentionally
+       *  not exposed here — tech presets fill sensible defaults, advanced
+       *  users edit YAML directly. */}
       {showAdvanced ? (
         <div className="space-y-3 pt-1 border-t border-border">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Repo name</Label>
+              <Label>
+                Repo name <span className="text-emerald-500">*</span>
+              </Label>
               <Input
                 value={draft.name}
                 onChange={(e) => onChange({ ...draft, name: e.target.value.trim() })}
@@ -521,7 +532,9 @@ export function RepoEditor({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Base branch</Label>
+              <Label>
+                Base branch <span className="text-emerald-500">*</span>
+              </Label>
               <Input
                 value={draft.baseBranch}
                 onChange={(e) => onChange({ ...draft, baseBranch: e.target.value.trim() })}
@@ -559,37 +572,17 @@ export function RepoEditor({
               className="font-mono text-xs h-8"
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label>Port</Label>
-              <Input
-                type="number"
-                value={draft.run.port ?? ""}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
-                }}
-                placeholder="3000"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Port env</Label>
-              <Input
-                value={draft.run.portEnv}
-                onChange={(e) => onChange({ ...draft, run: { ...draft.run, portEnv: e.target.value.trim() } })}
-                placeholder="PORT, SERVER_PORT"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-          </div>
           <div className="space-y-1.5">
-            <Label>Stop command (optional)</Label>
+            <Label>Preferred port <span className="text-muted-foreground/70 font-normal">(banyan finds a free port nearby per feature)</span></Label>
             <Input
-              value={draft.run.stopCommand}
-              onChange={(e) => onChange({ ...draft, run: { ...draft.run, stopCommand: e.target.value.trim() } })}
-              placeholder="./gradlew --stop"
-              className="font-mono text-xs h-8"
+              type="number"
+              value={draft.run.port ?? ""}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
+              }}
+              placeholder="3000"
+              className="font-mono text-xs h-8 w-32"
             />
           </div>
         </div>
