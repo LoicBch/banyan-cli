@@ -115,7 +115,16 @@ function Shell(): React.JSX.Element {
         }}
       />
       <main className="flex-1 overflow-y-auto">
-        {section === "pipeline" ? <Pipeline projectName={activeProject} /> : null}
+        {section === "pipeline" ? (
+          <Pipeline
+            projectName={activeProject}
+            onRepoClick={(projectName, repoName) => {
+              setProject(projectName);
+              setSection("config");
+              setFocusRepo({ project: projectName, repo: repoName });
+            }}
+          />
+        ) : null}
         {section === "shortcuts" ? <Shortcuts /> : null}
         {section === "inbox" ? <Inbox /> : null}
         {section === "history" ? <History projectName={activeProject} /> : null}

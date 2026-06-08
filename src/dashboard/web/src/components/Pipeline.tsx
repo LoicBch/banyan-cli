@@ -32,14 +32,19 @@ import { useKeyboard } from "@/lib/useKeyboard";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openAddRepoDialog } from "@/components/AddRepoDialog";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
+import { TechIcon } from "@/components/TechIcon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 
 interface PipelineProps {
   projectName: string | null;
+  /** Click on a repo chip — defers to the parent so it can switch
+   *  the section to Config + focus the matching card (same path as
+   *  the sidebar repo click). */
+  onRepoClick?: (projectName: string, repoName: string) => void;
 }
 
-export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
+export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX.Element {
   const { data, error, loading } = usePolling<DashboardState>(fetchState, 2000);
 
   if (loading && !data) return <PipelineSkeleton />;
@@ -58,25 +63,57 @@ export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
             Pipeline · {project.repos.length} {project.repos.length === 1 ? "repo" : "repos"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-2"
-            onClick={() => openAddRepoDialog(project.name)}
-            title="Add a repo to this project"
-          >
-            <FolderPlus className="size-4" />
-            Add repo
-          </Button>
-          <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
-            <Plus className="size-4" />
-            New feature
-          </Button>
-        </div>
+        <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
+          <Plus className="size-4" />
+          New feature
+        </Button>
       </header>
 
       <FeatureList project={project} />
+
+      <RepoChipRow project={project} onRepoClick={onRepoClick} />
+    </div>
+  );
+}
+
+/** Ultra-compact horizontal row of repo "chips" — inventory only.
+ *  Each chip = brand icon + name, clickable to drill into Config.
+ *  Trailing "+" opens AddRepoDialog. Deliberately not a full list:
+ *  the heavy editing UI lives in Config, this is just "what's in
+ *  this project at a glance." */
+function RepoChipRow({
+  project,
+  onRepoClick,
+}: {
+  project: ProjectState;
+  onRepoClick?: (projectName: string, repoName: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 shrink-0">
+        Repos
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {project.repos.map((r) => (
+          <button
+            key={r.name}
+            onClick={() => onRepoClick?.(project.name, r.name)}
+            title={`${r.path} — click to open config`}
+            className="group flex items-center gap-1.5 rounded-md border border-border bg-card/40 px-2 py-1 text-xs font-mono text-muted-foreground hover:border-primary/40 hover:bg-accent/40 hover:text-foreground transition-colors"
+          >
+            <TechIcon tech={r.tech} type={r.type} className="text-muted-foreground/70 group-hover:text-foreground transition-colors" />
+            {r.name}
+          </button>
+        ))}
+        <button
+          onClick={() => openAddRepoDialog(project.name)}
+          title="Add a repo to this project"
+          className="flex items-center gap-1 rounded-md border border-dashed border-border/60 bg-transparent px-2 py-1 text-xs font-medium text-muted-foreground/70 hover:border-emerald-500/50 hover:text-emerald-500 hover:bg-emerald-500/5 transition-colors"
+        >
+          <FolderPlus className="size-3.5" />
+          Add repo
+        </button>
+      </div>
     </div>
   );
 }
