@@ -16,7 +16,6 @@ import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
 import { deploy } from "../commands/deploy.js";
-import { todoCmd } from "../commands/todo.js";
 import { approveCmd } from "../commands/approve.js";
 
 export function register(
@@ -127,36 +126,6 @@ export function register(
       ) => {
         const feat = resolveFeatureFromCwd(config, project.name, feature, "approve");
         await approveCmd(config, project.name, feat, opts);
-      },
-    );
-
-  projectCmd
-    .command("todo [branch]")
-    .description(
-      "view or edit the TODO list for a feature. branch is inferred from cwd when omitted in a worktree. " +
-        "no flags = show. --set replaces the list, --add appends, --done/--undone toggles by id, --rm deletes. " +
-        "ids are auto-assigned (1..N) and never reused.",
-    )
-    .option("--set <items...>", "replace the entire list with these items")
-    .option("--add <items...>", "append these items to the list")
-    .option("--done <ids...>", "mark these item ids as done")
-    .option("--undone <ids...>", "mark these item ids as not done")
-    .option("--rm <ids...>", "delete these item ids")
-    .option("--json", "emit raw JSON")
-    .action(
-      async (
-        feature: string | undefined,
-        opts: {
-          set?: string[];
-          add?: string[];
-          done?: string[];
-          undone?: string[];
-          rm?: string[];
-          json?: boolean;
-        },
-      ) => {
-        const feat = resolveFeatureFromCwd(config, project.name, feature, "todo");
-        await todoCmd(config, project.name, feat, opts);
       },
     );
 

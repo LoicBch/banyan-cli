@@ -119,12 +119,11 @@ bn serve
 # http://localhost:4242 → "+ new project"
 ```
 
-Or via CLI:
+Or for power users:
 
 ```bash
-cd ~/front && bn init my-project
-bn my-project add-repo back ~/back
-bn my-project add-repo app ~/app
+cd ~/front && bn init my-project   # bootstrap with the first repo
+bn serve                            # add the remaining repos from the dashboard
 bn my-project start
 ```
 
@@ -335,7 +334,7 @@ projects:
         composeFile: docker-compose.dev.yml
 ```
 
-Stored at `~/.config/banyan/config.yaml`. Edit directly, via the dashboard's Config tab, or with `bn <project> add-repo / set-run / set-base`.
+Stored at `~/.config/banyan/config.yaml`. Edit directly or via the dashboard's Config tab.
 
 </details>
 
@@ -365,12 +364,9 @@ bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
 
-bn <project> todo <feature>
 bn <project> approve <feature>           approve a pending plan or report
 
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]
-
-bn <project> add-repo / remove-repo / remove / set-base / set-run / infer-run
 ```
 
 If you're inside a configured repo (or its worktree), drop the project name — banyan infers it from cwd. Or symlink `banyan` to your project name to skip the project arg entirely.
