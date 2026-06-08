@@ -12,9 +12,10 @@ export interface InitOpts {
 }
 
 /** Register a new project in the banyan config. Does NOT launch the
- *  workspace — that's `bn <project> start`. The two-step model keeps
- *  `init` predictable (it's just a config write) and lets the user add
- *  more repos via `bn <project> add-repo` before starting. */
+ *  workspace — that's `bn <project> start`. Minimal: writes a single
+ *  repo entry (the cwd or `--path`) with no `baseBranch` / `run` /
+ *  `tech`. For multi-repo setups with full run config + baseBranch,
+ *  use the dashboard wizard (`bn serve`) or edit the YAML directly. */
 export async function init(
   config: Config,
   projectName: string,
@@ -52,7 +53,7 @@ export async function init(
 
   logger.info(``);
   logger.info(`next steps:`);
-  logger.info(`  bn ${projectName} add-repo <name> [path]   # for each additional repo`);
+  logger.info(`  bn serve                                 # add more repos / set baseBranch / run config via the dashboard`);
   logger.info(`  bn ${projectName} start                    # launch the workspace`);
   return next;
 }
