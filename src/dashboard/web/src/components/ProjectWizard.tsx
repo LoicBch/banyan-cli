@@ -497,12 +497,41 @@ export function RepoEditor({
           <div className="flex items-start gap-2">
             <AlertCircle className="size-3.5 text-amber-500/80 mt-0.5 shrink-0" />
             <span className="text-muted-foreground">
-              Couldn't auto-detect this stack. Fill the fields below manually
-              or pick a tech preset.
+              Couldn't auto-detect this stack. Confirm the fields below and
+              pick a tech preset in Advanced if you want a starter run config.
             </span>
           </div>
         </div>
       ) : null}
+
+      {/* Required fields — always visible above the Advanced toggle so the
+       *  user never has to expand a section to set a mandatory field. The
+       *  probe auto-fills both from the path (basename → name,
+       *  `origin/HEAD` → baseBranch); user just confirms. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>
+            Repo name <span className="text-emerald-500">*</span>
+          </Label>
+          <Input
+            value={draft.name}
+            onChange={(e) => onChange({ ...draft, name: e.target.value.trim() })}
+            placeholder="front, back, app, …"
+            className="font-mono text-xs h-8"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>
+            Base branch <span className="text-emerald-500">*</span>
+          </Label>
+          <Input
+            value={draft.baseBranch}
+            onChange={(e) => onChange({ ...draft, baseBranch: e.target.value.trim() })}
+            placeholder="develop / main"
+            className="font-mono text-xs h-8"
+          />
+        </div>
+      </div>
 
       {/* Advanced toggle */}
       <button
@@ -514,35 +543,11 @@ export function RepoEditor({
         Advanced fields
       </button>
 
-      {/* Advanced fields. `portEnv` and `stopCommand` are intentionally
+      {/* Advanced (all optional). `portEnv` and `stopCommand` are intentionally
        *  not exposed here — tech presets fill sensible defaults, advanced
        *  users edit YAML directly. */}
       {showAdvanced ? (
         <div className="space-y-3 pt-1 border-t border-border">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>
-                Repo name <span className="text-emerald-500">*</span>
-              </Label>
-              <Input
-                value={draft.name}
-                onChange={(e) => onChange({ ...draft, name: e.target.value.trim() })}
-                placeholder="front, back, app, …"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                Base branch <span className="text-emerald-500">*</span>
-              </Label>
-              <Input
-                value={draft.baseBranch}
-                onChange={(e) => onChange({ ...draft, baseBranch: e.target.value.trim() })}
-                placeholder="develop / main"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-          </div>
           <div className="space-y-1.5">
             <Label>Tech preset</Label>
             <div className="flex flex-wrap gap-1.5">
