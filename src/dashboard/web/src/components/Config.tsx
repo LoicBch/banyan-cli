@@ -65,6 +65,10 @@ function repoToDraft(r: RepoConfig): RepoDraft {
 }
 
 export interface ConfigProps {
+  /** Active project — when set, the view scopes to this project's repos
+   *  only. Without it (e.g. zero projects yet) the view falls back to
+   *  showing every project's repos with a section per project. */
+  projectName?: string | null;
   /** When set, scroll the matching repo card into view + briefly highlight it.
    *  Set by the sidebar when the user clicks a repo. */
   focusRepo?: { project: string; repo: string } | null;
@@ -73,7 +77,7 @@ export interface ConfigProps {
   onFocusConsumed?: () => void;
 }
 
-export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.JSX.Element {
+export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps = {}): React.JSX.Element {
   const [data, setData] = React.useState<ConfigData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, RepoDraft>>({});
@@ -176,18 +180,44 @@ export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.
   if (error) return <ErrorPanel msg={error} />;
   if (!data) return <ConfigSkeleton />;
 
+  // Filter to the active project when one is set; otherwise show every
+  // project. The latter is the fallback for users who navigated to Config
+  // before picking a project.
+  const visibleProjects = projectName
+    ? data.projects.filter((p) => p.name === projectName)
+    : data.projects;
+  const scoped = !!projectName && visibleProjects.length === 1;
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6 animate-fade-in">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Config</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {scoped ? (
+            <>
+              <span className="font-mono text-primary">{projectName}</span>{" "}
+              <span className="text-muted-foreground font-normal">repos</span>
+            </>
+          ) : (
+            "Config"
+          )}
+        </h1>
         <p className="text-sm text-muted-foreground">
           Per-repo run command + named presets. Stored in <code className="text-foreground">~/.config/banyan/config.yaml</code> (comments preserved).
         </p>
       </header>
 
-      {data.projects.map((p) => (
+      {visibleProjects.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No project named <code className="text-foreground">{projectName}</code> in the config.
+        </p>
+      ) : null}
+
+      {visibleProjects.map((p) => (
         <section key={p.name} className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight font-mono">{p.name}</h2>
+          {/* Hide the project header when scoped — the page title already names it. */}
+          {scoped ? null : (
+            <h2 className="text-lg font-semibold tracking-tight font-mono">{p.name}</h2>
+          )}
           {p.repos.map((repo) => {
             const isCompose = repo.type === "compose";
             const draft = draftFor(p.name, repo);

@@ -117,7 +117,11 @@ function Shell(): React.JSX.Element {
         {section === "inbox" ? <Inbox /> : null}
         {section === "history" ? <History projectName={activeProject} /> : null}
         {section === "config" ? (
-          <Config focusRepo={focusRepo} onFocusConsumed={() => setFocusRepo(null)} />
+          <Config
+            projectName={activeProject}
+            focusRepo={focusRepo}
+            onFocusConsumed={() => setFocusRepo(null)}
+          />
         ) : null}
         {section === "ask" ? <Ask projectName={activeProject} /> : null}
       </main>
