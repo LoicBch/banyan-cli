@@ -19,6 +19,9 @@ export interface DashboardRepo {
   path: string;
   baseBranch?: string;
   composeFile?: string;
+  /** Tech profile id (`node`, `spring-boot`, `android`, `django`, `custom`).
+   *  Surfaces in the sidebar icon + Config tab. */
+  tech?: string;
   worktrees: DashboardWorktree[];      // only for git repos
   stacks: DashboardStack[];            // only for compose repos
   run?: {
@@ -71,6 +74,7 @@ export async function buildState(config: Config): Promise<DashboardState> {
           type: "compose",
           path: repo.path,
           composeFile: repo.composeFile,
+          tech: repo.tech,
           worktrees: [],
           stacks: await collectStacks(project, repo, activeStacks),
         });
@@ -80,6 +84,7 @@ export async function buildState(config: Config): Promise<DashboardState> {
           type: "git",
           path: repo.path,
           baseBranch: repo.baseBranch,
+          tech: repo.tech,
           worktrees: await collectWorktrees(repo, paneTags),
           stacks: [],
           run: repo.run

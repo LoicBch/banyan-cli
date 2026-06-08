@@ -68,13 +68,15 @@ function Shell(): React.JSX.Element {
     if (project) localStorage.setItem(STORAGE_PROJECT, project);
   }, [project]);
 
-  // Pull the project list for the sidebar. Cheap because /api/state already
-  // polls — we just project it here. (No second fetch.)
+  // Pull project state for the sidebar. Cheap because /api/state already
+  // polls — we project it here for the full repo list (needed by the
+  // expandable repo rows). The command palette only needs names.
   const { data } = usePolling(fetchState, 2000);
-  const projects = data?.projects.map((p) => p.name) ?? [];
+  const projects = data?.projects ?? [];
+  const projectNames = projects.map((p) => p.name);
 
   // Default project: persisted choice, else first available.
-  const activeProject = project && projects.includes(project) ? project : projects[0] ?? null;
+  const activeProject = project && projectNames.includes(project) ? project : projectNames[0] ?? null;
 
   // App-level keyboard bindings. View-specific bindings (j/k/s/m/c/a)
   // live in their owning component (Pipeline) — useKeyboard handles the
@@ -106,7 +108,7 @@ function Shell(): React.JSX.Element {
       <CommandPalette
         section={section}
         onSection={setSection}
-        projects={projects}
+        projects={projectNames}
         onProject={setProject}
       />
     </div>

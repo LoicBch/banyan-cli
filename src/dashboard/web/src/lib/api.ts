@@ -24,6 +24,9 @@ export interface RepoState {
   name: string;
   type: "git" | "compose";
   path: string;
+  /** Tech profile id — `node`, `spring-boot`, `android`, `django`, `custom`. */
+  tech?: string;
+  baseBranch?: string;
   worktrees: Worktree[];
   stacks: Stack[];
 }
