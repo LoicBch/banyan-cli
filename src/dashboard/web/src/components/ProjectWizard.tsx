@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/dialog-shell";
 import { cn } from "@/lib/utils";
 
-interface TechProfile {
+export interface TechProfile {
   id: string;
   label: string;
   hint: string;
@@ -61,7 +61,7 @@ interface TechProfile {
   };
 }
 
-interface RepoData {
+export interface RepoData {
   name: string;
   path: string;
   baseBranch: string;
@@ -331,7 +331,7 @@ function RepoCard({
 
 // ── Inline repo editor (Add or Edit) ─────────────────────────────────────
 
-function RepoEditor({
+export function RepoEditor({
   profiles,
   existingNames,
   draft,
@@ -740,7 +740,7 @@ function FsBrowserBody({
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function emptyDraft(): RepoData {
+export function emptyDraft(): RepoData {
   return {
     name: "",
     path: "",

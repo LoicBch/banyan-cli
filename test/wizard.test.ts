@@ -8,6 +8,7 @@ import {
   listFsEntries,
   probePath,
   createProject,
+  addRepoToProject,
   listTechProfiles,
 } from "../src/dashboard/wizard.js";
 import { ConfigError } from "../src/errors.js";
@@ -276,6 +277,130 @@ describe("createProject", () => {
     );
     const written = readFileSync(configPath, "utf8");
     assert.match(written, /path: ~\/\.banyan-test-wizard\/front/);
+  });
+});
+
+describe("addRepoToProject", () => {
+  let tmpDir: string;
+  let configPath: string;
+  let frontPath: string;
+  let backPath: string;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "banyan-addrepo-"));
+    configPath = path.join(tmpDir, "config.yaml");
+    frontPath = path.join(homedir(), ".banyan-test-wizard", "front");
+    backPath = path.join(homedir(), ".banyan-test-wizard", "back");
+    mkdirSync(frontPath, { recursive: true });
+    mkdirSync(backPath, { recursive: true });
+    // Seed: one project with one repo.
+    await createProject(
+      {
+        name: "demo",
+        repos: [
+          { name: "front", path: frontPath, tech: "node", run: { command: "npm run dev" } },
+        ],
+      },
+      configPath,
+    );
+  });
+
+  after(() => {
+    rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+  });
+
+  it("appends a repo to an existing project", async () => {
+    await addRepoToProject(
+      "demo",
+      { name: "back", path: backPath, tech: "node", run: { command: "node server.js", port: 8080 } },
+      configPath,
+    );
+    const written = readFileSync(configPath, "utf8");
+    assert.match(written, /name: front/);
+    assert.match(written, /name: back/);
+    assert.match(written, /port: 8080/);
+  });
+
+  it("preserves existing comments and project order", async () => {
+    // Inject comments by overwriting the seed with annotated YAML.
+    const annotated = [
+      "# Top-of-file note.",
+      "version: 1",
+      "projects:",
+      "  - name: demo",
+      "    repos:",
+      "      # the frontend repo",
+      "      - name: front",
+      "        path: ~/.banyan-test-wizard/front",
+      "        tech: node",
+      "        run:",
+      "          command: npm run dev",
+      "",
+    ].join("\n");
+    writeFileSync(configPath, annotated, "utf8");
+
+    await addRepoToProject(
+      "demo",
+      { name: "back", path: backPath, tech: "node", run: { command: "node server.js" } },
+      configPath,
+    );
+
+    const written = readFileSync(configPath, "utf8");
+    assert.match(written, /# Top-of-file note\./, "top comment preserved");
+    assert.match(written, /# the frontend repo/, "inner comment preserved");
+    // Front comes before back (appended at end).
+    const frontIdx = written.indexOf("name: front");
+    const backIdx = written.indexOf("name: back");
+    assert.ok(frontIdx > 0 && backIdx > frontIdx, "back appended after front");
+  });
+
+  it("rejects when the project does not exist", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "missing-project",
+        { name: "back", path: backPath, tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /not found/,
+    );
+  });
+
+  it("rejects a duplicate repo name within the project", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "front", path: backPath, tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /already exists/,
+    );
+  });
+
+  it("rejects an invalid repo name", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "bad name", path: backPath, tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /must match/,
+    );
+  });
+
+  it("rejects a non-existent path", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        {
+          name: "back",
+          path: path.join(homedir(), ".banyan-test-wizard", "missing"),
+          tech: "node",
+          run: { command: "x" },
+        },
+        configPath,
+      ),
+      /does not exist/,
+    );
   });
 });
 

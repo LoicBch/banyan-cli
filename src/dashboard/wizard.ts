@@ -261,41 +261,46 @@ function validateInput(input: CreateProjectInput): void {
 
   const seen = new Set<string>();
   for (const repo of input.repos) {
-    if (!repo.name || typeof repo.name !== "string") {
-      throw new ConfigError("repo name is required");
-    }
-    if (!/^[A-Za-z0-9_.-]+$/.test(repo.name)) {
-      throw new ConfigError(
-        `repo name '${repo.name}' must match [A-Za-z0-9_.-]+`,
-      );
-    }
     if (seen.has(repo.name)) {
       throw new ConfigError(`duplicate repo name '${repo.name}'`);
     }
     seen.add(repo.name);
+    validateRepoInput(repo);
+  }
+}
 
-    if (!repo.path || typeof repo.path !== "string") {
-      throw new ConfigError(`repo '${repo.name}' is missing a path`);
-    }
-    const resolvedPath = path.resolve(expandHome(repo.path));
-    if (!existsSync(resolvedPath)) {
-      throw new ConfigError(`repo '${repo.name}' path does not exist: ${repo.path}`);
-    }
-    if (!statSync(resolvedPath).isDirectory()) {
-      throw new ConfigError(`repo '${repo.name}' path is not a directory: ${repo.path}`);
-    }
+/** Validation shared between project creation and add-repo-to-existing. */
+function validateRepoInput(repo: CreateRepoInput): void {
+  if (!repo.name || typeof repo.name !== "string") {
+    throw new ConfigError("repo name is required");
+  }
+  if (!/^[A-Za-z0-9_.-]+$/.test(repo.name)) {
+    throw new ConfigError(
+      `repo name '${repo.name}' must match [A-Za-z0-9_.-]+`,
+    );
+  }
 
-    if (repo.tech !== undefined && repo.tech !== "" && !isKnownTech(repo.tech)) {
-      throw new ConfigError(
-        `unknown tech '${repo.tech}' for repo '${repo.name}'. ` +
-          `known: ${TECH_PROFILES.map((p) => p.id).join(", ")}`,
-      );
-    }
+  if (!repo.path || typeof repo.path !== "string") {
+    throw new ConfigError(`repo '${repo.name}' is missing a path`);
+  }
+  const resolvedPath = path.resolve(expandHome(repo.path));
+  if (!existsSync(resolvedPath)) {
+    throw new ConfigError(`repo '${repo.name}' path does not exist: ${repo.path}`);
+  }
+  if (!statSync(resolvedPath).isDirectory()) {
+    throw new ConfigError(`repo '${repo.name}' path is not a directory: ${repo.path}`);
+  }
 
-    if (repo.run !== undefined) {
-      if (!repo.run.command || typeof repo.run.command !== "string") {
-        throw new ConfigError(`repo '${repo.name}' run.command is required`);
-      }
+  if (repo.tech !== undefined && repo.tech !== "" && !isKnownTech(repo.tech)) {
+    throw new ConfigError(
+      `unknown tech '${repo.tech}' for repo '${repo.name}'. ` +
+        `known: ${TECH_PROFILES.map((p) => p.id).join(", ")}`,
+    );
+  }
+
+  if (repo.run !== undefined) {
+    if (!repo.run.command || typeof repo.run.command !== "string") {
+      throw new ConfigError(`repo '${repo.name}' run.command is required`);
     }
   }
 }
@@ -303,24 +308,84 @@ function validateInput(input: CreateProjectInput): void {
 function buildProjectNode(input: CreateProjectInput): Record<string, unknown> {
   return {
     name: input.name,
-    repos: input.repos.map((r) => ({
-      name: r.name,
-      path: contractHome(path.resolve(expandHome(r.path))),
-      ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
-      ...(r.tech ? { tech: r.tech } : {}),
-      ...(r.run
-        ? {
-            run: {
-              command: r.run.command,
-              ...(r.run.port !== undefined ? { port: r.run.port } : {}),
-              ...(r.run.portEnv ? { portEnv: r.run.portEnv } : {}),
-              ...(r.run.setup ? { setup: r.run.setup } : {}),
-              ...(r.run.stopCommand ? { stopCommand: r.run.stopCommand } : {}),
-            },
-          }
-        : {}),
-    })),
+    repos: input.repos.map(buildRepoNode),
   };
+}
+
+function buildRepoNode(r: CreateRepoInput): Record<string, unknown> {
+  return {
+    name: r.name,
+    path: contractHome(path.resolve(expandHome(r.path))),
+    ...(r.baseBranch ? { baseBranch: r.baseBranch } : {}),
+    ...(r.tech ? { tech: r.tech } : {}),
+    ...(r.run
+      ? {
+          run: {
+            command: r.run.command,
+            ...(r.run.port !== undefined ? { port: r.run.port } : {}),
+            ...(r.run.portEnv ? { portEnv: r.run.portEnv } : {}),
+            ...(r.run.setup ? { setup: r.run.setup } : {}),
+            ...(r.run.stopCommand ? { stopCommand: r.run.stopCommand } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Append a single repo to an existing project. Preserves the doc's
+ * comments and key order; validates the resulting config via the regular
+ * loader before persisting. Throws ConfigError on missing project,
+ * duplicate repo name, invalid path, or unknown tech.
+ */
+export async function addRepoToProject(
+  projectName: string,
+  repo: CreateRepoInput,
+  configPath?: string,
+): Promise<void> {
+  validateRepoInput(repo);
+
+  const resolved = configPath ?? defaultConfigPath();
+  if (!existsSync(resolved)) {
+    throw new ConfigError(`config file not found: ${resolved}`);
+  }
+  const doc = await loadOrInitDocument(resolved);
+
+  const projects = doc.get("projects") as YAML.YAMLSeq | undefined;
+  if (!projects || !YAML.isSeq(projects)) {
+    throw new ConfigError(`${resolved}: "projects" must be a sequence`);
+  }
+
+  let projectNode: YAML.YAMLMap | undefined;
+  for (const item of projects.items) {
+    if (YAML.isMap(item) && item.get("name") === projectName) {
+      projectNode = item;
+      break;
+    }
+  }
+  if (!projectNode) {
+    throw new ConfigError(`project '${projectName}' not found`);
+  }
+
+  const reposSeq = projectNode.get("repos") as YAML.YAMLSeq | undefined;
+  if (!reposSeq || !YAML.isSeq(reposSeq)) {
+    throw new ConfigError(`project '${projectName}' has no repos sequence`);
+  }
+  for (const item of reposSeq.items) {
+    if (YAML.isMap(item) && item.get("name") === repo.name) {
+      throw new ConfigError(
+        `repo '${repo.name}' already exists in project '${projectName}'`,
+      );
+    }
+  }
+
+  const newRepo = doc.createNode(buildRepoNode(repo));
+  reposSeq.add(newRepo);
+
+  validateConfig(doc.toJS(), resolved);
+
+  await mkdir(path.dirname(resolved), { recursive: true });
+  await writeFile(resolved, doc.toString(), "utf8");
 }
 
 async function loadOrInitDocument(configPath: string): Promise<YAML.Document.Parsed> {

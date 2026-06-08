@@ -14,8 +14,10 @@ import {
   listFsEntries,
   probePath,
   createProject,
+  addRepoToProject,
   listTechProfiles,
   type CreateProjectInput,
+  type CreateRepoInput,
 } from "../wizard.js";
 import type { RouteDeps } from "./shared.js";
 
@@ -82,6 +84,34 @@ export function register(app: Express, deps: WizardDeps): void {
       config.projects.length = 0;
       config.projects.push(...fresh.projects);
       res.json({ ok: true, name: body.name });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
+  });
+
+  // Append a repo to an existing project. Same payload shape as a single
+  // entry in POST /api/projects' `repos` array.
+  app.post("/api/projects/:name/repos", async (req, res) => {
+    if (!filesystemRoutesEnabled) {
+      res.status(403).json({ ok: false, error: "config mutation is disabled in remote mode" });
+      return;
+    }
+    const projectName = req.params.name;
+    if (!projectName) {
+      res.status(400).json({ ok: false, error: "project name is required" });
+      return;
+    }
+    const body = (req.body ?? {}) as Partial<CreateRepoInput>;
+    if (!body.name || !body.path) {
+      res.status(400).json({ ok: false, error: "repo name and path are required" });
+      return;
+    }
+    try {
+      await addRepoToProject(projectName, body as CreateRepoInput);
+      const fresh = await loadConfig();
+      config.projects.length = 0;
+      config.projects.push(...fresh.projects);
+      res.json({ ok: true, project: projectName, repo: body.name });
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
     }

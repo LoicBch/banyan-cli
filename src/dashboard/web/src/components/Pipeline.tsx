@@ -30,6 +30,7 @@ import * as actions from "@/lib/actions";
 import { confirm } from "@/lib/confirm";
 import { useKeyboard } from "@/lib/useKeyboard";
 import { openProjectWizard } from "@/components/ProjectWizard";
+import { openAddRepoDialog } from "@/components/AddRepoDialog";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,10 +58,22 @@ export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
             Pipeline · {project.repos.length} {project.repos.length === 1 ? "repo" : "repos"}
           </p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
-          <Plus className="size-4" />
-          New feature
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            onClick={() => openAddRepoDialog(project.name)}
+            title="Add a repo to this project"
+          >
+            <FolderPlus className="size-4" />
+            Add repo
+          </Button>
+          <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
+            <Plus className="size-4" />
+            New feature
+          </Button>
+        </div>
       </header>
 
       <FeatureList project={project} />
