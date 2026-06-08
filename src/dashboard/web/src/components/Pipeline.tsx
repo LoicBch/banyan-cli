@@ -140,19 +140,26 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
     feature: string,
     label: string,
     fn: () => Promise<actions.ActionResult>,
-  ): Promise<void> {
+  ): Promise<actions.ActionResult> {
     setBusyByFeature((s) => ({ ...s, [feature]: true }));
-    const p = fn();
-    toast.promise(p, {
-      loading: `${label}…`,
-      success: (r) => (r.ok ? `${label} ✓` : `${label} failed`),
-      error: () => `${label} failed`,
-    });
-    const r = await p;
-    setBusyByFeature((s) => ({ ...s, [feature]: false }));
-    if (!r.ok && r.error) {
-      toast.error(label, { description: r.error });
+    // Sonner-style loading-then-update: one toast, no flicker, no
+    // "success" envelope wrapping a failed result (the previous
+    // toast.promise variant printed both "Cleanup failed" with a green
+    // border and an error toast underneath).
+    const id = toast.loading(`${label}…`);
+    let r: actions.ActionResult;
+    try {
+      r = await fn();
+    } catch (err) {
+      r = { ok: false, error: String(err) };
     }
+    setBusyByFeature((s) => ({ ...s, [feature]: false }));
+    if (r.ok) {
+      toast.success(`${label} ✓`, { id });
+    } else {
+      toast.error(label, { id, description: r.error });
+    }
+    return r;
   }
 
   function isFeatureRunning(f: FeatureState): boolean {
@@ -194,9 +201,28 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
       confirmLabel: "Delete everything",
     });
     if (!ok) return;
-    await runFeatureAction(f.feature, "Cleanup", () =>
+
+    const r = await runFeatureAction(f.feature, "Cleanup", () =>
       actions.cleanup(project.name, f.feature),
     );
+
+    // Dirty-worktree path: `git worktree remove` refuses without --force when
+    // there are modified or untracked files. Show a confirm to retry with
+    // force=true so the user can blow it away from the dashboard instead of
+    // dropping back to the CLI.
+    if (!r.ok && r.error && /modified or untracked|use --force/i.test(r.error)) {
+      const forceOk = await confirm({
+        title: `Force cleanup '${f.feature}'?`,
+        description:
+          "This worktree has uncommitted changes or untracked files. Force-deleting will discard them — they can't be recovered.",
+        destructive: true,
+        confirmLabel: "Force delete",
+      });
+      if (!forceOk) return;
+      await runFeatureAction(f.feature, "Cleanup (force)", () =>
+        actions.cleanup(project.name, f.feature, { force: true }),
+      );
+    }
   }
 
   // ── Keyboard navigation (Tier 1) ──────────────────────────────────────
