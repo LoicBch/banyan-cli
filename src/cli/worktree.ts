@@ -12,7 +12,6 @@ import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
 import { testStop } from "../commands/testStop.js";
-import { assignTask } from "../commands/assignTask.js";
 import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
 import { generateSlug } from "../slug.js";
 import { UsageError } from "../errors.js";
@@ -156,17 +155,6 @@ export function register(
         process.stdout.write(launchScriptPath + "\n");
       },
     );
-
-  projectCmd
-    .command("task <branch> <prompt>")
-    .description("send a prompt to the per-feature claude agent (paste-and-submit into the existing pane)")
-    .option("-f, --force", "send even if claude isn't detected as running in the pane")
-    .action(async (feature: string, prompt: string, opts: { force?: boolean }) => {
-      const { paneId } = await assignTask(config, project.name, feature, prompt, {
-        force: opts.force,
-      });
-      logger.ok(`prompt sent to ${feature} (${paneId})`);
-    });
 
   projectCmd
     .command("wt-rm [branch] [repo]")

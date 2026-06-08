@@ -21,7 +21,6 @@ export function register(app: Express): void {
           type: r.type ?? "git",
           path: r.path,
           run: r.run ?? null,
-          deployCommand: r.deployCommand ?? null,
         })),
       }));
       res.json({ projects });

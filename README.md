@@ -294,7 +294,6 @@ Walks every active worktree on disk, recreates the tmux panes, restarts run proc
 version: 1
 projects:
   - name: myproject
-    deployCommand: bash ~/Dev/myproject/deploy.sh
     repos:
       - name: front
         path: ~/Dev/myproject/front
@@ -349,13 +348,11 @@ bn <project> start [feature] [repos...]  workspace (no feature) or run processes
 bn <project> stop <feature>              stop run processes
 bn <project> close                       close the tmux session (worktrees on disk kept)
 bn <project> status / resume / ports
-bn <project> deploy [repo] [args...]
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
   -p "<prompt>"   LLM-named slug from prompt
   -m <mode>       interactive | assisted | autonomous | autopilot
   --prefix <p>    branch prefix (default 'feature')
-bn <project> task <feature> <prompt>     paste into the feature's agent pane
 bn <project> wt-rm <feature> [repo]
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]

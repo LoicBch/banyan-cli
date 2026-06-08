@@ -1,6 +1,6 @@
 /**
  * Per-project lifecycle commands: workspace + feature start/stop, status,
- * resume, ports, deploy.
+ * resume, ports.
  */
 import type { Command } from "commander";
 import type { Config, ProjectConfig } from "../config.js";
@@ -15,7 +15,6 @@ import { testStop } from "../commands/testStop.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
-import { deploy } from "../commands/deploy.js";
 
 export function register(
   projectCmd: Command,
@@ -107,14 +106,5 @@ export function register(
     )
     .action(async (feature: string | undefined) => {
       await portsCmd(config, project.name, feature);
-    });
-
-  projectCmd
-    .command("deploy [repo] [args...]")
-    .description("run the deployCommand for the project (or a specific repo). extra args pass through to the command")
-    .allowUnknownOption()
-    .action(async (repoName: string | undefined, args: string[]) => {
-      const code = await deploy(config, project.name, repoName, args);
-      if (code !== 0) process.exit(code);
     });
 }
