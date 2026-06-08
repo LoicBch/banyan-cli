@@ -22,6 +22,7 @@ import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { fetchState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { useKeyboard } from "@/lib/useKeyboard";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const STORAGE_SECTION = "banyan.web.section";
 const STORAGE_PROJECT = "banyan.web.project";
@@ -29,8 +30,10 @@ const STORAGE_PROJECT = "banyan.web.project";
 export default function App(): React.JSX.Element {
   return (
     <ThemeProvider>
-      <Shell />
-      <ThemedToaster />
+      <TooltipProvider delayDuration={200}>
+        <Shell />
+        <ThemedToaster />
+      </TooltipProvider>
     </ThemeProvider>
   );
 }

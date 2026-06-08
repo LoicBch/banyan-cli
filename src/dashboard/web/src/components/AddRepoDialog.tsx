@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { CheckCircle2 } from "lucide-react";
 import { openDialog } from "@/lib/imperative-dialog";
 import { ThemeProvider } from "@/lib/theme";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
   DialogShell,
@@ -33,7 +34,9 @@ import {
 export function openAddRepoDialog(projectName: string, onAdded?: () => void): void {
   openDialog((close) => (
     <ThemeProvider>
-      <AddRepoBody projectName={projectName} onAdded={onAdded} close={close} />
+      <TooltipProvider delayDuration={200}>
+        <AddRepoBody projectName={projectName} onAdded={onAdded} close={close} />
+      </TooltipProvider>
     </ThemeProvider>
   ));
 }

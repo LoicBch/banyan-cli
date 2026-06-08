@@ -40,6 +40,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import {
   DialogShell,
   DialogHeader,
@@ -78,9 +80,31 @@ export interface RepoData {
 export function openProjectWizard(): void {
   openDialog((close) => (
     <ThemeProvider>
-      <WizardBody close={close} />
+      <TooltipProvider delayDuration={200}>
+        <WizardBody close={close} />
+      </TooltipProvider>
     </ThemeProvider>
   ));
+}
+
+/** Small `(?)` icon with a hover tooltip — used to annotate optional
+ *  / nuanced fields without cluttering the label. */
+function HelpHint({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="More info"
+          className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        >
+          <HelpCircle className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{children}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 // ── Main wizard ──────────────────────────────────────────────────────────
@@ -521,8 +545,12 @@ export function RepoEditor({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>
+          <Label className="flex items-center gap-1.5">
             Base branch <span className="text-emerald-500">*</span>
+            <HelpHint>
+              Development branch that's the target of <code>bn merge</code> for
+              this repo. banyan also rebases your feature onto it before pushing.
+            </HelpHint>
           </Label>
           <Input
             value={draft.baseBranch}
@@ -578,7 +606,14 @@ export function RepoEditor({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Preferred port <span className="text-muted-foreground/70 font-normal">(banyan finds a free port nearby per feature)</span></Label>
+            <Label className="flex items-center gap-1.5">
+              Preferred port
+              <HelpHint>
+                banyan finds a free port nearby per feature. Set this to give
+                each feature's run process a predictable port range (e.g. set
+                3000 → first feature gets :3000, second :3001, …).
+              </HelpHint>
+            </Label>
             <Input
               type="number"
               value={draft.run.port ?? ""}
