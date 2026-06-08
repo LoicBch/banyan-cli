@@ -137,12 +137,18 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
                 <div key={p.name} className="mb-0.5">
                   <div
                     className={cn(
-                      "group flex items-center rounded-md transition-colors",
+                      "group relative flex items-center rounded-md transition-colors",
                       isActive
-                        ? "bg-accent text-foreground"
+                        ? "bg-emerald-500/10 text-foreground"
                         : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                     )}
                   >
+                    {/* Active accent — vertical emerald bar on the left edge.
+                     *  Makes the current scope unmistakable while staying out
+                     *  of the way of the other interactive elements. */}
+                    {isActive ? (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-emerald-500" />
+                    ) : null}
                     {/* Chevron toggle — separate hitbox from the project button */}
                     <button
                       onClick={() => toggleExpanded(p.name)}
@@ -159,9 +165,12 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
                     {/* Project name — activating it switches the active project */}
                     <button
                       onClick={() => onProject(p.name)}
-                      className="flex flex-1 items-center gap-2 px-1 py-1.5 text-sm font-mono text-left"
+                      className={cn(
+                        "flex flex-1 items-center gap-2 px-1 py-1.5 text-sm font-mono text-left",
+                        isActive && "font-semibold",
+                      )}
                     >
-                      <FolderTree className="size-4" />
+                      <FolderTree className={cn("size-4", isActive && "text-emerald-500")} />
                       {p.name}
                     </button>
                   </div>
