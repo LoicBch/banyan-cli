@@ -21,11 +21,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { StackPicker, type TechProfile } from "@/components/ProjectWizard";
 
 interface RepoConfig {
   name: string;
   type: "git" | "compose";
   path: string;
+  tech?: string | null;
+  baseBranch?: string | null;
   run: null | {
     command: string;
     setup?: string;
@@ -44,9 +47,11 @@ interface ProjectCfg {
 
 interface ConfigData {
   projects: ProjectCfg[];
+  configPath?: string;
 }
 
 interface RepoDraft {
+  tech: string;
   command: string;
   setup: string;
   stopCommand: string;
@@ -56,6 +61,7 @@ interface RepoDraft {
 
 function repoToDraft(r: RepoConfig): RepoDraft {
   return {
+    tech: r.tech ?? "",
     command: r.run?.command ?? "",
     setup: r.run?.setup ?? "",
     stopCommand: r.run?.stopCommand ?? "",
@@ -79,6 +85,7 @@ export interface ConfigProps {
 
 export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps = {}): React.JSX.Element {
   const [data, setData] = React.useState<ConfigData | null>(null);
+  const [profiles, setProfiles] = React.useState<TechProfile[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, RepoDraft>>({});
   const [highlightKey, setHighlightKey] = React.useState<string | null>(null);
@@ -96,6 +103,15 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
+
+  // Tech profiles for the per-card StackPicker. Fetched once; the list
+  // doesn't change at runtime.
+  React.useEffect(() => {
+    fetch("/api/tech-profiles")
+      .then((r) => r.json())
+      .then((d) => setProfiles(d.profiles ?? []))
+      .catch(() => { /* non-fatal — picker just renders empty */ });
+  }, []);
 
   // Focus a specific repo card when the parent passes one in (sidebar click).
   // Waits one tick for the cards to render, then scrolls + briefly highlights.
@@ -151,6 +167,22 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
     if (!draft) return;
     if (!draft.command.trim()) { toast.error("Command is required"); return; }
 
+    // Meta first (tech) — if it fails we don't want a half-saved state.
+    // Only post when the draft actually differs from disk.
+    const techChanged = (draft.tech || "") !== (repo.tech || "");
+    if (techChanged) {
+      const metaRes = await fetch("/api/config/repos/meta", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project, repo: repo.name, tech: draft.tech || "" }),
+      });
+      const metaJson = await metaRes.json().catch(() => ({}));
+      if (!metaRes.ok || !metaJson.ok) {
+        toast.error("Save failed", { description: metaJson.error ?? `${metaRes.status}` });
+        return;
+      }
+    }
+
     const body = {
       project,
       repo: repo.name,
@@ -174,6 +206,18 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
       await load();
     } else {
       toast.error("Save failed", { description: result.error ?? `${r.status}` });
+    }
+  }
+
+  async function openConfigFile() {
+    try {
+      const r = await fetch("/api/config/open", { method: "POST" });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok || !json.ok) {
+        toast.error("Could not open config", { description: json.error ?? `${r.status}` });
+      }
+    } catch (err) {
+      toast.error("Could not open config", { description: String(err) });
     }
   }
 
@@ -202,7 +246,15 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
           )}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Per-repo run command + named presets. Stored in <code className="text-foreground">~/.config/banyan/config.yaml</code> (comments preserved).
+          Config stored in{" "}
+          <button
+            type="button"
+            onClick={openConfigFile}
+            className="font-mono text-foreground underline-offset-4 hover:underline hover:text-primary transition-colors"
+            title="Open this file in your default editor"
+          >
+            {data.configPath ?? "~/.config/banyan/config.yaml"}
+          </button>
         </p>
       </header>
 
@@ -258,6 +310,17 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
                     </p>
                   ) : (
                     <>
+                      {profiles.length > 0 ? (
+                        <div className="space-y-1.5">
+                          <Label>Stack</Label>
+                          <StackPicker
+                            profiles={profiles}
+                            selected={draft.tech}
+                            onSelect={(id) => updateDraft(p.name, repo.name, { tech: id })}
+                          />
+                        </div>
+                      ) : null}
+
                       <div className="space-y-1.5">
                         <Label>Command</Label>
                         <Input

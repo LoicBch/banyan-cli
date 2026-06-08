@@ -109,7 +109,7 @@ export async function startServer(
   stateRoutes.register(app, { config, auth: opts.auth });
   actionsRoutes.register(app, { config });
   shortcutsRoutes.register(app);
-  configRoutes.register(app);
+  configRoutes.register(app, { filesystemRoutesEnabled: !opts.auth?.enabled });
   wizardRoutes.register(app, {
     config,
     filesystemRoutesEnabled: !opts.auth?.enabled,

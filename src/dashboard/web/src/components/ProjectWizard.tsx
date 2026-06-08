@@ -608,11 +608,12 @@ export function RepoEditor({
 
 // ── Stack picker (square cards) ──────────────────────────────────────────
 
-/** Card grid for picking a tech stack. Each tile has a lucide icon
- *  representing the stack, the label below, and animates on
- *  selection (emerald ring + scale-105) and on click (brief scale-95
- *  bounce). */
-function StackPicker({
+/** Card grid for picking a tech stack. Each tile has the brand icon
+ *  (Simple Icons paths inlined via TechIcon), the label below, and
+ *  animates on selection (emerald ring + scale-103) and on click
+ *  (brief scale-95 bounce). Compact size so it doesn't dominate a
+ *  form crowded with other fields. */
+export function StackPicker({
   profiles,
   selected,
   onSelect,
@@ -622,7 +623,7 @@ function StackPicker({
   onSelect: (id: string) => void;
 }): React.JSX.Element {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+    <div className="grid grid-cols-5 gap-1.5">
       {profiles.map((p) => {
         const isSelected = p.id === selected;
         return (
@@ -632,42 +633,37 @@ function StackPicker({
             onClick={() => onSelect(p.id)}
             title={p.hint}
             className={cn(
-              "group relative aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border bg-card/40 px-2 py-3",
+              "group relative flex flex-col items-center justify-center gap-1 rounded-md border bg-card/40 px-2 py-2",
               "transition-all duration-200 ease-out active:scale-95",
               isSelected
-                ? "border-emerald-500/60 bg-emerald-500/10 ring-2 ring-emerald-500/40 scale-[1.03] shadow-[0_0_0_4px_rgba(16,185,129,0.08)]"
+                ? "border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/40 scale-[1.03]"
                 : "border-border hover:border-primary/40 hover:bg-accent/40",
             )}
           >
-            <StackIcon
+            <TechIcon
               tech={p.id}
+              branded={isSelected}
               className={cn(
-                "size-7 transition-colors",
-                isSelected ? "text-emerald-500" : "text-muted-foreground group-hover:text-foreground",
+                "size-5 transition-colors",
+                isSelected ? "" : "text-muted-foreground group-hover:text-foreground",
               )}
             />
             <span
               className={cn(
-                "text-[11px] font-medium transition-colors text-center leading-tight",
+                "text-[10px] font-medium transition-colors text-center leading-tight",
                 isSelected ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
               )}
             >
               {p.label}
             </span>
             {isSelected ? (
-              <span className="absolute top-1 right-1 size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="absolute top-1 right-1 size-1 rounded-full bg-emerald-500" />
             ) : null}
           </button>
         );
       })}
     </div>
   );
-}
-
-/** Wraps TechIcon but routes the wizard tech ids through the same icon
- *  set used in the sidebar — adds a generic "Code" for custom/unknown. */
-function StackIcon({ tech, className }: { tech: string; className?: string }): React.JSX.Element {
-  return <TechIcon tech={tech} className={className} />;
 }
 
 // ── Detection summary card ──────────────────────────────────────────────

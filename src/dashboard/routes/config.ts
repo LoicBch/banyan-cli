@@ -3,14 +3,33 @@
  *
  * Reads come from `readConfigForDashboard` which always pulls from disk so
  * the editor reflects what's saved (not the in-memory copy that
- * `/api/projects` mutates). Writes go through `updateRepoRun` which
- * preserves comments via `YAML.parseDocument`.
+ * `/api/projects` mutates). Writes go through `updateRepoRun` /
+ * `updateRepoMeta` which preserve comments via `YAML.parseDocument`.
+ *
+ * The open-in-editor endpoint is gated to local mode (no auth) like the
+ * filesystem routes — we don't want a remote attacker triggering shell
+ * commands by guessing the token.
  */
 import type { Express } from "express";
-import { updateRepoRun, readConfigForDashboard } from "../configWrite.js";
+import { spawn } from "node:child_process";
+import { defaultConfigPath } from "../../config.js";
+import {
+  updateRepoRun,
+  updateRepoMeta,
+  readConfigForDashboard,
+} from "../configWrite.js";
 import { requireFields } from "./shared.js";
 
-export function register(app: Express): void {
+interface ConfigDeps {
+  /** True in local mode — gates routes that touch the user's machine
+   *  beyond config-file mutation (specifically: opening the YAML in
+   *  their editor). */
+  filesystemRoutesEnabled: boolean;
+}
+
+export function register(app: Express, deps: ConfigDeps): void {
+  const { filesystemRoutesEnabled } = deps;
+
   app.get("/api/config/repos", async (_req, res) => {
     try {
       const fresh = await readConfigForDashboard();
@@ -20,10 +39,15 @@ export function register(app: Express): void {
           name: r.name,
           type: r.type ?? "git",
           path: r.path,
+          tech: r.tech ?? null,
+          baseBranch: r.baseBranch ?? null,
           run: r.run ?? null,
         })),
       }));
-      res.json({ projects });
+      res.json({
+        projects,
+        configPath: defaultConfigPath(),
+      });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -51,6 +75,48 @@ export function register(app: Express): void {
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
+    }
+  });
+
+  // Meta fields (tech, baseBranch) — separate from `run` so a save can
+  // touch either without rewriting the whole block.
+  app.post("/api/config/repos/meta", async (req, res) => {
+    if (!requireFields(req, res, ["project", "repo"])) return;
+    const { project, repo, tech, baseBranch } = req.body as {
+      project: string;
+      repo: string;
+      tech?: string;
+      baseBranch?: string;
+    };
+    try {
+      await updateRepoMeta(project, repo, { tech, baseBranch });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
+  });
+
+  // Open the config file in the user's default editor. Local-only — we
+  // don't want a tunneled dashboard triggering OS-level commands.
+  app.post("/api/config/open", (_req, res) => {
+    if (!filesystemRoutesEnabled) {
+      res.status(403).json({ ok: false, error: "open-in-editor is disabled in remote mode" });
+      return;
+    }
+    const target = defaultConfigPath();
+    const cmd =
+      process.platform === "darwin" ? "open" :
+      process.platform === "win32" ? "start" :
+      "xdg-open";
+    try {
+      // `start` on Windows needs to go through cmd.exe; for simplicity we
+      // detach in all cases and ignore the child's exit.
+      const child = spawn(cmd, [target], { detached: true, stdio: "ignore" });
+      child.on("error", () => { /* swallow — already responded */ });
+      child.unref();
+      res.json({ ok: true, path: target });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: (err as Error).message });
     }
   });
 }
