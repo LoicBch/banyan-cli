@@ -27,7 +27,6 @@ export async function projectInfo(
   projectName: string,
 ): Promise<{
   name: string;
-  deployCommand?: string;
   repos: Array<{
     name: string;
     type: "git" | "compose";
@@ -43,14 +42,12 @@ export async function projectInfo(
       env?: Record<string, string>;
       composePorts?: Record<string, string>;
     };
-    deployCommand?: string;
   }>;
 }> {
   const config = await getConfig();
   const project = getProject(config, projectName);
   return {
     name: project.name,
-    deployCommand: project.deployCommand,
     repos: project.repos.map((r) => ({
       name: r.name,
       type: r.type ?? "git",
@@ -58,7 +55,6 @@ export async function projectInfo(
       baseBranch: r.baseBranch,
       composeFile: r.composeFile,
       run: r.run,
-      deployCommand: r.deployCommand,
     })),
   };
 }

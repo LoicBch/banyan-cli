@@ -205,7 +205,6 @@ export interface CreateRepoInput {
 export interface CreateProjectInput {
   name: string;
   repos: CreateRepoInput[];
-  deployCommand?: string;
 }
 
 /**
@@ -304,7 +303,6 @@ function validateInput(input: CreateProjectInput): void {
 function buildProjectNode(input: CreateProjectInput): Record<string, unknown> {
   return {
     name: input.name,
-    ...(input.deployCommand ? { deployCommand: input.deployCommand } : {}),
     repos: input.repos.map((r) => ({
       name: r.name,
       path: contractHome(path.resolve(expandHome(r.path))),

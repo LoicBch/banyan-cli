@@ -10,7 +10,6 @@ const TOPLEVEL_CMDS = new Set([
   "ls",
   "init",
   "serve",
-  "install-tmux",
   "_autopilot-tick",
   "help",
   "-h",

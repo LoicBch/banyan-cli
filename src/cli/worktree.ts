@@ -8,15 +8,14 @@ import { getProject } from "../config.js";
 import { logger } from "../logger.js";
 import { wtAll } from "../commands/wtAll.js";
 import { wtRm } from "../commands/wtRm.js";
-import { wtLs } from "../commands/wtLs.js";
 import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
 import { testStop } from "../commands/testStop.js";
-import { assignTask } from "../commands/assignTask.js";
 import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
 import { generateSlug } from "../slug.js";
 import { UsageError } from "../errors.js";
+import { resolveFeatureFromCwd } from "../location.js";
 
 
 export function register(
@@ -46,10 +45,6 @@ export function register(
       "-m, --mode <mode>",
       `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
     )
-    .option(
-      "--review-plan",
-      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <branch>`. orthogonal to --mode (combine with autonomous or autopilot).",
-    )
     .action(
       async (
         feature: string | undefined,
@@ -58,7 +53,6 @@ export function register(
           prompt?: string;
           prefix?: string;
           mode?: string;
-          reviewPlan?: boolean;
         },
       ) => {
         let mode: AgentMode | undefined;
@@ -105,7 +99,6 @@ export function register(
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
-          ...(opts.reviewPlan ? { requireApproval: true } : {}),
         });
       },
     );
@@ -124,7 +117,6 @@ export function register(
     .option("--repos <repos...>", "limit to these repos")
     .option("--prefix <prefix>", "branch prefix")
     .option("-m, --mode <mode>", "agent mode")
-    .option("--review-plan", "require plan approval before work starts")
     .action(
       async (
         prompt: string,
@@ -132,7 +124,6 @@ export function register(
           repos?: string[];
           prefix?: string;
           mode?: string;
-          reviewPlan?: boolean;
         },
       ) => {
         const paneId = process.env.TMUX_PANE;
@@ -153,7 +144,6 @@ export function register(
           initialPrompt: prompt,
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
-          ...(opts.reviewPlan ? { requireApproval: true } : {}),
           inheritPaneId: paneId,
           stagedLaunch: true,
         });
@@ -167,62 +157,46 @@ export function register(
     );
 
   projectCmd
-    .command("task <branch> <prompt>")
-    .description("send a prompt to the per-feature claude agent (paste-and-submit into the existing pane)")
-    .option("-f, --force", "send even if claude isn't detected as running in the pane")
-    .action(async (feature: string, prompt: string, opts: { force?: boolean }) => {
-      const { paneId } = await assignTask(config, project.name, feature, prompt, {
-        force: opts.force,
-      });
-      logger.ok(`prompt sent to ${feature} (${paneId})`);
-    });
-
-  projectCmd
-    .command("wt-rm <branch> [repo]")
-    .description("remove worktree (keep branch local + remote) and close pane. omit repo to act on all worktrees of this feature")
+    .command("wt-rm [branch] [repo]")
+    .description("remove worktree (keep branch local + remote) and close pane. branch is inferred from cwd when omitted in a worktree. omit repo to act on all worktrees of this feature")
     .option(
       "-f, --force",
       "remove worktree even with uncommitted changes (branch is still kept)",
     )
-    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
-      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
+    .action(async (feature: string | undefined, repo: string | undefined, opts: { force?: boolean }) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "wt-rm");
+      const repos = await resolveRepos(getProject(config, project.name), feat, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await wtRm(
-          await buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature: feat, repoName: r }),
           { force: opts.force },
         );
       }
     });
 
   projectCmd
-    .command("wt-ls")
-    .description("list worktrees across all repos")
-    .action(async () => {
-      await wtLs(await buildContext(config, project.name));
-    });
-
-  projectCmd
-    .command("rebase <branch> [repo]")
-    .description("fetch + rebase the worktree on its base branch. omit repo to rebase all worktrees of this branch.")
+    .command("rebase [branch] [repo]")
+    .description("fetch + rebase the worktree on its base branch. branch is inferred from cwd when omitted in a worktree. omit repo to rebase all worktrees of this branch.")
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
-    .action(async (feature: string, repo: string | undefined, opts: { base?: string }) => {
-      const repos = await resolveRepos(getProject(config, project.name), feature, repo);
+    .action(async (feature: string | undefined, repo: string | undefined, opts: { base?: string }) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "rebase");
+      const repos = await resolveRepos(getProject(config, project.name), feat, repo);
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await rebase(
-          await buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature: feat, repoName: r }),
           { base: opts.base },
         );
       }
     });
 
   projectCmd
-    .command("merge <branch> [repo]")
+    .command("merge [branch] [repo]")
     .description(
-      "push + create MR/PR + merge (GitLab/GitHub). always pre-flights a local rebase first " +
-        "and runs the headless claude resolver on conflicts (cross-feature aware). " +
-        "--local for the offline path, --no-resolve to opt out of auto-resolution.",
+      "push + create MR/PR + merge (GitLab/GitHub). branch is inferred from cwd when omitted in a worktree. " +
+        "always pre-flights a local rebase first and runs the headless claude resolver on conflicts " +
+        "(cross-feature aware). --local for the offline path, --no-resolve to opt out of auto-resolution.",
     )
     .option("-b, --base <branch>", "override base branch (default: repo baseBranch / origin/HEAD / main)")
     .option("--local", "skip the MR/PR flow, merge locally as before")
@@ -235,7 +209,7 @@ export function register(
     )
     .action(
       async (
-        feature: string,
+        feature: string | undefined,
         repo: string | undefined,
         opts: {
           base?: string;
@@ -246,11 +220,12 @@ export function register(
           resolve?: boolean;
         },
       ) => {
-        const repos = await resolveRepos(getProject(config, project.name), feature, repo);
+        const feat = resolveFeatureFromCwd(config, project.name, feature, "merge");
+        const repos = await resolveRepos(getProject(config, project.name), feat, repo);
         for (const r of repos) {
           if (repos.length > 1) logger.info(`=== ${r} ===`);
           await merge(
-            await buildContext(config, project.name, { feature, repoName: r }),
+            await buildContext(config, project.name, { feature: feat, repoName: r }),
             {
               base: opts.base,
               local: opts.local,
@@ -266,21 +241,23 @@ export function register(
     );
 
   projectCmd
-    .command("cleanup <branch> [repo]")
+    .command("cleanup [branch] [repo]")
     .description(
       "full teardown of a feature: stop running tests + remove worktree(s) + delete branch (safe) + " +
-        "close pane + stop compose stack and drop volumes. omit repo to cleanup everything across the project.",
+        "close pane + stop compose stack and drop volumes. branch is inferred from cwd when omitted in a worktree. " +
+        "omit repo to cleanup everything across the project.",
     )
     .option(
       "-f, --force",
       "remove worktree even with uncommitted changes; force-delete branch even with unmerged commits",
     )
-    .action(async (feature: string, repo: string | undefined, opts: { force?: boolean }) => {
+    .action(async (feature: string | undefined, repo: string | undefined, opts: { force?: boolean }) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "cleanup");
       // Full project cleanup also includes compose stacks. With an explicit
       // repo, we only act on that one (the user knows what they're doing).
       const repos = await resolveRepos(
         getProject(config, project.name),
-        feature,
+        feat,
         repo,
         { includeCompose: !repo },
       );
@@ -296,7 +273,7 @@ export function register(
         try {
           await testStop(
             await buildContext(config, project.name),
-            feature,
+            feat,
           );
         } catch (err) {
           // Best-effort: if test-stop fails (no window, stopCommand errors,
@@ -311,7 +288,7 @@ export function register(
       for (const r of repos) {
         if (repos.length > 1) logger.info(`=== ${r} ===`);
         await cleanup(
-          await buildContext(config, project.name, { feature, repoName: r }),
+          await buildContext(config, project.name, { feature: feat, repoName: r }),
           { force: opts.force },
         );
       }

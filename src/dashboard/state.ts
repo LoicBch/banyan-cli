@@ -27,7 +27,6 @@ export interface DashboardRepo {
     portEnv?: string;
     composePorts?: Record<string, string>;
   };
-  deployCommand?: string;
 }
 
 export interface DashboardStack {
@@ -46,7 +45,6 @@ export interface DashboardService {
 
 export interface DashboardProject {
   name: string;
-  deployCommand?: string;
   sessionRunning: boolean;
   repos: DashboardRepo[];
 }
@@ -75,7 +73,6 @@ export async function buildState(config: Config): Promise<DashboardState> {
           composeFile: repo.composeFile,
           worktrees: [],
           stacks: await collectStacks(project, repo, activeStacks),
-          deployCommand: repo.deployCommand,
         });
       } else {
         repos.push({
@@ -93,14 +90,12 @@ export async function buildState(config: Config): Promise<DashboardState> {
                 composePorts: repo.run.composePorts,
               }
             : undefined,
-          deployCommand: repo.deployCommand,
         });
       }
     }
 
     projects.push({
       name: project.name,
-      deployCommand: project.deployCommand,
       sessionRunning,
       repos,
     });

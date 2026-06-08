@@ -106,8 +106,9 @@ Different worktrees, different ports, different DBs, different agents. An orches
 ```bash
 git clone https://github.com/LoicBch/banyan-cli
 cd banyan-cli && npm install && npm run build && npm link
-bn install-tmux
 ```
+
+`bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
 
 Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges), `$OPENROUTER_API_KEY` (faster LLM-named features).
 
@@ -118,12 +119,11 @@ bn serve
 # http://localhost:4242 → "+ new project"
 ```
 
-Or via CLI:
+Or for power users:
 
 ```bash
-cd ~/front && bn init my-project
-bn my-project add-repo back ~/back
-bn my-project add-repo app ~/app
+cd ~/front && bn init my-project   # bootstrap with the first repo
+bn serve                            # add the remaining repos from the dashboard
 bn my-project start
 ```
 
@@ -147,9 +147,12 @@ $ bn myproject start profile-page
 $ bn myproject wt tag-filter -p "fix infinite loop on tag filter"
   ✓ feature/tag-filter worktrees, agent, stack on :8082
 
-$ bn myproject ls-features
-  profile-page  running  3 panes  :3001 :8081
-  tag-filter    running  2 panes  :3002 :8082
+$ bn myproject status
+  session 'banyan-myproject': running
+  features:
+    profile-page  autopilot  agent: live  stack: running
+    tag-filter    autonomous agent: live  stack: running
+  …
 
 $ bn myproject merge tag-filter && bn myproject cleanup tag-filter
   ✓ rebase clean · pushed · MR merged · stack destroyed · worktrees removed
@@ -166,9 +169,9 @@ $ bn myproject resume
 <details>
 <summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, config editor, conflict pulse, remote mode with QR</summary>
 
-`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
+`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
 
-`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds, approve plans, accept tasks from your phone.
+`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds and accept tasks from your phone.
 
 </details>
 
@@ -191,18 +194,16 @@ repos:
 </details>
 
 <details>
-<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot, with optional plan approval</summary>
+<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot</summary>
 
 ```bash
-bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot --review-plan
+bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot
 ```
 
 - **interactive** — plain Claude, you drive
 - **assisted** — agent asks on big decisions
 - **autonomous** — agent decides everything, documents hesitations
 - **autopilot** — autonomous + loops on Stop hook through a TODO list until `banyan_report_done`
-
-`--review-plan` gates execution: the agent builds a TODO list and waits for `bn approve <feature>` before any work starts.
 
 LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter or `claude --print`. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
 
@@ -293,7 +294,6 @@ Walks every active worktree on disk, recreates the tmux panes, restarts run proc
 version: 1
 projects:
   - name: myproject
-    deployCommand: bash ~/Dev/myproject/deploy.sh
     repos:
       - name: front
         path: ~/Dev/myproject/front
@@ -331,7 +331,7 @@ projects:
         composeFile: docker-compose.dev.yml
 ```
 
-Stored at `~/.config/banyan/config.yaml`. Edit directly, via the dashboard's Config tab, or with `bn <project> add-repo / set-run / set-base`.
+Stored at `~/.config/banyan/config.yaml`. Edit directly or via the dashboard's Config tab.
 
 </details>
 
@@ -343,34 +343,22 @@ bn ls                                    list projects
 bn init <project>                        create a project
 bn ask "<question>"                      answer from project memory
 bn serve [--remote]                      web dashboard
-bn install-tmux [-f]                     render tmux config
-bn mcp-serve                             MCP server over stdio
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
-bn <project> kill                        full session teardown
-bn <project> attach / detach / status / resume / ls-features / ports
-bn <project> deploy [repo] [args...]
+bn <project> close                       close the tmux session (worktrees on disk kept)
+bn <project> status / resume / ports
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
   -p "<prompt>"   LLM-named slug from prompt
   -m <mode>       interactive | assisted | autonomous | autopilot
-  --review-plan   require approval before work starts
   --prefix <p>    branch prefix (default 'feature')
-bn <project> task <feature> <prompt>     paste into the feature's agent pane
 bn <project> wt-rm <feature> [repo]
-bn <project> wt-ls
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
 
-bn <project> todo <feature>
-bn <project> reports [feature]
-bn <project> approve <feature>           approve a pending plan or report
-
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]
-
-bn <project> add-repo / remove-repo / remove / set-base / set-run / infer-run / config
 ```
 
 If you're inside a configured repo (or its worktree), drop the project name — banyan infers it from cwd. Or symlink `banyan` to your project name to skip the project arg entirely.

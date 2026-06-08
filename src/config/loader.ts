@@ -49,7 +49,6 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
     version: cfg.version,
     projects: cfg.projects.map((p) => ({
       name: p.name,
-      ...(p.deployCommand ? { deployCommand: p.deployCommand } : {}),
       repos: p.repos.map((r) => ({
         name: r.name,
         ...(r.type && r.type !== "git" ? { type: r.type } : {}),
@@ -84,7 +83,6 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
               },
             }
           : {}),
-        ...(r.deployCommand ? { deployCommand: r.deployCommand } : {}),
         ...(r.composeFile ? { composeFile: r.composeFile } : {}),
       })),
     })),

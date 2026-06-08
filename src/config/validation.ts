@@ -276,16 +276,6 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         };
       }
 
-      let deployCommand: string | undefined;
-      if (r.deployCommand !== undefined && r.deployCommand !== null && r.deployCommand !== "") {
-        if (typeof r.deployCommand !== "string") {
-          throw new ConfigError(
-            `${sourcePath}: projects[${i}].repos[${j}].deployCommand must be a string`,
-          );
-        }
-        deployCommand = r.deployCommand;
-      }
-
       // `type` — default "git" when omitted. Validates that compose repos have composeFile.
       let type: RepoType = "git";
       if (r.type !== undefined && r.type !== null && r.type !== "") {
@@ -323,24 +313,12 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
         ...(copyOnWorktree ? { copyOnWorktree } : {}),
         ...(loadEnvFiles ? { loadEnvFiles } : {}),
         ...(run ? { run } : {}),
-        ...(deployCommand ? { deployCommand } : {}),
         ...(composeFile ? { composeFile } : {}),
       });
     }
 
-    let projectDeployCommand: string | undefined;
-    if (p.deployCommand !== undefined && p.deployCommand !== null && p.deployCommand !== "") {
-      if (typeof p.deployCommand !== "string") {
-        throw new ConfigError(
-          `${sourcePath}: projects[${i}].deployCommand must be a string`,
-        );
-      }
-      projectDeployCommand = p.deployCommand;
-    }
-
     projects.push({
       name,
-      ...(projectDeployCommand ? { deployCommand: projectDeployCommand } : {}),
       repos,
     });
   }

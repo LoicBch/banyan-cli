@@ -112,14 +112,12 @@ export interface RepoConfig {
    */
   loadEnvFiles?: string[];
   run?: RunConfig;
-  deployCommand?: string;
   // For type=compose only:
   composeFile?: string;      // path relative to `path`, or absolute
 }
 
 export interface ProjectConfig {
   name: string;
-  deployCommand?: string;
   repos: RepoConfig[];
 }
 
