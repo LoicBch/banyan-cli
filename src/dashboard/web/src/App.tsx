@@ -96,7 +96,15 @@ function Shell(): React.JSX.Element {
         onSection={setSection}
         projects={projects}
         activeProject={activeProject}
-        onProject={setProject}
+        onProject={(name) => {
+          setProject(name);
+          // Clicking a project in the sidebar = "go to this project's
+          // overview". Always lands on Pipeline so the user sees its
+          // features list. Without this, clicking a project while in
+          // Config or another section was a no-op visually.
+          setSection("pipeline");
+          setFocusRepo(null);
+        }}
         onRepoClick={(projectName, repoName) => {
           setProject(projectName);
           setSection("config");
