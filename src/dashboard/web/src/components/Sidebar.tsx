@@ -39,6 +39,8 @@ interface SidebarProps {
   projects: ProjectState[];
   activeProject: string | null;
   onProject: (name: string) => void;
+  /** Called when a repo row is clicked — navigates to its config. */
+  onRepoClick: (projectName: string, repoName: string) => void;
 }
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ReactNode }> = [
@@ -52,7 +54,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ReactNode }> =
 
 const STORAGE_EXPANDED = "banyan.web.sidebar.expanded";
 
-export function Sidebar({ section, onSection, projects, activeProject, onProject }: SidebarProps): React.JSX.Element {
+export function Sidebar({ section, onSection, projects, activeProject, onProject, onRepoClick }: SidebarProps): React.JSX.Element {
   const { theme, toggle } = useTheme();
 
   // Per-project expansion state. Stored as `Record<projectName, boolean>` in
@@ -161,37 +163,45 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
                     >
                       <FolderTree className="size-4" />
                       {p.name}
-                      <span className="ml-auto text-[10px] text-muted-foreground/70">
-                        {p.repos.length}
-                      </span>
                     </button>
                   </div>
 
-                  {isOpen ? (
-                    <div className="ml-5 mt-0.5 mb-1 border-l border-border/60 pl-2 space-y-0.5">
-                      {p.repos.length === 0 ? (
-                        <div className="px-2 py-1 text-[11px] italic text-muted-foreground/60">
-                          no repos
-                        </div>
-                      ) : (
-                        p.repos.map((r) => (
-                          <div
-                            key={r.name}
-                            className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground"
-                            title={r.path}
-                          >
-                            <TechIcon tech={r.tech} type={r.type} className="text-muted-foreground/70" />
-                            <span className="font-mono truncate">{r.name}</span>
-                            {techLabel(r.tech, r.type) ? (
-                              <span className="ml-auto text-[10px] text-muted-foreground/50 shrink-0">
-                                {techLabel(r.tech, r.type)}
-                              </span>
-                            ) : null}
+                  {/* Animated expand/collapse using the grid-rows trick:
+                   *  the wrapper transitions grid-template-rows from 0fr to 1fr;
+                   *  the inner div with overflow-hidden clips during the animation. */}
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows] duration-200 ease-out",
+                      isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-5 mt-0.5 mb-1 border-l border-border/60 pl-2 space-y-0.5">
+                        {p.repos.length === 0 ? (
+                          <div className="px-2 py-1 text-[11px] italic text-muted-foreground/60">
+                            no repos
                           </div>
-                        ))
-                      )}
+                        ) : (
+                          p.repos.map((r) => (
+                            <button
+                              key={r.name}
+                              onClick={() => onRepoClick(p.name, r.name)}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-left text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+                              title={`${r.path} — click to open config`}
+                            >
+                              <TechIcon tech={r.tech} type={r.type} className="text-muted-foreground/70" />
+                              <span className="font-mono truncate">{r.name}</span>
+                              {techLabel(r.tech, r.type) ? (
+                                <span className="ml-auto text-[10px] text-muted-foreground/50 shrink-0">
+                                  {techLabel(r.tech, r.type)}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               );
             })}

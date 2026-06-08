@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface RepoConfig {
   name: string;
@@ -63,10 +64,20 @@ function repoToDraft(r: RepoConfig): RepoDraft {
   };
 }
 
-export function Config(): React.JSX.Element {
+export interface ConfigProps {
+  /** When set, scroll the matching repo card into view + briefly highlight it.
+   *  Set by the sidebar when the user clicks a repo. */
+  focusRepo?: { project: string; repo: string } | null;
+  /** Called after the focus highlight has played, so the parent can clear
+   *  the focus so the next click re-triggers. */
+  onFocusConsumed?: () => void;
+}
+
+export function Config({ focusRepo, onFocusConsumed }: ConfigProps = {}): React.JSX.Element {
   const [data, setData] = React.useState<ConfigData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, RepoDraft>>({});
+  const [highlightKey, setHighlightKey] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -81,6 +92,24 @@ export function Config(): React.JSX.Element {
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
+
+  // Focus a specific repo card when the parent passes one in (sidebar click).
+  // Waits one tick for the cards to render, then scrolls + briefly highlights.
+  React.useEffect(() => {
+    if (!focusRepo || !data) return;
+    const key = `${focusRepo.project}/${focusRepo.repo}`;
+    const el = document.querySelector<HTMLElement>(`[data-repo-key="${CSS.escape(key)}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightKey(key);
+      const t = window.setTimeout(() => {
+        setHighlightKey(null);
+        onFocusConsumed?.();
+      }, 1600);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [focusRepo, data, onFocusConsumed]);
 
   function draftFor(project: string, repo: RepoConfig): RepoDraft {
     const key = `${project}/${repo.name}`;
@@ -153,8 +182,17 @@ export function Config(): React.JSX.Element {
             const isCompose = repo.type === "compose";
             const draft = draftFor(p.name, repo);
             const dirty = !!drafts[`${p.name}/${repo.name}`];
+            const repoKey = `${p.name}/${repo.name}`;
+            const isHighlighted = highlightKey === repoKey;
             return (
-              <Card key={repo.name}>
+              <Card
+                key={repo.name}
+                data-repo-key={repoKey}
+                className={cn(
+                  "transition-shadow duration-500",
+                  isHighlighted && "ring-2 ring-emerald-500/60 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]",
+                )}
+              >
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">

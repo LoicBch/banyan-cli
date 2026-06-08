@@ -59,6 +59,7 @@ function Shell(): React.JSX.Element {
   const [project, setProject] = React.useState<string | null>(() =>
     localStorage.getItem(STORAGE_PROJECT),
   );
+  const [focusRepo, setFocusRepo] = React.useState<{ project: string; repo: string } | null>(null);
 
   React.useEffect(() => {
     localStorage.setItem(STORAGE_SECTION, section);
@@ -96,13 +97,20 @@ function Shell(): React.JSX.Element {
         projects={projects}
         activeProject={activeProject}
         onProject={setProject}
+        onRepoClick={(projectName, repoName) => {
+          setProject(projectName);
+          setSection("config");
+          setFocusRepo({ project: projectName, repo: repoName });
+        }}
       />
       <main className="flex-1 overflow-y-auto">
         {section === "pipeline" ? <Pipeline projectName={activeProject} /> : null}
         {section === "shortcuts" ? <Shortcuts /> : null}
         {section === "inbox" ? <Inbox /> : null}
         {section === "history" ? <History projectName={activeProject} /> : null}
-        {section === "config" ? <Config /> : null}
+        {section === "config" ? (
+          <Config focusRepo={focusRepo} onFocusConsumed={() => setFocusRepo(null)} />
+        ) : null}
         {section === "ask" ? <Ask projectName={activeProject} /> : null}
       </main>
       <CommandPalette
