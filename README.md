@@ -171,7 +171,7 @@ $ bn myproject resume
 
 `bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
 
-`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds, approve plans, accept tasks from your phone.
+`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds and accept tasks from your phone.
 
 </details>
 
@@ -194,18 +194,16 @@ repos:
 </details>
 
 <details>
-<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot, with optional plan approval</summary>
+<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot</summary>
 
 ```bash
-bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot --review-plan
+bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot
 ```
 
 - **interactive** — plain Claude, you drive
 - **assisted** — agent asks on big decisions
 - **autonomous** — agent decides everything, documents hesitations
 - **autopilot** — autonomous + loops on Stop hook through a TODO list until `banyan_report_done`
-
-`--review-plan` gates execution: the agent builds a TODO list and waits for `bn approve <feature>` before any work starts.
 
 LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter or `claude --print`. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
 
@@ -356,15 +354,12 @@ bn <project> deploy [repo] [args...]
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
   -p "<prompt>"   LLM-named slug from prompt
   -m <mode>       interactive | assisted | autonomous | autopilot
-  --review-plan   require approval before work starts
   --prefix <p>    branch prefix (default 'feature')
 bn <project> task <feature> <prompt>     paste into the feature's agent pane
 bn <project> wt-rm <feature> [repo]
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
-
-bn <project> approve <feature>           approve a pending plan or report
 
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]
 ```

@@ -16,7 +16,6 @@ import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
 import { deploy } from "../commands/deploy.js";
-import { approveCmd } from "../commands/approve.js";
 
 export function register(
   projectCmd: Command,
@@ -109,25 +108,6 @@ export function register(
     .action(async (feature: string | undefined) => {
       await portsCmd(config, project.name, feature);
     });
-
-  projectCmd
-    .command("approve [branch]")
-    .description(
-      "approve (or reject) whatever's pending for this branch — the plan if a plan-review gate is open, " +
-        "otherwise the latest report. branch is inferred from cwd when omitted in a worktree. " +
-        "without flags: approve. with --reject: reject (agent revises). with --show: read current state, no mutation.",
-    )
-    .option("--reject [reason]", "reject (the plan or report — whichever is pending) instead of approving")
-    .option("--show", "show plan + report state without mutating")
-    .action(
-      async (
-        feature: string | undefined,
-        opts: { reject?: string | boolean; show?: boolean },
-      ) => {
-        const feat = resolveFeatureFromCwd(config, project.name, feature, "approve");
-        await approveCmd(config, project.name, feat, opts);
-      },
-    );
 
   projectCmd
     .command("deploy [repo] [args...]")

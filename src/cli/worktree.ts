@@ -46,10 +46,6 @@ export function register(
       "-m, --mode <mode>",
       `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
     )
-    .option(
-      "--review-plan",
-      "gate the agent: it must build a TODO list and request approval before working. you approve via `bn <project> approve <branch>`. orthogonal to --mode (combine with autonomous or autopilot).",
-    )
     .action(
       async (
         feature: string | undefined,
@@ -58,7 +54,6 @@ export function register(
           prompt?: string;
           prefix?: string;
           mode?: string;
-          reviewPlan?: boolean;
         },
       ) => {
         let mode: AgentMode | undefined;
@@ -105,7 +100,6 @@ export function register(
           ...(opts.prompt ? { initialPrompt: opts.prompt } : {}),
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
-          ...(opts.reviewPlan ? { requireApproval: true } : {}),
         });
       },
     );
@@ -124,7 +118,6 @@ export function register(
     .option("--repos <repos...>", "limit to these repos")
     .option("--prefix <prefix>", "branch prefix")
     .option("-m, --mode <mode>", "agent mode")
-    .option("--review-plan", "require plan approval before work starts")
     .action(
       async (
         prompt: string,
@@ -132,7 +125,6 @@ export function register(
           repos?: string[];
           prefix?: string;
           mode?: string;
-          reviewPlan?: boolean;
         },
       ) => {
         const paneId = process.env.TMUX_PANE;
@@ -153,7 +145,6 @@ export function register(
           initialPrompt: prompt,
           ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
           ...(mode !== undefined ? { mode } : {}),
-          ...(opts.reviewPlan ? { requireApproval: true } : {}),
           inheritPaneId: paneId,
           stagedLaunch: true,
         });
