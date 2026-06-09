@@ -20,8 +20,19 @@ import { fetchState } from "@/lib/api";
 
 const STORAGE_OPEN_TERMINAL = "banyan.web.openTerminalAfterSpawn";
 
-const MODES = ["interactive", "assisted", "autonomous", "autopilot"] as const;
-type Mode = (typeof MODES)[number];
+const MODES = [
+  {
+    id: "live" as const,
+    label: "Live",
+    description: "banyan-aware claude, conversational. you drive at the terminal.",
+  },
+  {
+    id: "delegated" as const,
+    label: "Delegated",
+    description: "pipeline-gated: plan-review → execute → report. fire-and-forget.",
+  },
+];
+type Mode = (typeof MODES)[number]["id"];
 
 export function openWorktreeDialog(project: string): void {
   openDialog((close) => (
@@ -34,7 +45,7 @@ export function openWorktreeDialog(project: string): void {
 function WorktreeDialogBody({ project, close }: { project: string; close: () => void }): React.JSX.Element {
   const [feature, setFeature] = React.useState("");
   const [prompt, setPrompt] = React.useState("");
-  const [mode, setMode] = React.useState<Mode>("autonomous");
+  const [mode, setMode] = React.useState<Mode>("delegated");
   const [busy, setBusy] = React.useState(false);
   const [localMode, setLocalMode] = React.useState<boolean | null>(null);
   // Default to true so the most common flow (local dev, want to see the agent)
@@ -120,20 +131,29 @@ function WorktreeDialogBody({ project, close }: { project: string; close: () => 
         </div>
         <div className="space-y-1.5">
           <Label>Mode</Label>
-          <div className="flex gap-1.5 flex-wrap">
-            {MODES.map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={
-                  m === mode
-                    ? "px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground transition-colors"
-                    : "px-2.5 py-1 text-xs rounded-md bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
-                }
-              >
-                {m}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            {MODES.map((m) => {
+              const selected = m.id === mode;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMode(m.id)}
+                  className={
+                    selected
+                      ? "rounded-lg border border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/40 px-3 py-2 text-left transition-all duration-200 ease-out active:scale-95"
+                      : "rounded-lg border border-border bg-card/40 px-3 py-2 text-left hover:border-primary/40 hover:bg-accent/40 transition-all duration-200 ease-out active:scale-95"
+                  }
+                >
+                  <div className={selected ? "text-sm font-semibold text-foreground" : "text-sm font-medium text-muted-foreground"}>
+                    {m.label}
+                  </div>
+                  <div className="text-[11px] leading-snug text-muted-foreground/80 mt-0.5">
+                    {m.description}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 

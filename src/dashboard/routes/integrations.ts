@@ -143,7 +143,9 @@ export function register(app: Express, deps: IntegrationsDeps): void {
     const body = (req.body ?? {}) as {
       taskId: string;
       project: string;
-      mode?: "interactive" | "assisted" | "autonomous" | "autopilot";
+      /** Accepts the new `live` / `delegated` mode names, or any legacy
+       *  4-mode value — normalized inside wtAll's resolveMode. */
+      mode?: string;
       repos?: string[];
     };
     if (!config.projects.some((p) => p.name === body.project)) {
@@ -160,10 +162,15 @@ export function register(app: Express, deps: IntegrationsDeps): void {
       const prompt = buildInitialPrompt(entry);
       const { generateSlug } = await import("../../slug.js");
       const featureName = await generateSlug(`${entry.task.title}\n\n${entry.task.description ?? ""}`);
+      // Integrations spawn = delegated by default (the user wasn't there
+      // when the task was filed; pipeline-gated review is the point).
+      const { normalizeMode } = await import("../../agentPrompt.js");
+      const requested = body.mode ?? entry.suggestedMode;
+      const resolvedMode = normalizeMode(requested) ?? "delegated";
       await wtAll(config, body.project, featureName, {
         ...(body.repos && body.repos.length > 0 ? { only: body.repos } : {}),
         initialPrompt: prompt,
-        mode: body.mode ?? (entry.suggestedMode as "autonomous" | undefined) ?? "autonomous",
+        mode: resolvedMode,
       });
       markSpawned(body.taskId, body.project, featureName);
       res.json({ ok: true, feature: featureName });

@@ -91,7 +91,10 @@ export function needsSupervisorHook(opts: {
   mode: AgentMode;
   requireApproval?: boolean;
 }): boolean {
-  return opts.mode === "autopilot" || !!opts.requireApproval;
+  // Delegated mode = autopilot + plan-review baked in. The supervisor
+  // Stop hook keeps the agent looping until banyan_report_done is called.
+  // `requireApproval` is also honored as a legacy explicit toggle.
+  return opts.mode === "delegated" || !!opts.requireApproval;
 }
 
 export function removeAutopilotSettings(project: string, feature: string): void {

@@ -34,14 +34,14 @@ export const lifecycleTools: ToolDef[] = [
           },
           mode: {
             type: "string",
-            enum: ["interactive", "assisted", "autonomous", "autopilot"],
+            enum: ["live", "delegated"],
             description:
-              "agent autonomy level. interactive: plain claude, no convention. assisted: agent decides minor things, asks on big decisions. autonomous (default for MCP-driven creation): agent decides everything, documents hesitations in the report. autopilot: autonomous + works through a TODO list, loops until banyan_report_done is called.",
+              "agent autonomy level. live: banyan-aware claude in a normal collaborative session — no report obligation, user is at the terminal. delegated (default for MCP-driven creation): pipeline-gated — agent submits a plan for review, executes the approved TODO list, submits a final report, looped via Stop hook until banyan_report_done is called.",
           },
           requireApproval: {
             type: "boolean",
             description:
-              "if true, gate the agent: it must build a TODO list and call `banyan_request_plan_approval`, then wait for user approval (`banyan_approve_plan` or `bn approve`) before working. Orthogonal to mode — combine with autonomous or autopilot. Use when the user wants to validate the plan before execution. Ignored for mode=interactive.",
+              "Legacy flag — `delegated` mode already bakes in plan-review. Set this only to opt-into plan-review explicitly from `live` mode (rare).",
           },
         },
         required: ["project", "feature"],

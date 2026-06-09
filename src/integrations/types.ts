@@ -50,8 +50,10 @@ export interface IntegrationRule {
   suggest: {
     /** Project name to spawn the worktree in. */
     project: string;
-    /** Agent mode to default to in the spawn modal. */
-    mode?: "interactive" | "assisted" | "autonomous" | "autopilot";
+    /** Agent mode to default to in the spawn modal. Accepts the new
+     *  `live` / `delegated` names, or legacy 4-mode values — normalized
+     *  at the worktree-spawn entry. */
+    mode?: string;
     /** Prefix passed to wtAll (e.g. "fix"). */
     prefix?: string;
   };

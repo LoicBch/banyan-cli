@@ -34,10 +34,10 @@ export async function createFeature(
   requireApproval?: boolean,
 ): Promise<{ ok: true; feature: string }> {
   const config = await getConfig();
-  // MCP-driven creation defaults to `autonomous` (the orchestrator is by
-  // construction delegating). Caller can pass mode="interactive" for a
-  // hands-on session, "autopilot" for full TODO-list autopilot, etc.
-  const effectiveMode = mode ?? "autonomous";
+  // MCP-driven creation = orchestrator delegating to a sub-agent →
+  // `delegated` is the right default. Caller can pass mode="live" to
+  // request a conversational session instead.
+  const effectiveMode = mode ?? "delegated";
   await wtAll(config, projectName, feature, {
     ...(repos && repos.length > 0 ? { only: repos } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),

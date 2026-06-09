@@ -151,22 +151,19 @@ describe("autopilot — approval gate integration", () => {
 });
 
 describe("autopilot — needsSupervisorHook", () => {
-  it("true for autopilot mode regardless of approval flag", async () => {
+  it("true for delegated mode regardless of approval flag", async () => {
     const { needsSupervisorHook } = await import("../src/autopilot.js");
-    assert.equal(needsSupervisorHook({ mode: "autopilot" }), true);
-    assert.equal(needsSupervisorHook({ mode: "autopilot", requireApproval: false }), true);
+    assert.equal(needsSupervisorHook({ mode: "delegated" }), true);
+    assert.equal(needsSupervisorHook({ mode: "delegated", requireApproval: false }), true);
   });
 
-  it("true when requireApproval is set, even on non-autopilot modes", async () => {
+  it("true when requireApproval is set in live mode (legacy opt-in)", async () => {
     const { needsSupervisorHook } = await import("../src/autopilot.js");
-    assert.equal(needsSupervisorHook({ mode: "autonomous", requireApproval: true }), true);
-    assert.equal(needsSupervisorHook({ mode: "assisted", requireApproval: true }), true);
+    assert.equal(needsSupervisorHook({ mode: "live", requireApproval: true }), true);
   });
 
-  it("false for non-autopilot modes without requireApproval", async () => {
+  it("false for live mode without requireApproval", async () => {
     const { needsSupervisorHook } = await import("../src/autopilot.js");
-    assert.equal(needsSupervisorHook({ mode: "interactive" }), false);
-    assert.equal(needsSupervisorHook({ mode: "assisted" }), false);
-    assert.equal(needsSupervisorHook({ mode: "autonomous" }), false);
+    assert.equal(needsSupervisorHook({ mode: "live" }), false);
   });
 });

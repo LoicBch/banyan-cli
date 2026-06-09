@@ -12,7 +12,7 @@ import { rebase } from "../commands/rebase.js";
 import { merge } from "../commands/merge.js";
 import { cleanup } from "../commands/cleanup.js";
 import { testStop } from "../commands/testStop.js";
-import { ALL_AGENT_MODES, isAgentMode, type AgentMode } from "../agentPrompt.js";
+import { ALL_AGENT_MODES, normalizeMode, type AgentMode } from "../agentPrompt.js";
 import { generateSlug } from "../slug.js";
 import { UsageError } from "../errors.js";
 import { resolveFeatureFromCwd } from "../location.js";
@@ -29,13 +29,11 @@ export function register(
       "spin up a feature environment. no repos = all (git worktrees + compose stacks + one claude agent). with repos = only those. " +
         "no branch = create a draft worktree (branch named draft-<ts>); the agent must call banyan_finalize_feature_name " +
         "after your first prompt to pick the real name. " +
-        "agent mode controls autonomy: interactive (plain claude, you drive), assisted (asks on big decisions), " +
-        "autonomous (decides everything, documents hesitations), autopilot (autonomous + works through TODO list, " +
-        "loops until banyan_report_done).",
+        "agent mode: live (banyan-aware claude, conversational, you drive) or delegated (pipeline-gated: plan-review → execute → report, looped via Stop hook).",
     )
     .option(
       "-p, --prompt <prompt>",
-      "first message sent to the per-feature claude agent (only on a fresh session). implies --mode autonomous unless overridden.",
+      "first message sent to the per-feature claude agent (only on a fresh session). implies --mode delegated unless overridden.",
     )
     .option(
       "--prefix <prefix>",
@@ -43,7 +41,7 @@ export function register(
     )
     .option(
       "-m, --mode <mode>",
-      `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: autonomous if --prompt is given, interactive otherwise.`,
+      `agent mode: ${ALL_AGENT_MODES.join(" | ")}. default: delegated if --prompt is given, live otherwise. legacy names (interactive/assisted/autonomous/autopilot) are accepted and normalized.`,
     )
     .action(
       async (
@@ -57,12 +55,13 @@ export function register(
       ) => {
         let mode: AgentMode | undefined;
         if (opts.mode !== undefined) {
-          if (!isAgentMode(opts.mode)) {
+          const normalized = normalizeMode(opts.mode);
+          if (!normalized) {
             throw new UsageError(
               `unknown mode '${opts.mode}'. valid: ${ALL_AGENT_MODES.join(", ")}`,
             );
           }
-          mode = opts.mode;
+          mode = normalized;
         }
         // Feature naming flow, in priority order:
         //   1. explicit name → use it as-is
@@ -131,7 +130,10 @@ export function register(
           throw new UsageError("_wt-stage-from-prompt must be run from within a tmux pane");
         }
         let mode: AgentMode | undefined;
-        if (opts.mode && isAgentMode(opts.mode)) mode = opts.mode;
+        if (opts.mode) {
+          const normalized = normalizeMode(opts.mode);
+          if (normalized) mode = normalized;
+        }
 
         // logger writes go to stderr by default — keep stdout clean for the
         // launch-script path the bash caller will capture.

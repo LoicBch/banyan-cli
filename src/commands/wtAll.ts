@@ -226,7 +226,9 @@ export async function wtAll(
   // changes while we're running inside the target pane would jostle our shell
   // mid-script. The next `bn start` / resume can repair the layout if needed.
   if (opts.stagedLaunch) {
-    const requireApproval = mode === "interactive" ? false : !!opts.requireApproval;
+    // delegated mode bakes in plan-review; live mode is opt-in via the
+    // legacy explicit flag (rare).
+    const requireApproval = mode === "delegated" || !!opts.requireApproval;
     const settingsPath = needsSupervisorHook({ mode, requireApproval })
       ? generateAutopilotSettings(projectName, feature)
       : undefined;
@@ -269,8 +271,9 @@ export async function wtAll(
   // Use main-horizontal so the ops pane stays small at the bottom while the
   // claude pane(s) take the majority of the window.
   await tmux.applyLayout(session, agentsWin, "main-horizontal");
-  // requireApproval is meaningless for interactive mode (user is right there).
-  const requireApproval = mode === "interactive" ? false : !!opts.requireApproval;
+  // delegated mode bakes in plan-review; live mode is opt-in via the
+  // legacy explicit flag (rare — user is right there to drive).
+  const requireApproval = mode === "delegated" || !!opts.requireApproval;
   const settingsPath = needsSupervisorHook({ mode, requireApproval })
     ? generateAutopilotSettings(projectName, feature)
     : undefined;
