@@ -26,6 +26,7 @@ import {
 import { fetchState, fetchPipeline, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
 import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
 import { openReportReviewDialog } from "@/components/ReportReviewDialog";
+import { StageIndicator } from "@/components/StageIndicator";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
@@ -489,6 +490,8 @@ function FeatureCard({
                 </span>
               </div>
             ) : null}
+
+            <StageIndicator feature={feature} />
 
             {/* Delegated-pipeline gate buttons — surface visibly when the
              *  user needs to act. Emerald = "your move", same vocabulary as
