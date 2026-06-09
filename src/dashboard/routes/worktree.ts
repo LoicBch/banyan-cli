@@ -20,6 +20,7 @@
 import type { Express } from "express";
 import { wtAll } from "../../commands/wtAll.js";
 import { openTerminalWindow } from "../terminalLauncher.js";
+import { sessionName } from "../../naming.js";
 import { requireFields, type RouteDeps } from "./shared.js";
 
 interface WtRouteDeps extends RouteDeps {
@@ -71,14 +72,19 @@ export function register(app: Express, deps: WtRouteDeps): void {
 
       // Best-effort terminal attach. Local-mode only; failures don't
       // un-do the spawn — they just surface in the response payload so
-      // the dashboard can toast accordingly.
+      // the dashboard can toast accordingly. If a tmux client is already
+      // attached to the session, the launcher activates the terminal app
+      // instead of opening a redundant second window.
       let terminalOpened = false;
+      let terminalAttachedToExisting = false;
       let terminalError: string | undefined;
       if (body.openTerminal && filesystemRoutesEnabled) {
         const r = await openTerminalWindow({
           command: `bn ${body.project} start`,
+          existingTmuxSession: sessionName(body.project),
         });
         terminalOpened = r.ok;
+        terminalAttachedToExisting = !!r.attachedToExisting;
         if (!r.ok) terminalError = r.error;
       }
 
@@ -88,6 +94,7 @@ export function register(app: Express, deps: WtRouteDeps): void {
         draft: !body.feature && !inferredFromPrompt,
         inferredFromPrompt,
         terminalOpened,
+        terminalAttachedToExisting,
         ...(terminalError ? { terminalError } : {}),
       });
     } catch (err) {
@@ -109,8 +116,11 @@ export function register(app: Express, deps: WtRouteDeps): void {
       res.status(404).json({ ok: false, error: `unknown project '${project}'` });
       return;
     }
-    const r = await openTerminalWindow({ command: `bn ${project} start` });
-    if (r.ok) res.json({ ok: true, terminal: r.terminal });
+    const r = await openTerminalWindow({
+      command: `bn ${project} start`,
+      existingTmuxSession: sessionName(project),
+    });
+    if (r.ok) res.json({ ok: true, terminal: r.terminal, attachedToExisting: !!r.attachedToExisting });
     else res.status(500).json({ ok: false, error: r.error });
   });
 }

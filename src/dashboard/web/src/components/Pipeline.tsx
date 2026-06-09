@@ -71,8 +71,15 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
               className="gap-2"
               onClick={async () => {
                 const r = await actions.openTerminal(project.name);
-                if (r.ok) toast.success(`Terminal opened (${r.terminal ?? ""})`);
-                else toast.error("Couldn't open terminal", { description: r.error });
+                if (r.ok) {
+                  toast.success(
+                    r.attachedToExisting
+                      ? "Switch to your terminal — session already attached"
+                      : `Terminal opened${r.terminal ? ` (${r.terminal})` : ""}`,
+                  );
+                } else {
+                  toast.error("Couldn't open terminal", { description: r.error });
+                }
               }}
               title="Open a native terminal attached to this project's tmux session"
             >

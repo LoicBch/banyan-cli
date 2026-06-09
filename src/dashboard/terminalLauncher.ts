@@ -12,23 +12,58 @@
  * is non-fatal — the feature is already spawned, the terminal pop is
  * just convenience.
  */
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { promisify } from "node:util";
+
+const execFileP = promisify(execFile);
 
 export interface LaunchOptions {
   /** Shell command to run in the new terminal window (e.g. `bn p4n start`). */
   command: string;
   /** Working directory the terminal opens in. Defaults to $HOME. */
   cwd?: string;
+  /** Tmux session name. If set + the session already has an attached
+   *  client, we skip opening a new window and just bring the terminal
+   *  app to the front so the user can switch to the existing tmux pane. */
+  existingTmuxSession?: string;
 }
 
 export interface LaunchResult {
   ok: boolean;
   terminal?: string;
+  /** True when we detected an existing tmux client and just brought the
+   *  terminal app to front instead of spawning a new window. */
+  attachedToExisting?: boolean;
   error?: string;
 }
 
+/** Check whether tmux has at least one client attached to the given session.
+ *  When true we don't want to spawn a second terminal window — the user
+ *  already has one open with the session in it. */
+async function sessionHasAttachedClient(session: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileP("tmux", ["list-clients", "-t", session], {
+      encoding: "utf8",
+    });
+    return stdout.trim().length > 0;
+  } catch {
+    // tmux exits non-zero when the session doesn't exist or no server is
+    // running — both mean "no client attached".
+    return false;
+  }
+}
+
 export async function openTerminalWindow(opts: LaunchOptions): Promise<LaunchResult> {
+  // Short-circuit when an existing terminal is already attached to the tmux
+  // session for this project. Saves the user from a redundant second window.
+  if (opts.existingTmuxSession) {
+    const attached = await sessionHasAttachedClient(opts.existingTmuxSession);
+    if (attached) {
+      const r = await bringTerminalToFront();
+      return { ...r, attachedToExisting: true };
+    }
+  }
   switch (process.platform) {
     case "darwin":
       return openOnMac(opts);
@@ -39,6 +74,21 @@ export async function openTerminalWindow(opts: LaunchOptions): Promise<LaunchRes
     default:
       return { ok: false, error: `unsupported platform: ${process.platform}` };
   }
+}
+
+/** Activate the terminal app currently most likely to hold the tmux client,
+ *  without opening a new window. Prefers iTerm if installed, else
+ *  Terminal.app on macOS; no-op on other platforms (we'd need a window
+ *  manager hook). */
+async function bringTerminalToFront(): Promise<LaunchResult> {
+  if (process.platform === "darwin") {
+    const target = existsSync("/Applications/iTerm.app") ? "iTerm" : "Terminal";
+    return runAppleScript(`tell application "${target}" to activate`, target);
+  }
+  // Linux / Windows: we can't reliably "find and raise" the right window
+  // without a desktop env API hook. Return ok so the caller can show a
+  // gentler toast instead of an error.
+  return { ok: true, terminal: "existing" };
 }
 
 // ── macOS ────────────────────────────────────────────────────────────────

@@ -75,7 +75,11 @@ function WorktreeDialogBody({ project, close }: { project: string; close: () => 
     setBusy(false);
     if (r.ok) {
       const base = r.draft ? `Draft created — agent will finalize the name` : `Created ${r.feature ?? ""}`;
-      const suffix = r.terminalOpened ? " — terminal opened" : "";
+      const suffix = r.terminalAttachedToExisting
+        ? " — switch to your terminal to see the agent"
+        : r.terminalOpened
+          ? " — terminal opened"
+          : "";
       toast.success(base + suffix);
       if (r.terminalError) {
         toast.warning("Terminal couldn't open", { description: r.terminalError });
