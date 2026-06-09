@@ -56,4 +56,14 @@ export const createWorktree = (body: {
   initialPrompt?: string;
   mode?: string;
   repos?: string[];
+  /** When true (and in local mode) the backend pops a native terminal
+   *  window already attached to the tmux session via osascript /
+   *  gnome-terminal / wt.exe. Silently ignored in `--remote` mode. */
+  openTerminal?: boolean;
 }) => post("/api/wt", body);
+
+/** Open a native terminal window attached to a project's tmux session.
+ *  Local-mode only — fails with 403 when the dashboard is behind the
+ *  `--remote` tunnel. */
+export const openTerminal = (project: string) =>
+  post("/api/terminal/open", { project });

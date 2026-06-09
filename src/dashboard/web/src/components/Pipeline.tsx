@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal,
+  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -63,10 +63,28 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
             Pipeline · {project.repos.length} {project.repos.length === 1 ? "repo" : "repos"}
           </p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
-          <Plus className="size-4" />
-          New feature
-        </Button>
+        <div className="flex items-center gap-2">
+          {data.localMode === true ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                const r = await actions.openTerminal(project.name);
+                if (r.ok) toast.success(`Terminal opened (${r.terminal ?? ""})`);
+                else toast.error("Couldn't open terminal", { description: r.error });
+              }}
+              title="Open a native terminal attached to this project's tmux session"
+            >
+              <TerminalSquare className="size-4" />
+              Open in terminal
+            </Button>
+          ) : null}
+          <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
+            <Plus className="size-4" />
+            New feature
+          </Button>
+        </div>
       </header>
 
       <FeatureList project={project} />

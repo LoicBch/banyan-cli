@@ -55,6 +55,9 @@ export interface ProjectState {
 export interface DashboardState {
   generatedAt: number;
   projects: ProjectState[];
+  /** True when the dashboard is running locally (no `--remote` tunnel).
+   *  Some features (e.g. native terminal launch) only work in this mode. */
+  localMode?: boolean;
   error?: string;
 }
 

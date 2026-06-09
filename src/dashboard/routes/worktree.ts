@@ -9,15 +9,28 @@
  *   3. No feature, no prompt — create a draft worktree; the agent will
  *      call `banyan_finalize_feature_name` after the first user message.
  *
+ * When `openTerminal` is set + we're in local mode, after the worktree
+ * is spawned we also pop a native terminal window already running
+ * `bn <project> start` so the user sees the agent live without manual
+ * attach.
+ *
  * The integrations-spawn endpoint also creates worktrees but with extra
  * lifecycle (markSpawned, etc.) — it lives in `integrations.ts`.
  */
 import type { Express } from "express";
 import { wtAll } from "../../commands/wtAll.js";
+import { openTerminalWindow } from "../terminalLauncher.js";
 import { requireFields, type RouteDeps } from "./shared.js";
 
-export function register(app: Express, deps: RouteDeps): void {
-  const { config } = deps;
+interface WtRouteDeps extends RouteDeps {
+  /** True in local mode — gates the "open native terminal" side-effect.
+   *  In `--remote` tunnel mode the server can't usefully spawn a window
+   *  on the user's phone, so we silently skip. */
+  filesystemRoutesEnabled: boolean;
+}
+
+export function register(app: Express, deps: WtRouteDeps): void {
+  const { config, filesystemRoutesEnabled } = deps;
 
   app.post("/api/wt", async (req, res) => {
     if (!requireFields(req, res, ["project"])) return;
@@ -29,6 +42,7 @@ export function register(app: Express, deps: RouteDeps): void {
       mode?: "interactive" | "assisted" | "autonomous" | "autopilot";
       prefix?: string;
       requireApproval?: boolean;
+      openTerminal?: boolean;
     };
     if (!config.projects.some((p) => p.name === body.project)) {
       res.status(404).json({ ok: false, error: `unknown project '${body.project}'` });
@@ -54,14 +68,49 @@ export function register(app: Express, deps: RouteDeps): void {
         ...(body.mode ? { mode: body.mode } : {}),
         ...(body.requireApproval ? { requireApproval: true } : {}),
       });
+
+      // Best-effort terminal attach. Local-mode only; failures don't
+      // un-do the spawn — they just surface in the response payload so
+      // the dashboard can toast accordingly.
+      let terminalOpened = false;
+      let terminalError: string | undefined;
+      if (body.openTerminal && filesystemRoutesEnabled) {
+        const r = await openTerminalWindow({
+          command: `bn ${body.project} start`,
+        });
+        terminalOpened = r.ok;
+        if (!r.ok) terminalError = r.error;
+      }
+
       res.json({
         ok: true,
         feature: featureName,
         draft: !body.feature && !inferredFromPrompt,
         inferredFromPrompt,
+        terminalOpened,
+        ...(terminalError ? { terminalError } : {}),
       });
     } catch (err) {
       res.status(400).json({ ok: false, error: (err as Error).message });
     }
+  });
+
+  // Standalone terminal-attach for already-spawned features. Same path as
+  // the post-create attach above, but invoked from a button on existing
+  // feature cards in the Pipeline drill-down.
+  app.post("/api/terminal/open", async (req, res) => {
+    if (!filesystemRoutesEnabled) {
+      res.status(403).json({ ok: false, error: "terminal launch is disabled in remote mode" });
+      return;
+    }
+    if (!requireFields(req, res, ["project"])) return;
+    const { project } = req.body as { project: string };
+    if (!config.projects.some((p) => p.name === project)) {
+      res.status(404).json({ ok: false, error: `unknown project '${project}'` });
+      return;
+    }
+    const r = await openTerminalWindow({ command: `bn ${project} start` });
+    if (r.ok) res.json({ ok: true, terminal: r.terminal });
+    else res.status(500).json({ ok: false, error: r.error });
   });
 }

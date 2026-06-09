@@ -117,7 +117,7 @@ export async function startServer(
   askRoutes.register(app, { config });
   historyRoutes.register(app, { config });
   mrRoutes.register(app, { config });
-  worktreeRoutes.register(app, { config });
+  worktreeRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
   integrationsRoutes.register(app, {
     config,
     scheduler,
