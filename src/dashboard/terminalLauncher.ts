@@ -54,13 +54,85 @@ async function sessionHasAttachedClient(session: string): Promise<boolean> {
   }
 }
 
+/** Find which terminal app currently holds an attached tmux client for the
+ *  given session. Walks: tmux client tty → lsof PID → process tree → first
+ *  ancestor whose name matches a known terminal app. Returns the .app name
+ *  on macOS (suitable for `tell application "<name>"`) or null when no
+ *  match. Best-effort; failures fall through to the iTerm/Terminal default. */
+async function detectAttachedTerminalApp(session: string): Promise<string | null> {
+  if (process.platform !== "darwin") return null;
+  try {
+    // Get the tty of the most-recently-attached client. Format example:
+    //   "/dev/ttys009 1733764800 1 [80x24] (utf-8) ..."
+    const { stdout } = await execFileP(
+      "tmux",
+      ["list-clients", "-t", session, "-F", "#{client_tty}"],
+      { encoding: "utf8" },
+    );
+    const tty = stdout.split("\n").map((s) => s.trim()).find((s) => s.length > 0);
+    if (!tty) return null;
+
+    // lsof: which pid has the tty open. Filter to processes ("-c") that
+    // own the device. Then walk up the ancestor chain via `ps -o ppid`
+    // looking for a known terminal app binary.
+    const { stdout: lsofOut } = await execFileP("lsof", ["-t", tty], { encoding: "utf8" });
+    const pids = lsofOut.split("\n").map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
+    for (const pid of pids) {
+      const app = await walkProcessTreeForTerminal(pid);
+      if (app) return app;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const KNOWN_TERMINAL_APPS: Record<string, string> = {
+  // Map process-name substrings (case-insensitive) → AppleScript app name.
+  warp: "Warp",
+  iterm: "iTerm",
+  iterm2: "iTerm",
+  ghostty: "Ghostty",
+  alacritty: "Alacritty",
+  wezterm: "WezTerm",
+  kitty: "kitty",
+  hyper: "Hyper",
+  terminal: "Terminal", // Terminal.app — fallback last in the dict order
+};
+
+async function walkProcessTreeForTerminal(pid: string): Promise<string | null> {
+  let current = pid;
+  for (let i = 0; i < 16; i++) {
+    try {
+      const { stdout } = await execFileP(
+        "ps",
+        ["-o", "ppid=,comm=", "-p", current],
+        { encoding: "utf8" },
+      );
+      const line = stdout.trim();
+      if (!line) return null;
+      const [ppidStr, ...commParts] = line.split(/\s+/);
+      const comm = commParts.join(" ").toLowerCase();
+      for (const [needle, appName] of Object.entries(KNOWN_TERMINAL_APPS)) {
+        if (comm.includes(needle)) return appName;
+      }
+      if (!ppidStr || ppidStr === "0" || ppidStr === "1") return null;
+      current = ppidStr;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export async function openTerminalWindow(opts: LaunchOptions): Promise<LaunchResult> {
   // Short-circuit when an existing terminal is already attached to the tmux
   // session for this project. Saves the user from a redundant second window.
   if (opts.existingTmuxSession) {
     const attached = await sessionHasAttachedClient(opts.existingTmuxSession);
     if (attached) {
-      const r = await bringTerminalToFront();
+      const detected = await detectAttachedTerminalApp(opts.existingTmuxSession);
+      const r = await bringTerminalToFront(detected);
       return { ...r, attachedToExisting: true };
     }
   }
@@ -76,13 +148,14 @@ export async function openTerminalWindow(opts: LaunchOptions): Promise<LaunchRes
   }
 }
 
-/** Activate the terminal app currently most likely to hold the tmux client,
- *  without opening a new window. Prefers iTerm if installed, else
- *  Terminal.app on macOS; no-op on other platforms (we'd need a window
- *  manager hook). */
-async function bringTerminalToFront(): Promise<LaunchResult> {
+/** Activate the terminal app holding the attached tmux client, so the user
+ *  can switch to it instead of getting a second window. `detected` comes
+ *  from `detectAttachedTerminalApp` (process-tree walk); if null we fall
+ *  back to iTerm/Terminal.app heuristic. No-op on Linux/Windows where
+ *  raising a specific window without a desktop-env hook is unreliable. */
+async function bringTerminalToFront(detected: string | null): Promise<LaunchResult> {
   if (process.platform === "darwin") {
-    const target = existsSync("/Applications/iTerm.app") ? "iTerm" : "Terminal";
+    const target = detected ?? (existsSync("/Applications/iTerm.app") ? "iTerm" : "Terminal");
     return runAppleScript(`tell application "${target}" to activate`, target);
   }
   // Linux / Windows: we can't reliably "find and raise" the right window
