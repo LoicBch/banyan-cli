@@ -23,7 +23,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fetchState, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
+import { fetchState, fetchPipeline, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
+import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
+import { openReportReviewDialog } from "@/components/ReportReviewDialog";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
@@ -47,12 +49,23 @@ interface PipelineProps {
 export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX.Element {
   const { data, error, loading } = usePolling<DashboardState>(fetchState, 2000);
 
+  // Pipeline data (approval state, latest report, …) is served by a
+  // separate endpoint so it's not bundled into every /api/state response.
+  // Joined here on the active project — keeps the feature cards rich.
+  const activeName = projectName ?? data?.projects[0]?.name ?? null;
+  const fetchPipelineForActive = React.useCallback(() => {
+    if (!activeName) return Promise.resolve({ features: [] });
+    return fetchPipeline(activeName);
+  }, [activeName]);
+  const { data: pipelineData } = usePolling(fetchPipelineForActive, 2000);
+
   if (loading && !data) return <PipelineSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
   if (!data || data.projects.length === 0) return <NoProjectsState />;
 
   const project =
     data.projects.find((p) => p.name === projectName) ?? data.projects[0]!;
+  const pipelineFeatures = pipelineData?.features ?? [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-6 animate-fade-in">
@@ -94,7 +107,7 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
         </div>
       </header>
 
-      <FeatureList project={project} />
+      <FeatureList project={project} pipelineFeatures={pipelineFeatures} />
 
       <RepoChipRow project={project} onRepoClick={onRepoClick} />
     </div>
@@ -143,9 +156,30 @@ function RepoChipRow({
   );
 }
 
-function FeatureList({ project }: { project: ProjectState }): React.JSX.Element {
-  // Derive features from worktrees if /api/pipeline isn't surfaced in state.
-  const features = deriveFeatures(project);
+function FeatureList({
+  project,
+  pipelineFeatures,
+}: {
+  project: ProjectState;
+  pipelineFeatures: FeatureState[];
+}): React.JSX.Element {
+  // Merge the basic feature list (from /api/state worktrees) with the
+  // richer pipeline view (/api/pipeline). Pipeline rows win when they
+  // exist — they carry approval / latestReport / reportApproval that
+  // the state endpoint doesn't surface.
+  const baseFeatures = deriveFeatures(project);
+  const pipelineByName = new Map(pipelineFeatures.map((f) => [f.feature, f]));
+  const features = baseFeatures.map((bf) => {
+    const pf = pipelineByName.get(bf.feature);
+    return pf ? { ...bf, ...pf } : bf;
+  });
+  // Also surface pipeline features that aren't in the basic list (e.g.
+  // merged/cleaned-up but still in approval history) — usually empty.
+  for (const pf of pipelineFeatures) {
+    if (!features.find((f) => f.feature === pf.feature)) {
+      features.push(pf);
+    }
+  }
 
   // List nav: which card is "selected" (visible keyboard cursor).
   // Reset selection when the feature set changes (a feature gets removed by
@@ -381,9 +415,21 @@ function FeatureCard({
 }: FeatureCardProps): React.JSX.Element {
   const ports = feature.ports ?? collectPortsFromRepos(project, feature.feature);
   const reposTouched = feature.reposActive ?? reposWithWorktree(project, feature.feature);
-  const todosPct = feature.todos && feature.todos.total > 0
-    ? Math.round((feature.todos.done / feature.todos.total) * 100)
+  // Pipeline data may surface todo under `todo` (new) OR `todos` (legacy).
+  // Normalize to a shared shape so the progress bar code below stays simple.
+  const todo = feature.todo ?? (feature.todos
+    ? { total: feature.todos.total, done: feature.todos.done }
+    : undefined);
+  const todosPct = todo && todo.total > 0
+    ? Math.round((todo.done / todo.total) * 100)
     : null;
+
+  // Delegated-pipeline gates pending action.
+  const planPending = feature.approval?.status === "pending";
+  const reportPending =
+    !!feature.latestReport &&
+    feature.latestReport.status === "done" &&
+    feature.reportApproval?.status === "pending";
 
   return (
     <Card
@@ -427,7 +473,7 @@ function FeatureCard({
               )}
             </div>
 
-            {todosPct !== null && feature.todos ? (
+            {todosPct !== null && todo ? (
               <div className="flex items-center gap-2 text-xs">
                 <div className="h-1 w-32 rounded-full bg-muted overflow-hidden">
                   <div
@@ -439,8 +485,40 @@ function FeatureCard({
                   />
                 </div>
                 <span className="text-muted-foreground">
-                  {feature.todos.done}/{feature.todos.total} todos
+                  {todo.done}/{todo.total} todos
                 </span>
+              </div>
+            ) : null}
+
+            {/* Delegated-pipeline gate buttons — surface visibly when the
+             *  user needs to act. Emerald = "your move", same vocabulary as
+             *  the sidebar "+ NEW" and the "+ Add repo" pill. */}
+            {planPending || reportPending ? (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {planPending ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPlanReviewDialog(project.name, feature.feature);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/70 hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Review plan
+                  </button>
+                ) : null}
+                {reportPending && feature.latestReport ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openReportReviewDialog(project.name, feature.feature, feature.latestReport!);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/70 hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Review report
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
