@@ -109,7 +109,7 @@ export async function startServer(
   stateRoutes.register(app, { config, auth: opts.auth });
   actionsRoutes.register(app, { config });
   shortcutsRoutes.register(app);
-  configRoutes.register(app);
+  configRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
   wizardRoutes.register(app, {
     config,
     filesystemRoutesEnabled: !opts.auth?.enabled,
@@ -117,7 +117,7 @@ export async function startServer(
   askRoutes.register(app, { config });
   historyRoutes.register(app, { config });
   mrRoutes.register(app, { config });
-  worktreeRoutes.register(app, { config });
+  worktreeRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
   integrationsRoutes.register(app, {
     config,
     scheduler,

@@ -32,11 +32,13 @@ export function register(app: Express, deps: StateDeps): void {
     res.json({ authRequired: !!auth?.enabled });
   });
 
-  // Full SPA state — the polling target.
+  // Full SPA state — the polling target. `localMode` lets the SPA
+  // decide whether features that require backend-host control (like
+  // launching a native terminal window) can be offered.
   app.get("/api/state", async (_req, res) => {
     try {
       const state = await buildState(config);
-      res.json(state);
+      res.json({ ...state, localMode: !auth?.enabled });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

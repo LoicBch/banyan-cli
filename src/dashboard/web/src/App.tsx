@@ -22,6 +22,7 @@ import { openWorktreeDialog } from "@/components/WorktreeDialog";
 import { fetchState } from "@/lib/api";
 import { usePolling } from "@/lib/usePolling";
 import { useKeyboard } from "@/lib/useKeyboard";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const STORAGE_SECTION = "banyan.web.section";
 const STORAGE_PROJECT = "banyan.web.project";
@@ -29,8 +30,10 @@ const STORAGE_PROJECT = "banyan.web.project";
 export default function App(): React.JSX.Element {
   return (
     <ThemeProvider>
-      <Shell />
-      <ThemedToaster />
+      <TooltipProvider delayDuration={200}>
+        <Shell />
+        <ThemedToaster />
+      </TooltipProvider>
     </ThemeProvider>
   );
 }
@@ -59,6 +62,7 @@ function Shell(): React.JSX.Element {
   const [project, setProject] = React.useState<string | null>(() =>
     localStorage.getItem(STORAGE_PROJECT),
   );
+  const [focusRepo, setFocusRepo] = React.useState<{ project: string; repo: string } | null>(null);
 
   React.useEffect(() => {
     localStorage.setItem(STORAGE_SECTION, section);
@@ -68,13 +72,15 @@ function Shell(): React.JSX.Element {
     if (project) localStorage.setItem(STORAGE_PROJECT, project);
   }, [project]);
 
-  // Pull the project list for the sidebar. Cheap because /api/state already
-  // polls — we just project it here. (No second fetch.)
+  // Pull project state for the sidebar. Cheap because /api/state already
+  // polls — we project it here for the full repo list (needed by the
+  // expandable repo rows). The command palette only needs names.
   const { data } = usePolling(fetchState, 2000);
-  const projects = data?.projects.map((p) => p.name) ?? [];
+  const projects = data?.projects ?? [];
+  const projectNames = projects.map((p) => p.name);
 
   // Default project: persisted choice, else first available.
-  const activeProject = project && projects.includes(project) ? project : projects[0] ?? null;
+  const activeProject = project && projectNames.includes(project) ? project : projectNames[0] ?? null;
 
   // App-level keyboard bindings. View-specific bindings (j/k/s/m/c/a)
   // live in their owning component (Pipeline) — useKeyboard handles the
@@ -93,20 +99,48 @@ function Shell(): React.JSX.Element {
         onSection={setSection}
         projects={projects}
         activeProject={activeProject}
-        onProject={setProject}
+        onProject={(name) => {
+          setProject(name);
+          // Clicking a project in the sidebar = "go to this project's
+          // overview". Always lands on Pipeline so the user sees its
+          // features list. Without this, clicking a project while in
+          // Config or another section was a no-op visually.
+          setSection("pipeline");
+          setFocusRepo(null);
+        }}
+        onRepoClick={(projectName, repoName) => {
+          setProject(projectName);
+          setSection("config");
+          setFocusRepo({ project: projectName, repo: repoName });
+        }}
       />
       <main className="flex-1 overflow-y-auto">
-        {section === "pipeline" ? <Pipeline projectName={activeProject} /> : null}
+        {section === "pipeline" ? (
+          <Pipeline
+            projectName={activeProject}
+            onRepoClick={(projectName, repoName) => {
+              setProject(projectName);
+              setSection("config");
+              setFocusRepo({ project: projectName, repo: repoName });
+            }}
+          />
+        ) : null}
         {section === "shortcuts" ? <Shortcuts /> : null}
         {section === "inbox" ? <Inbox /> : null}
         {section === "history" ? <History projectName={activeProject} /> : null}
-        {section === "config" ? <Config /> : null}
+        {section === "config" ? (
+          <Config
+            projectName={activeProject}
+            focusRepo={focusRepo}
+            onFocusConsumed={() => setFocusRepo(null)}
+          />
+        ) : null}
         {section === "ask" ? <Ask projectName={activeProject} /> : null}
       </main>
       <CommandPalette
         section={section}
         onSection={setSection}
-        projects={projects}
+        projects={projectNames}
         onProject={setProject}
       />
     </div>

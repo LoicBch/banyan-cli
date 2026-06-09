@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal,
+  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -30,15 +30,21 @@ import * as actions from "@/lib/actions";
 import { confirm } from "@/lib/confirm";
 import { useKeyboard } from "@/lib/useKeyboard";
 import { openProjectWizard } from "@/components/ProjectWizard";
+import { openAddRepoDialog } from "@/components/AddRepoDialog";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
+import { TechIcon } from "@/components/TechIcon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 
 interface PipelineProps {
   projectName: string | null;
+  /** Click on a repo chip — defers to the parent so it can switch
+   *  the section to Config + focus the matching card (same path as
+   *  the sidebar repo click). */
+  onRepoClick?: (projectName: string, repoName: string) => void;
 }
 
-export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
+export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX.Element {
   const { data, error, loading } = usePolling<DashboardState>(fetchState, 2000);
 
   if (loading && !data) return <PipelineSkeleton />;
@@ -57,13 +63,82 @@ export function Pipeline({ projectName }: PipelineProps): React.JSX.Element {
             Pipeline · {project.repos.length} {project.repos.length === 1 ? "repo" : "repos"}
           </p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
-          <Plus className="size-4" />
-          New feature
-        </Button>
+        <div className="flex items-center gap-2">
+          {data.localMode === true ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                const r = await actions.openTerminal(project.name);
+                if (r.ok) {
+                  toast.success(
+                    r.attachedToExisting
+                      ? "Switch to your terminal — session already attached"
+                      : `Terminal opened${r.terminal ? ` (${r.terminal})` : ""}`,
+                  );
+                } else {
+                  toast.error("Couldn't open terminal", { description: r.error });
+                }
+              }}
+              title="Open a native terminal attached to this project's tmux session"
+            >
+              <TerminalSquare className="size-4" />
+              Open in terminal
+            </Button>
+          ) : null}
+          <Button size="sm" className="gap-2" onClick={() => openWorktreeDialog(project.name)}>
+            <Plus className="size-4" />
+            New feature
+          </Button>
+        </div>
       </header>
 
       <FeatureList project={project} />
+
+      <RepoChipRow project={project} onRepoClick={onRepoClick} />
+    </div>
+  );
+}
+
+/** Ultra-compact horizontal row of repo "chips" — inventory only.
+ *  Each chip = brand icon + name, clickable to drill into Config.
+ *  Trailing "+" opens AddRepoDialog. Deliberately not a full list:
+ *  the heavy editing UI lives in Config, this is just "what's in
+ *  this project at a glance." */
+function RepoChipRow({
+  project,
+  onRepoClick,
+}: {
+  project: ProjectState;
+  onRepoClick?: (projectName: string, repoName: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 shrink-0">
+        Repos
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {project.repos.map((r) => (
+          <button
+            key={r.name}
+            onClick={() => onRepoClick?.(project.name, r.name)}
+            title={`${r.path} — click to open config`}
+            className="group flex items-center gap-1.5 rounded-md border border-border bg-card/40 px-2 py-1 text-xs font-mono text-muted-foreground hover:border-primary/40 hover:bg-accent/40 hover:text-foreground transition-colors"
+          >
+            <TechIcon tech={r.tech} type={r.type} className="text-muted-foreground/70 group-hover:text-foreground transition-colors" />
+            {r.name}
+          </button>
+        ))}
+        <button
+          onClick={() => openAddRepoDialog(project.name)}
+          title="Add a repo to this project"
+          className="flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/60 hover:bg-emerald-500/20 transition-colors"
+        >
+          <FolderPlus className="size-3.5" />
+          Add repo
+        </button>
+      </div>
     </div>
   );
 }
@@ -90,19 +165,26 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
     feature: string,
     label: string,
     fn: () => Promise<actions.ActionResult>,
-  ): Promise<void> {
+  ): Promise<actions.ActionResult> {
     setBusyByFeature((s) => ({ ...s, [feature]: true }));
-    const p = fn();
-    toast.promise(p, {
-      loading: `${label}…`,
-      success: (r) => (r.ok ? `${label} ✓` : `${label} failed`),
-      error: () => `${label} failed`,
-    });
-    const r = await p;
-    setBusyByFeature((s) => ({ ...s, [feature]: false }));
-    if (!r.ok && r.error) {
-      toast.error(label, { description: r.error });
+    // Sonner-style loading-then-update: one toast, no flicker, no
+    // "success" envelope wrapping a failed result (the previous
+    // toast.promise variant printed both "Cleanup failed" with a green
+    // border and an error toast underneath).
+    const id = toast.loading(`${label}…`);
+    let r: actions.ActionResult;
+    try {
+      r = await fn();
+    } catch (err) {
+      r = { ok: false, error: String(err) };
     }
+    setBusyByFeature((s) => ({ ...s, [feature]: false }));
+    if (r.ok) {
+      toast.success(`${label} ✓`, { id });
+    } else {
+      toast.error(label, { id, description: r.error });
+    }
+    return r;
   }
 
   function isFeatureRunning(f: FeatureState): boolean {
@@ -144,9 +226,28 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
       confirmLabel: "Delete everything",
     });
     if (!ok) return;
-    await runFeatureAction(f.feature, "Cleanup", () =>
+
+    const r = await runFeatureAction(f.feature, "Cleanup", () =>
       actions.cleanup(project.name, f.feature),
     );
+
+    // Dirty-worktree path: `git worktree remove` refuses without --force when
+    // there are modified or untracked files. Show a confirm to retry with
+    // force=true so the user can blow it away from the dashboard instead of
+    // dropping back to the CLI.
+    if (!r.ok && r.error && /modified or untracked|use --force/i.test(r.error)) {
+      const forceOk = await confirm({
+        title: `Force cleanup '${f.feature}'?`,
+        description:
+          "This worktree has uncommitted changes or untracked files. Force-deleting will discard them — they can't be recovered.",
+        destructive: true,
+        confirmLabel: "Force delete",
+      });
+      if (!forceOk) return;
+      await runFeatureAction(f.feature, "Cleanup (force)", () =>
+        actions.cleanup(project.name, f.feature, { force: true }),
+      );
+    }
   }
 
   // ── Keyboard navigation (Tier 1) ──────────────────────────────────────

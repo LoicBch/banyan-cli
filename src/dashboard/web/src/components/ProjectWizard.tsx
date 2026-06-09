@@ -29,8 +29,6 @@ import {
   X,
   Plus,
   Sparkles,
-  ChevronDown,
-  ChevronRight,
   Pencil,
   AlertCircle,
 } from "lucide-react";
@@ -40,6 +38,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import {
   DialogShell,
   DialogHeader,
@@ -47,8 +47,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog-shell";
 import { cn } from "@/lib/utils";
+import { TechIcon } from "@/components/TechIcon";
 
-interface TechProfile {
+export interface TechProfile {
   id: string;
   label: string;
   hint: string;
@@ -61,7 +62,7 @@ interface TechProfile {
   };
 }
 
-interface RepoData {
+export interface RepoData {
   name: string;
   path: string;
   baseBranch: string;
@@ -78,9 +79,31 @@ interface RepoData {
 export function openProjectWizard(): void {
   openDialog((close) => (
     <ThemeProvider>
-      <WizardBody close={close} />
+      <TooltipProvider delayDuration={200}>
+        <WizardBody close={close} />
+      </TooltipProvider>
     </ThemeProvider>
   ));
+}
+
+/** Small `(?)` icon with a hover tooltip — used to annotate optional
+ *  / nuanced fields without cluttering the label. */
+function HelpHint({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="More info"
+          className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        >
+          <HelpCircle className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{children}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 // ── Main wizard ──────────────────────────────────────────────────────────
@@ -331,7 +354,7 @@ function RepoCard({
 
 // ── Inline repo editor (Add or Edit) ─────────────────────────────────────
 
-function RepoEditor({
+export function RepoEditor({
   profiles,
   existingNames,
   draft,
@@ -348,7 +371,6 @@ function RepoEditor({
   onSave: (d: RepoData) => void;
   mode: "add" | "edit";
 }): React.JSX.Element {
-  const [showAdvanced, setShowAdvanced] = React.useState(mode === "edit");
   const [probing, setProbing] = React.useState(false);
   const [probeResult, setProbeResult] = React.useState<"detected" | "unknown" | null>(
     // When editing an existing repo, treat it as "already detected" so we
@@ -358,8 +380,8 @@ function RepoEditor({
 
   // Re-run probe whenever the user blurs the path field (or hits Enter).
   // Smart defaults: probe fills name + tech + run config when it detects
-  // something. Failing detection switches to manual mode (advanced fields
-  // auto-expand).
+  // something. The full form is shown unconditionally — every field is
+  // optional past the required trio (path / name / baseBranch).
   async function probe(target?: string): Promise<void> {
     const p = (target ?? draft.path).trim();
     if (!p) return;
@@ -383,6 +405,7 @@ function RepoEditor({
         ...draft,
         path: data.path,
         name: draft.name || data.suggestedName,
+        baseBranch: draft.baseBranch || (data.suggestedBaseBranch ?? ""),
         tech,
         run: {
           command: sug.command ?? draft.run.command,
@@ -392,13 +415,7 @@ function RepoEditor({
           stopCommand: sug.stopCommand ?? draft.run.stopCommand,
         },
       });
-      if (data.suggestedTech) {
-        setProbeResult("detected");
-      } else {
-        setProbeResult("unknown");
-        // Auto-expand advanced so the user can fill manually.
-        setShowAdvanced(true);
-      }
+      setProbeResult(data.suggestedTech ? "detected" : "unknown");
     } catch (err) {
       setProbeResult("unknown");
       toast.error("Probe failed", { description: String(err) });
@@ -439,6 +456,10 @@ function RepoEditor({
       toast.error(`A repo named '${draft.name}' already exists`);
       return;
     }
+    if (!draft.baseBranch) {
+      toast.error("Base branch is required");
+      return;
+    }
     onSave(draft);
   }
 
@@ -453,7 +474,9 @@ function RepoEditor({
 
       {/* Path — the only required field for the happy path */}
       <div className="space-y-1.5">
-        <Label htmlFor="repo-path">Path</Label>
+        <Label htmlFor="repo-path">
+          Path <span className="text-emerald-500">*</span>
+        </Label>
         <div className="flex gap-2">
           <Input
             id="repo-path"
@@ -490,110 +513,88 @@ function RepoEditor({
           <div className="flex items-start gap-2">
             <AlertCircle className="size-3.5 text-amber-500/80 mt-0.5 shrink-0" />
             <span className="text-muted-foreground">
-              Couldn't auto-detect this stack. Fill the fields below manually
-              or pick a tech preset.
+              Couldn't auto-detect this stack. Confirm the fields below and
+              pick a tech preset in Advanced if you want a starter run config.
             </span>
           </div>
         </div>
       ) : null}
 
-      {/* Advanced toggle */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced((v) => !v)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {showAdvanced ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        Advanced fields
-      </button>
-
-      {/* Advanced fields */}
-      {showAdvanced ? (
-        <div className="space-y-3 pt-1 border-t border-border">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Repo name</Label>
-              <Input
-                value={draft.name}
-                onChange={(e) => onChange({ ...draft, name: e.target.value.trim() })}
-                placeholder="front, back, app, …"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Base branch</Label>
-              <Input
-                value={draft.baseBranch}
-                onChange={(e) => onChange({ ...draft, baseBranch: e.target.value.trim() })}
-                placeholder="develop / main"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Tech preset</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {profiles.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectTech(p.id)}
-                  className={
-                    p.id === draft.tech
-                      ? "px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground"
-                      : "px-2.5 py-1 text-xs rounded-md bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  }
-                  title={p.hint}
-                  type="button"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Run command</Label>
-            <Input
-              value={draft.run.command}
-              onChange={(e) => onChange({ ...draft, run: { ...draft.run, command: e.target.value } })}
-              placeholder="npm run dev"
-              className="font-mono text-xs h-8"
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label>Port</Label>
-              <Input
-                type="number"
-                value={draft.run.port ?? ""}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
-                }}
-                placeholder="3000"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Port env</Label>
-              <Input
-                value={draft.run.portEnv}
-                onChange={(e) => onChange({ ...draft, run: { ...draft.run, portEnv: e.target.value.trim() } })}
-                placeholder="PORT, SERVER_PORT"
-                className="font-mono text-xs h-8"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Stop command (optional)</Label>
-            <Input
-              value={draft.run.stopCommand}
-              onChange={(e) => onChange({ ...draft, run: { ...draft.run, stopCommand: e.target.value.trim() } })}
-              placeholder="./gradlew --stop"
-              className="font-mono text-xs h-8"
-            />
-          </div>
+      {/* Required fields — always visible above the Advanced toggle so the
+       *  user never has to expand a section to set a mandatory field. The
+       *  probe auto-fills both from the path (basename → name,
+       *  `origin/HEAD` → baseBranch); user just confirms. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 h-4">
+            Repo name <span className="text-emerald-500">*</span>
+          </Label>
+          <Input
+            value={draft.name}
+            onChange={(e) => onChange({ ...draft, name: e.target.value.trim() })}
+            placeholder="front, back, app, …"
+            className="font-mono text-xs h-8"
+          />
         </div>
-      ) : null}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 h-4">
+            Base branch <span className="text-emerald-500">*</span>
+            <HelpHint>
+              Development branch that's the target of <code>bn merge</code> for
+              this repo. banyan also rebases your feature onto it before pushing.
+            </HelpHint>
+          </Label>
+          <Input
+            value={draft.baseBranch}
+            onChange={(e) => onChange({ ...draft, baseBranch: e.target.value.trim() })}
+            placeholder="develop / main"
+            className="font-mono text-xs h-8"
+          />
+        </div>
+      </div>
+
+      {/* All remaining fields are optional. Shown unconditionally — no
+       *  Advanced disclosure — because users repeatedly complained about
+       *  having to expand a section to see what banyan auto-detected. */}
+      <div className="space-y-3 pt-2 border-t border-border">
+        <div className="space-y-1.5">
+          <Label>Stack</Label>
+          <StackPicker
+            profiles={profiles}
+            selected={draft.tech}
+            onSelect={selectTech}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Run command</Label>
+          <Input
+            value={draft.run.command}
+            onChange={(e) => onChange({ ...draft, run: { ...draft.run, command: e.target.value } })}
+            placeholder="npm run dev"
+            className="font-mono text-xs h-8"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            Preferred port
+            <HelpHint>
+              banyan finds a free port nearby per feature. Set this to give
+              each feature's run process a predictable port range (e.g. set
+              3000 → first feature gets :3000, second :3001, …).
+            </HelpHint>
+          </Label>
+          <Input
+            type="number"
+            value={draft.run.port ?? ""}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              onChange({ ...draft, run: { ...draft.run, port: Number.isFinite(n) ? n : null } });
+            }}
+            placeholder="3000"
+            className="font-mono text-xs h-8 w-32"
+          />
+        </div>
+      </div>
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
@@ -601,6 +602,66 @@ function RepoEditor({
           {mode === "add" ? "Add to project" : "Save"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── Stack picker (square cards) ──────────────────────────────────────────
+
+/** Card grid for picking a tech stack. Each tile has the brand icon
+ *  (Simple Icons paths inlined via TechIcon), the label below, and
+ *  animates on selection (emerald ring + scale-103) and on click
+ *  (brief scale-95 bounce). Compact size so it doesn't dominate a
+ *  form crowded with other fields. */
+export function StackPicker({
+  profiles,
+  selected,
+  onSelect,
+}: {
+  profiles: TechProfile[];
+  selected: string;
+  onSelect: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-5 gap-1.5">
+      {profiles.map((p) => {
+        const isSelected = p.id === selected;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onSelect(p.id)}
+            title={p.hint}
+            className={cn(
+              "group relative flex flex-col items-center justify-center gap-1 rounded-md border bg-card/40 px-2 py-2",
+              "transition-all duration-200 ease-out active:scale-95",
+              isSelected
+                ? "border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/40 scale-[1.03]"
+                : "border-border hover:border-primary/40 hover:bg-accent/40",
+            )}
+          >
+            <TechIcon
+              tech={p.id}
+              branded={isSelected}
+              className={cn(
+                "size-5 transition-colors",
+                isSelected ? "" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            />
+            <span
+              className={cn(
+                "text-[10px] font-medium transition-colors text-center leading-tight",
+                isSelected ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </span>
+            {isSelected ? (
+              <span className="absolute top-1 right-1 size-1 rounded-full bg-emerald-500" />
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -740,7 +801,7 @@ function FsBrowserBody({
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function emptyDraft(): RepoData {
+export function emptyDraft(): RepoData {
   return {
     name: "",
     path: "",
