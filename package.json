@@ -1,6 +1,6 @@
 {
   "name": "banyan",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Workspace manager: tmux + git worktrees + Claude Code, multi-repo per project",
   "type": "module",
   "bin": {

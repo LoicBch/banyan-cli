@@ -106,11 +106,16 @@ Different worktrees, different ports, different DBs, different agents. An orches
 ```bash
 git clone https://github.com/LoicBch/banyan-cli
 cd banyan-cli && npm install && npm run build && npm link
+bn doctor
 ```
 
-`bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
+`bn doctor` walks your environment and prints exactly what's missing plus the command to fix each thing. Run it any time the setup feels off.
 
-Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges), `$OPENROUTER_API_KEY` (faster LLM-named features).
+Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges).
+
+An **OpenRouter API key** (free tier works fine) is needed if you want `bn wt -p "<prompt>"` to auto-name the branch from the prompt. Set via `$OPENROUTER_API_KEY` or `~/.config/banyan/config.yaml` under `llm.openrouterApiKey`. Skip it if you always pass an explicit feature name.
+
+`bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
 
 Set up your first project from the dashboard wizard:
 
@@ -136,7 +141,7 @@ $ bn myproject wt profile-page
   ✓ feature/profile-page worktrees created in front, back, app
   ✓ .env.local seeded into each worktree
   ✓ compose stack: myproject-profile-page (mysql:33061)
-  ✓ agent pane opened (mode=autonomous)
+  ✓ agent pane opened (mode=live)
 
 $ bn myproject start profile-page
   back  : SERVER_PORT=8081 JWT_SECRET=… ./gradlew bootRun
@@ -145,13 +150,13 @@ $ bn myproject start profile-page
 
 # A bug comes in. Don't touch profile-page — open a parallel context:
 $ bn myproject wt tag-filter -p "fix infinite loop on tag filter"
-  ✓ feature/tag-filter worktrees, agent, stack on :8082
+  ✓ feature/tag-filter worktrees, agent (mode=delegated), stack on :8082
 
 $ bn myproject status
   session 'banyan-myproject': running
   features:
-    profile-page  autopilot  agent: live  stack: running
-    tag-filter    autonomous agent: live  stack: running
+    profile-page  live       agent: live   stack: running
+    tag-filter    delegated  agent: live   stack: running   stage: planning
   …
 
 $ bn myproject merge tag-filter && bn myproject cleanup tag-filter
@@ -167,11 +172,16 @@ $ bn myproject resume
 ## What else it does
 
 <details>
-<summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, config editor, conflict pulse, remote mode with QR</summary>
+<summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, plan review, live conversation, remote mode with QR</summary>
 
-`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
+`bn serve` opens it at `localhost:4242`. Four tabs:
 
-`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds and accept tasks from your phone.
+- **Pipeline** — every feature × every repo, with a stage indicator (Setup → Plan → Execute → Report → Merge), a plan-review dialog when delegated-mode agents pause for approval, a report-review dialog when they finish, and a **live conversation** modal that streams the claude transcript per feature via SSE and lets you reply inline.
+- **Config** — per-repo run command (with named presets via `activePreset`), base branch, env templates, the OpenRouter API key — all saved with a comment-preserving YAML writer.
+- **Shortcuts** — the tmux Alt-keybinds banyan ships.
+- **History** — past features with merge timestamps and MR/PR links.
+
+`bn serve --remote` exposes it over a Cloudflare tunnel (or ngrok) with 32-hex Bearer-token auth and prints a QR code — scan from your phone to monitor builds, approve plans, and chat live with agents from anywhere.
 
 </details>
 
@@ -194,18 +204,24 @@ repos:
 </details>
 
 <details>
-<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot</summary>
+<summary><b>Agent modes</b> &nbsp;·&nbsp; <code>live</code> (default) / <code>delegated</code> (pipeline-gated)</summary>
 
 ```bash
-bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot
+bn myproject wt fix-search -p "the search bar lags above 500 items"
+# → mode=delegated (because -p was given)
+
+bn myproject wt fix-search
+# → mode=live (default, no prompt)
+
+bn myproject wt fix-search -m delegated   # override
 ```
 
-- **interactive** — plain Claude, you drive
-- **assisted** — agent asks on big decisions
-- **autonomous** — agent decides everything, documents hesitations
-- **autopilot** — autonomous + loops on Stop hook through a TODO list until `banyan_report_done`
+- **live** — conversational, no ceremony. The agent is banyan-aware (knows the MCP tools) but you drive. Can edit the main branch directly. Default when no prompt.
+- **delegated** — pipeline-gated: **Setup → Plan → human review → Execute → Report → Merge**. Loops via a Stop hook until `banyan_report_done` is called. Default when `-p` is given.
 
-LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter or `claude --print`. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
+Legacy mode names (`interactive`, `assisted`, `autonomous`, `autopilot`) are still accepted and normalized to the closest equivalent.
+
+LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
 
 </details>
 
@@ -245,9 +261,14 @@ Tools cover the full lifecycle: `banyan_create_feature`, `banyan_merge_feature`,
 </details>
 
 <details>
-<summary><b>Discord Rich Presence</b> &nbsp;·&nbsp; current project + active features + mode in your status</summary>
+<summary><b>Discord Rich Presence</b> &nbsp;·&nbsp; current project + active features in your Discord profile</summary>
 
-When the dashboard is running, your Discord status reflects what you're working on: project name, list of active feature names (with `+N more` overflow), and overall mode (autonomous/supervised). Toggle each field in config.
+Optional, off by default. When enabled (`~/.config/banyan/discord-rpc.yaml` → `enabled: true`), banyan publishes a Rich Presence card while the dashboard is running:
+
+- **Single project** — feature names on the top line, project name + count on the second.
+- **Multiple projects** — project names with feature counts on top, totals below.
+
+Uses Banyan's official Discord application — no setup needed beyond flipping the flag. See [`src/integrations/discord-rpc/README.md`](src/integrations/discord-rpc/README.md) for asset details.
 
 </details>
 
@@ -325,16 +346,19 @@ Stored at `~/.config/banyan/config.yaml`. Edit directly or via the dashboard's C
 ```
 bn ls                                    list projects
 bn init <project>                        create a project
-bn serve [--remote]                      web dashboard
+bn doctor                                check the environment is ready
+bn serve [--remote] [--tunnel <p>]       web dashboard (--remote = HTTPS tunnel + QR + token auth)
+  --port <n> · --no-open · --rotate-token
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
 bn <project> close                       close the tmux session (worktrees on disk kept)
 bn <project> status / resume / ports
+bn <project> restart-orchestrator        relaunch the orchestrator pane
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
-  -p "<prompt>"   LLM-named slug from prompt
-  -m <mode>       interactive | assisted | autonomous | autopilot
+  -p "<prompt>"   first message to the agent + LLM-named slug from prompt; implies -m delegated
+  -m <mode>       live | delegated   (legacy names normalized)
   --prefix <p>    branch prefix (default 'feature')
 bn <project> wt-rm <feature> [repo]
 bn <project> rebase <feature> [repo]
@@ -357,7 +381,7 @@ npm test         # node --test on dist/test
 npm run clean
 ```
 
-231 tests, CI runs on Ubuntu + macOS × Node 20 + 22.
+300 tests, CI runs on Ubuntu + macOS × Node 20 + 22.
 
 </details>
 
