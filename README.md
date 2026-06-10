@@ -104,8 +104,7 @@ Different worktrees, different ports, different DBs, different agents. An orches
 ## Install
 
 ```bash
-git clone https://github.com/LoicBch/banyan-cli
-cd banyan-cli && npm install && npm run build && npm link
+npm install -g banyan-cli
 bn doctor
 ```
 
@@ -116,6 +115,16 @@ Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://do
 An **OpenRouter API key** (free tier works fine) is needed if you want `bn wt -p "<prompt>"` to auto-name the branch from the prompt. Set via `$OPENROUTER_API_KEY` or `~/.config/banyan/config.yaml` under `llm.openrouterApiKey`. Skip it if you always pass an explicit feature name.
 
 `bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
+
+<details>
+<summary>Install from source (for contributors)</summary>
+
+```bash
+git clone https://github.com/LoicBch/banyan-cli
+cd banyan-cli && npm install && npm run build && npm link
+```
+
+</details>
 
 Set up your first project from the dashboard wizard:
 
