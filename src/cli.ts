@@ -129,8 +129,8 @@ export async function run(argv: string[]): Promise<number> {
     .description(
       "register a new project in the banyan config (cwd as the first repo by default). " +
         "this command only writes config; run `bn <project> start` afterwards to launch the workspace " +
-        "(orchestrator + terminal). multi-repo: register additional repos with `bn <project> add-repo` " +
-        "before starting.",
+        "(orchestrator + terminal). multi-repo: add the remaining repos through the dashboard's Config " +
+        "tab (`bn serve`) or by editing `~/.config/banyan/config.yaml` directly.",
     )
     .option("-r, --repo-name <name>", "name for the first repo (default: basename of cwd)")
     .option("-p, --path <path>", "path of the first repo (default: cwd)")
