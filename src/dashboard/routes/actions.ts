@@ -20,6 +20,7 @@ import {
 } from "../actions.js";
 import { approvalStatus, approvePlan, rejectPlan } from "../../approval.js";
 import { approveReport, rejectReport, reportApprovalStatus } from "../../reportApproval.js";
+import { assignTask } from "../../commands/assignTask.js";
 import { requireFields, type RouteDeps } from "./shared.js";
 
 export function register(app: Express, deps: RouteDeps): void {
@@ -145,5 +146,31 @@ export function register(app: Express, deps: RouteDeps): void {
     };
     const r = await actionEnvRecreate(config, { project, feature, repo });
     res.status(r.ok ? 200 : 400).json(r);
+  });
+
+  // Send a follow-up prompt to an already-running feature agent. The
+  // backend pastes the message into the agent's tmux pane via
+  // `assignTask`. Used by the dashboard's "Send message" button to
+  // intervene live in a delegated pipeline without leaving the browser.
+  app.post("/api/actions/task", async (req, res) => {
+    if (!requireFields(req, res, ["project", "feature", "prompt"])) return;
+    const { project, feature, prompt, force } = req.body as {
+      project: string;
+      feature: string;
+      prompt: string;
+      force?: boolean;
+    };
+    if (typeof prompt !== "string" || prompt.trim().length === 0) {
+      res.status(400).json({ ok: false, error: "prompt cannot be empty" });
+      return;
+    }
+    try {
+      const { paneId } = await assignTask(config, project, feature, prompt, {
+        ...(force ? { force: true } : {}),
+      });
+      res.json({ ok: true, paneId });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
   });
 }

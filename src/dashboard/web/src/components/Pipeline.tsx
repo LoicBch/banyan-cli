@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare,
+  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare, MessageSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ import {
 import { fetchState, fetchPipeline, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
 import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
 import { openReportReviewDialog } from "@/components/ReportReviewDialog";
+import { openSendMessageDialog } from "@/components/SendMessageDialog";
 import { StageIndicator } from "@/components/StageIndicator";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
@@ -108,7 +109,11 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
         </div>
       </header>
 
-      <FeatureList project={project} pipelineFeatures={pipelineFeatures} />
+      <FeatureList
+        project={project}
+        pipelineFeatures={pipelineFeatures}
+        localMode={data.localMode === true}
+      />
 
       <RepoChipRow project={project} onRepoClick={onRepoClick} />
     </div>
@@ -160,9 +165,11 @@ function RepoChipRow({
 function FeatureList({
   project,
   pipelineFeatures,
+  localMode,
 }: {
   project: ProjectState;
   pipelineFeatures: FeatureState[];
+  localMode: boolean;
 }): React.JSX.Element {
   // Merge the basic feature list (from /api/state worktrees) with the
   // richer pipeline view (/api/pipeline). Pipeline rows win when they
@@ -231,6 +238,21 @@ function FeatureList({
     await runFeatureAction(f.feature, "Start", () =>
       actions.testStart(project.name, f.feature),
     );
+  }
+  // Project-level terminal launch — surfaces a single iTerm/Warp/…
+  // window attached to the session. If a client is already attached we
+  // just bring the existing window to front (no second window).
+  async function dispatchOpenInTerminal(): Promise<void> {
+    const r = await actions.openTerminal(project.name);
+    if (r.ok) {
+      toast.success(
+        r.attachedToExisting
+          ? "Switch to your terminal — session already attached"
+          : `Terminal opened${r.terminal ? ` (${r.terminal})` : ""}`,
+      );
+    } else {
+      toast.error("Couldn't open terminal", { description: r.error });
+    }
   }
   async function dispatchStop(f: FeatureState): Promise<void> {
     await runFeatureAction(f.feature, "Stop", () =>
@@ -315,7 +337,7 @@ function FeatureList({
     a: () => {
       const f = selectedFeature();
       if (!f) return;
-      onAttach(project.name);
+      void dispatchOpenInTerminal();
     },
   });
 
@@ -375,12 +397,16 @@ function FeatureList({
           selected={i === selectedIdx}
           busy={!!busyByFeature[f.feature]}
           isRunning={isFeatureRunning(f)}
+          localMode={localMode}
           onSelect={() => setSelectedIdx(i)}
           onStart={() => dispatchStart(f)}
           onStop={() => dispatchStop(f)}
           onMerge={() => dispatchMerge(f)}
           onCleanup={() => dispatchCleanup(f)}
-          onAttach={() => onAttach(project.name)}
+          onOpenInTerminal={() => dispatchOpenInTerminal()}
+          onSendMessage={() =>
+            openSendMessageDialog(project.name, f.feature, { localMode })
+          }
         />
       ))}
     </div>
@@ -393,12 +419,15 @@ interface FeatureCardProps {
   selected: boolean;
   busy: boolean;
   isRunning: boolean;
+  /** True in local mode — gates the "Open in terminal" menu item. */
+  localMode: boolean;
   onSelect: () => void;
   onStart: () => void;
   onStop: () => void;
   onMerge: () => void;
   onCleanup: () => void;
-  onAttach: () => void;
+  onOpenInTerminal: () => void;
+  onSendMessage: () => void;
 }
 
 function FeatureCard({
@@ -407,12 +436,14 @@ function FeatureCard({
   selected,
   busy,
   isRunning,
+  localMode,
   onSelect,
   onStart,
   onStop,
   onMerge,
   onCleanup,
-  onAttach,
+  onOpenInTerminal,
+  onSendMessage,
 }: FeatureCardProps): React.JSX.Element {
   const ports = feature.ports ?? collectPortsFromRepos(project, feature.feature);
   const reposTouched = feature.reposActive ?? reposWithWorktree(project, feature.feature);
@@ -553,6 +584,20 @@ function FeatureCard({
                 Start
               </Button>
             )}
+            {/* Live-intervention shortcut. Always available on a feature —
+                lets the user jump out of the gated pipeline at any stage to
+                talk to the agent directly without leaving the dashboard. */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9"
+              onClick={onSendMessage}
+              disabled={busy}
+              aria-label="Send message to agent"
+              title="Send a follow-up prompt to the agent"
+            >
+              <MessageSquare className="size-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -566,11 +611,15 @@ function FeatureCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={onAttach}>
-                  <Terminal className="size-4" />
-                  <span>Copy attach command</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {localMode ? (
+                  <>
+                    <DropdownMenuItem onSelect={onOpenInTerminal}>
+                      <TerminalSquare className="size-4" />
+                      <span>Open in terminal</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem onSelect={onMerge}>
                   <GitMerge className="size-4" />
                   <span>Merge feature…</span>
@@ -586,25 +635,6 @@ function FeatureCard({
       </CardContent>
     </Card>
   );
-}
-
-// ── Action helpers ─────────────────────────────────────────────────────────
-
-/** Copy the tmux attach command for the project to the clipboard. The
- *  dashboard can't itself attach the user to tmux — they're in a browser —
- *  so we give them the one-shot they need to paste in their terminal. */
-function onAttach(projectName: string): void {
-  const cmd = `bn ${projectName} attach`;
-  navigator.clipboard
-    .writeText(cmd)
-    .then(() => {
-      toast.success("Copied attach command", { description: cmd });
-    })
-    .catch(() => {
-      // Fallback for browsers without clipboard API access (rare in 2026):
-      // surface the command in the toast so the user can copy it manually.
-      toast.info("Run this in your terminal", { description: cmd });
-    });
 }
 
 // ── Consequence builders for confirm dialogs ──────────────────────────────
