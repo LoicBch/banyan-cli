@@ -169,7 +169,7 @@ $ bn myproject resume
 <details>
 <summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, config editor, conflict pulse, remote mode with QR</summary>
 
-`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
+`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), History (agent reports timeline — read these here, no CLI equivalent), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
 
 `bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds and accept tasks from your phone.
 
@@ -215,24 +215,6 @@ LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter or `claude --p
 Live file × feature matrix in the dashboard. Color-coded overlap risk. Suggested merge order.
 
 On merge/rebase conflict, banyan launches a headless Claude with `--add-dir` on every repo (so it sees sibling worktrees) and banyan MCP wired in. It can call `banyan_feature_status` to check how other features resolved the same files — consistent resolutions across the project, no context pollution in per-feature agents.
-
-</details>
-
-<details>
-<summary><b>Task inbox</b> &nbsp;·&nbsp; pull from ClickUp (Linear/Jira adapters ~100 LOC each), spawn from the dashboard</summary>
-
-```yaml
-# ~/.config/banyan/integrations.yaml
-sources:
-  - type: clickup
-    name: my-clickup
-    pollIntervalMin: 5
-    options:
-      apiToken: pk_xxx
-      listId: "901234"
-```
-
-Matching tasks land in the dashboard's Inbox tab. Click → spawn a feature with the task description as the first prompt to the agent.
 
 </details>
 

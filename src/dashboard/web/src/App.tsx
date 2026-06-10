@@ -12,7 +12,6 @@ import { ThemeProvider, useTheme } from "@/lib/theme";
 import { Sidebar, type SectionId } from "@/components/Sidebar";
 import { Pipeline } from "@/components/Pipeline";
 import { Shortcuts } from "@/components/Shortcuts";
-import { Inbox } from "@/components/Inbox";
 import { History } from "@/components/History";
 import { Config } from "@/components/Config";
 import { Ask } from "@/components/Ask";
@@ -126,7 +125,6 @@ function Shell(): React.JSX.Element {
           />
         ) : null}
         {section === "shortcuts" ? <Shortcuts /> : null}
-        {section === "inbox" ? <Inbox /> : null}
         {section === "history" ? <History projectName={activeProject} /> : null}
         {section === "config" ? (
           <Config
@@ -148,5 +146,5 @@ function Shell(): React.JSX.Element {
 }
 
 function isSection(s: string): s is SectionId {
-  return ["pipeline", "inbox", "history", "ask", "config", "shortcuts"].includes(s);
+  return ["pipeline", "history", "ask", "config", "shortcuts"].includes(s);
 }
