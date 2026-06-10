@@ -13,7 +13,6 @@ import * as React from "react";
 import {
   LayoutDashboard,
   History,
-  MessageSquare,
   Settings,
   Keyboard,
   Sun,
@@ -30,7 +29,7 @@ import { openProjectWizard } from "@/components/ProjectWizard";
 import { TechIcon, techLabel } from "@/components/TechIcon";
 import type { ProjectState } from "@/lib/api";
 
-export type SectionId = "pipeline" | "history" | "ask" | "config" | "shortcuts";
+export type SectionId = "pipeline" | "history" | "config" | "shortcuts";
 
 interface SidebarProps {
   section: SectionId;
@@ -45,7 +44,6 @@ interface SidebarProps {
 const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ReactNode }> = [
   { id: "pipeline", label: "Pipeline", icon: <LayoutDashboard className="size-4" /> },
   { id: "history", label: "History", icon: <History className="size-4" /> },
-  { id: "ask", label: "Ask", icon: <MessageSquare className="size-4" /> },
   { id: "config", label: "Config", icon: <Settings className="size-4" /> },
   { id: "shortcuts", label: "Shortcuts", icon: <Keyboard className="size-4" /> },
 ];

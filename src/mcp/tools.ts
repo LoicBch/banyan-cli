@@ -26,6 +26,7 @@ import { todoTools } from "./tools/todo.js";
 import { approvalTools } from "./tools/approval.js";
 import { reportTools } from "./tools/report.js";
 import { taskTools } from "./tools/task.js";
+import { searchTools } from "./tools/search.js";
 import type { ToolDef } from "./tools/types.js";
 
 export const tools: ToolDef[] = [
@@ -35,4 +36,5 @@ export const tools: ToolDef[] = [
   ...reportTools,
   ...todoTools,
   ...approvalTools,
+  ...searchTools,
 ];

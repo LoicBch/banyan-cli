@@ -12,7 +12,7 @@
  *   Esc             close
  */
 import * as React from "react";
-import { Search, ArrowRight, Sun, Moon, Plus, FolderTree, LayoutDashboard, History, MessageSquare, Settings, Keyboard } from "lucide-react";
+import { Search, ArrowRight, Sun, Moon, Plus, FolderTree, LayoutDashboard, History, Settings, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { openProjectWizard } from "@/components/ProjectWizard";
@@ -74,7 +74,6 @@ export function CommandPalette({ section: _section, onSection, projects, onProje
     const navTargets: Array<{ id: SectionId; label: string; icon: React.ReactNode }> = [
       { id: "pipeline", label: "Go to Pipeline", icon: <LayoutDashboard className="size-4" /> },
       { id: "history", label: "Go to History", icon: <History className="size-4" /> },
-      { id: "ask", label: "Go to Ask", icon: <MessageSquare className="size-4" /> },
       { id: "config", label: "Go to Config", icon: <Settings className="size-4" /> },
       { id: "shortcuts", label: "Go to Shortcuts", icon: <Keyboard className="size-4" /> },
     ];

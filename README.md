@@ -219,15 +219,17 @@ On merge/rebase conflict, banyan launches a headless Claude with `--add-dir` on 
 </details>
 
 <details>
-<summary><b>Project memory</b> &nbsp;·&nbsp; <code>bn ask</code> answers from reports + commits + agent transcripts</summary>
+<summary><b>Project memory</b> &nbsp;·&nbsp; the orchestrator queries reports + commits + transcripts via MCP</summary>
 
-```bash
-bn myproject ask "what changed on auth this month?"
-bn myproject ask "where did we land on the search bug?" -f search-fix
-bn myproject ask "what's still pending?" --days 7
+Open the orchestrator pane (`bn <p> start` or the dashboard's "Open in terminal") and ask it directly:
+
+```
+why did we switch from JWT to OAuth?
+what's still pending across features?
+what was the hesitation on the cart refactor?
 ```
 
-End-of-task reports (`banyan_report_done`) and per-feature TODO lists feed `bn ask` too. The dashboard's History tab shows the timeline with watch/notify.
+It calls `banyan_list_reports`, `banyan_search_transcripts`, reads commits, and answers conversationally. Multi-turn: you can refine, drill in, and have it act on the findings (spawn a fix, merge a feature) in the same conversation.
 
 </details>
 
@@ -323,7 +325,6 @@ Stored at `~/.config/banyan/config.yaml`. Edit directly or via the dashboard's C
 ```
 bn ls                                    list projects
 bn init <project>                        create a project
-bn ask "<question>"                      answer from project memory
 bn serve [--remote]                      web dashboard
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
