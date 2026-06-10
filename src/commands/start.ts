@@ -39,7 +39,7 @@ export async function ensureWorkspace(ctx: Context): Promise<void> {
   const gitRepos = project.repos.filter((r) => r.type !== "compose");
   if (gitRepos.length === 0) {
     throw new UsageError(
-      `project '${project.name}' has no git repos. add one with: bn ${project.name} add-repo <name> [path]`,
+      `project '${project.name}' has no git repos. add one via the dashboard's Config tab (\`bn serve\`) or by editing ~/.config/banyan/config.yaml directly.`,
     );
   }
   const primaryCwd = gitRepos[0]!.path;
