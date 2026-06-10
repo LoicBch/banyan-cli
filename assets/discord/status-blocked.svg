@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <circle cx="256" cy="256" r="240" fill="#0f172a"/>
+  <circle cx="256" cy="256" r="176" fill="#ef4444"/>
+  <!-- Exclamation mark -->
+  <rect x="236" y="156" width="40" height="160" rx="12" fill="#ffffff"/>
+  <circle cx="256" cy="356" r="22" fill="#ffffff"/>
+</svg>

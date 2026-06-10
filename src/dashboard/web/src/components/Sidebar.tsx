@@ -4,34 +4,77 @@
  * Density goal: tight enough to scan many projects, but breathable spacing
  * around section headers so it doesn't read as cramped. Active section has
  * a subtle primary-tinted background, not a hard accent.
+ *
+ * Each project row has a chevron that expands to show its configured repos
+ * with their tech-stack icon. Persisted in localStorage per project so the
+ * expansion state survives reloads.
  */
 import * as React from "react";
-import { LayoutDashboard, Inbox, History, MessageSquare, Settings, Keyboard, Sun, Moon, FolderTree } from "lucide-react";
+import {
+  LayoutDashboard,
+  History,
+  Settings,
+  Keyboard,
+  Sun,
+  Moon,
+  FolderTree,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
+import { openProjectWizard } from "@/components/ProjectWizard";
+import { TechIcon, techLabel } from "@/components/TechIcon";
+import type { ProjectState } from "@/lib/api";
 
-export type SectionId = "pipeline" | "inbox" | "history" | "ask" | "config" | "shortcuts";
+export type SectionId = "pipeline" | "history" | "config" | "shortcuts";
 
 interface SidebarProps {
   section: SectionId;
   onSection: (id: SectionId) => void;
-  projects: string[];
+  projects: ProjectState[];
   activeProject: string | null;
   onProject: (name: string) => void;
+  /** Called when a repo row is clicked — navigates to its config. */
+  onRepoClick: (projectName: string, repoName: string) => void;
 }
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ReactNode }> = [
   { id: "pipeline", label: "Pipeline", icon: <LayoutDashboard className="size-4" /> },
-  { id: "inbox", label: "Inbox", icon: <Inbox className="size-4" /> },
   { id: "history", label: "History", icon: <History className="size-4" /> },
-  { id: "ask", label: "Ask", icon: <MessageSquare className="size-4" /> },
   { id: "config", label: "Config", icon: <Settings className="size-4" /> },
   { id: "shortcuts", label: "Shortcuts", icon: <Keyboard className="size-4" /> },
 ];
 
-export function Sidebar({ section, onSection, projects, activeProject, onProject }: SidebarProps): React.JSX.Element {
+const STORAGE_EXPANDED = "banyan.web.sidebar.expanded";
+
+export function Sidebar({ section, onSection, projects, activeProject, onProject, onRepoClick }: SidebarProps): React.JSX.Element {
   const { theme, toggle } = useTheme();
+
+  // Per-project expansion state. Stored as `Record<projectName, boolean>` in
+  // localStorage. Default: collapsed.
+  const [expanded, setExpanded] = React.useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_EXPANDED);
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_EXPANDED, JSON.stringify(expanded));
+    } catch {
+      /* quota exceeded — non-fatal */
+    }
+  }, [expanded]);
+
+  function toggleExpanded(name: string): void {
+    setExpanded((s) => ({ ...s, [name]: !s[name] }));
+  }
 
   return (
     <aside className="flex h-full w-60 flex-col border-r border-border bg-card">
@@ -70,24 +113,103 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
 
         {projects.length > 0 ? (
           <>
-            <div className="mt-4 mb-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Projects
-            </div>
-            {projects.map((p) => (
+            <div className="mt-4 mb-1 flex items-center justify-between pl-2 pr-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Projects
+              </span>
               <button
-                key={p}
-                onClick={() => onProject(p)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors font-mono",
-                  activeProject === p
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
+                onClick={openProjectWizard}
+                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-colors"
+                title="Create a new banyan project"
               >
-                <FolderTree className="size-4" />
-                {p}
+                <Plus className="size-3" />
+                New
               </button>
-            ))}
+            </div>
+            {projects.map((p) => {
+              const isOpen = !!expanded[p.name];
+              const isActive = activeProject === p.name;
+              return (
+                <div key={p.name} className="mb-0.5">
+                  <div
+                    className={cn(
+                      "group relative flex items-center rounded-md transition-colors",
+                      isActive
+                        ? "bg-emerald-500/10 text-foreground"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    )}
+                  >
+                    {/* Active accent — vertical emerald bar on the left edge.
+                     *  Makes the current scope unmistakable while staying out
+                     *  of the way of the other interactive elements. */}
+                    {isActive ? (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-emerald-500" />
+                    ) : null}
+                    {/* Chevron toggle — separate hitbox from the project button */}
+                    <button
+                      onClick={() => toggleExpanded(p.name)}
+                      className="flex items-center justify-center size-6 rounded-l-md hover:text-foreground"
+                      title={isOpen ? "Collapse" : "Expand"}
+                      aria-label={isOpen ? "Collapse repos" : "Expand repos"}
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="size-3.5" />
+                      ) : (
+                        <ChevronRight className="size-3.5" />
+                      )}
+                    </button>
+                    {/* Project name — activating it switches the active project */}
+                    <button
+                      onClick={() => onProject(p.name)}
+                      className={cn(
+                        "flex flex-1 items-center gap-2 px-1 py-1.5 text-sm font-mono text-left",
+                        isActive && "font-semibold",
+                      )}
+                    >
+                      <FolderTree className={cn("size-4", isActive && "text-emerald-500")} />
+                      {p.name}
+                    </button>
+                  </div>
+
+                  {/* Animated expand/collapse using the grid-rows trick:
+                   *  the wrapper transitions grid-template-rows from 0fr to 1fr;
+                   *  the inner div with overflow-hidden clips during the animation. */}
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows] duration-200 ease-out",
+                      isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-5 mt-0.5 mb-1 border-l border-border/60 pl-2 space-y-0.5">
+                        {p.repos.length === 0 ? (
+                          <div className="px-2 py-1 text-[11px] italic text-muted-foreground/60">
+                            no repos
+                          </div>
+                        ) : (
+                          p.repos.map((r) => (
+                            <button
+                              key={r.name}
+                              onClick={() => onRepoClick(p.name, r.name)}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-left text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+                              title={`${r.path} — click to open config`}
+                            >
+                              <TechIcon tech={r.tech} type={r.type} className="text-muted-foreground/70" />
+                              <span className="font-mono truncate">{r.name}</span>
+                              {techLabel(r.tech, r.type) ? (
+                                <span className="ml-auto text-[10px] text-muted-foreground/50 shrink-0">
+                                  {techLabel(r.tech, r.type)}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </>
         ) : null}
       </nav>

@@ -19,6 +19,9 @@ export interface DashboardRepo {
   path: string;
   baseBranch?: string;
   composeFile?: string;
+  /** Tech profile id (`node`, `spring-boot`, `android`, `django`, `custom`).
+   *  Surfaces in the sidebar icon + Config tab. */
+  tech?: string;
   worktrees: DashboardWorktree[];      // only for git repos
   stacks: DashboardStack[];            // only for compose repos
   run?: {
@@ -27,7 +30,6 @@ export interface DashboardRepo {
     portEnv?: string;
     composePorts?: Record<string, string>;
   };
-  deployCommand?: string;
 }
 
 export interface DashboardStack {
@@ -46,7 +48,6 @@ export interface DashboardService {
 
 export interface DashboardProject {
   name: string;
-  deployCommand?: string;
   sessionRunning: boolean;
   repos: DashboardRepo[];
 }
@@ -73,9 +74,9 @@ export async function buildState(config: Config): Promise<DashboardState> {
           type: "compose",
           path: repo.path,
           composeFile: repo.composeFile,
+          tech: repo.tech,
           worktrees: [],
           stacks: await collectStacks(project, repo, activeStacks),
-          deployCommand: repo.deployCommand,
         });
       } else {
         repos.push({
@@ -83,6 +84,7 @@ export async function buildState(config: Config): Promise<DashboardState> {
           type: "git",
           path: repo.path,
           baseBranch: repo.baseBranch,
+          tech: repo.tech,
           worktrees: await collectWorktrees(repo, paneTags),
           stacks: [],
           run: repo.run
@@ -93,14 +95,12 @@ export async function buildState(config: Config): Promise<DashboardState> {
                 composePorts: repo.run.composePorts,
               }
             : undefined,
-          deployCommand: repo.deployCommand,
         });
       }
     }
 
     projects.push({
       name: project.name,
-      deployCommand: project.deployCommand,
       sessionRunning,
       repos,
     });

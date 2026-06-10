@@ -4,6 +4,7 @@ import type { Config } from "../config.js";
 import { saveConfig, expandHome } from "../config.js";
 import { logger } from "../logger.js";
 import { UsageError, ConfigError } from "../errors.js";
+import { setupTmuxOnInit } from "../tmuxSetup.js";
 
 export interface InitOpts {
   repoName?: string;
@@ -11,9 +12,10 @@ export interface InitOpts {
 }
 
 /** Register a new project in the banyan config. Does NOT launch the
- *  workspace — that's `bn <project> start`. The two-step model keeps
- *  `init` predictable (it's just a config write) and lets the user add
- *  more repos via `bn <project> add-repo` before starting. */
+ *  workspace — that's `bn <project> start`. Minimal: writes a single
+ *  repo entry (the cwd or `--path`) with no `baseBranch` / `run` /
+ *  `tech`. For multi-repo setups with full run config + baseBranch,
+ *  use the dashboard wizard (`bn serve`) or edit the YAML directly. */
 export async function init(
   config: Config,
   projectName: string,
@@ -43,9 +45,15 @@ export async function init(
 
   await saveConfig(next);
   logger.ok(`created project "${projectName}" with repo "${repoName}" → ${repoPath}`);
+
+  // Tmux shortcut bootstrap. Idempotent: re-renders only when stale; prompts
+  // to wire `~/.tmux.conf` only on first init (when the source-file line is
+  // missing). Subsequent inits / banyan upgrades stay silent.
+  await setupTmuxOnInit();
+
   logger.info(``);
   logger.info(`next steps:`);
-  logger.info(`  bn ${projectName} add-repo <name> [path]   # for each additional repo`);
+  logger.info(`  bn serve                                 # add more repos / set baseBranch / run config via the dashboard`);
   logger.info(`  bn ${projectName} start                    # launch the workspace`);
   return next;
 }

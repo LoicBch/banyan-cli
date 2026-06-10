@@ -106,10 +106,16 @@ Different worktrees, different ports, different DBs, different agents. An orches
 ```bash
 git clone https://github.com/LoicBch/banyan-cli
 cd banyan-cli && npm install && npm run build && npm link
-bn install-tmux
+bn doctor
 ```
 
-Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges), `$OPENROUTER_API_KEY` (faster LLM-named features).
+`bn doctor` walks your environment and prints exactly what's missing plus the command to fix each thing. Run it any time the setup feels off.
+
+Needs Node ≥ 20, tmux ≥ 3, git ≥ 2.5, and the [Claude Code CLI](https://docs.claude.com/claude-code). Optional: Docker (compose stacks), `gh`/`glab` (merges).
+
+An **OpenRouter API key** (free tier works fine) is needed if you want `bn wt -p "<prompt>"` to auto-name the branch from the prompt. Set via `$OPENROUTER_API_KEY` or `~/.config/banyan/config.yaml` under `llm.openrouterApiKey`. Skip it if you always pass an explicit feature name.
+
+`bn init` will offer to wire its tmux keybindings into your `~/.tmux.conf` on first run.
 
 Set up your first project from the dashboard wizard:
 
@@ -118,12 +124,11 @@ bn serve
 # http://localhost:4242 → "+ new project"
 ```
 
-Or via CLI:
+Or for power users:
 
 ```bash
-cd ~/front && bn init my-project
-bn my-project add-repo back ~/back
-bn my-project add-repo app ~/app
+cd ~/front && bn init my-project   # bootstrap with the first repo
+bn serve                            # add the remaining repos from the dashboard
 bn my-project start
 ```
 
@@ -136,7 +141,7 @@ $ bn myproject wt profile-page
   ✓ feature/profile-page worktrees created in front, back, app
   ✓ .env.local seeded into each worktree
   ✓ compose stack: myproject-profile-page (mysql:33061)
-  ✓ agent pane opened (mode=autonomous)
+  ✓ agent pane opened (mode=live)
 
 $ bn myproject start profile-page
   back  : SERVER_PORT=8081 JWT_SECRET=… ./gradlew bootRun
@@ -145,11 +150,14 @@ $ bn myproject start profile-page
 
 # A bug comes in. Don't touch profile-page — open a parallel context:
 $ bn myproject wt tag-filter -p "fix infinite loop on tag filter"
-  ✓ feature/tag-filter worktrees, agent, stack on :8082
+  ✓ feature/tag-filter worktrees, agent (mode=delegated), stack on :8082
 
-$ bn myproject ls-features
-  profile-page  running  3 panes  :3001 :8081
-  tag-filter    running  2 panes  :3002 :8082
+$ bn myproject status
+  session 'banyan-myproject': running
+  features:
+    profile-page  live       agent: live   stack: running
+    tag-filter    delegated  agent: live   stack: running   stage: planning
+  …
 
 $ bn myproject merge tag-filter && bn myproject cleanup tag-filter
   ✓ rebase clean · pushed · MR merged · stack destroyed · worktrees removed
@@ -164,11 +172,16 @@ $ bn myproject resume
 ## What else it does
 
 <details>
-<summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, config editor, conflict pulse, remote mode with QR</summary>
+<summary><b>Web dashboard</b> &nbsp;·&nbsp; pipeline view, plan review, live conversation, remote mode with QR</summary>
 
-`bn serve` opens it at `localhost:4242`. Tabs: Pipeline (every feature × every repo), Inbox (integration tasks), History (agent reports timeline), Ask, Config (edit run commands with comment-preserving YAML writes), Shortcuts.
+`bn serve` opens it at `localhost:4242`. Four tabs:
 
-`bn serve --remote` exposes it over a Cloudflare tunnel with token auth and prints a QR code — monitor builds, approve plans, accept tasks from your phone.
+- **Pipeline** — every feature × every repo, with a stage indicator (Setup → Plan → Execute → Report → Merge), a plan-review dialog when delegated-mode agents pause for approval, a report-review dialog when they finish, and a **live conversation** modal that streams the claude transcript per feature via SSE and lets you reply inline.
+- **Config** — per-repo run command (with named presets via `activePreset`), base branch, env templates, the OpenRouter API key — all saved with a comment-preserving YAML writer.
+- **Shortcuts** — the tmux Alt-keybinds banyan ships.
+- **History** — past features with merge timestamps and MR/PR links.
+
+`bn serve --remote` exposes it over a Cloudflare tunnel (or ngrok) with 32-hex Bearer-token auth and prints a QR code — scan from your phone to monitor builds, approve plans, and chat live with agents from anywhere.
 
 </details>
 
@@ -191,20 +204,24 @@ repos:
 </details>
 
 <details>
-<summary><b>Agent modes</b> &nbsp;·&nbsp; interactive / assisted / autonomous / autopilot, with optional plan approval</summary>
+<summary><b>Agent modes</b> &nbsp;·&nbsp; <code>live</code> (default) / <code>delegated</code> (pipeline-gated)</summary>
 
 ```bash
-bn myproject wt fix-search -p "the search bar lags above 500 items" -m autopilot --review-plan
+bn myproject wt fix-search -p "the search bar lags above 500 items"
+# → mode=delegated (because -p was given)
+
+bn myproject wt fix-search
+# → mode=live (default, no prompt)
+
+bn myproject wt fix-search -m delegated   # override
 ```
 
-- **interactive** — plain Claude, you drive
-- **assisted** — agent asks on big decisions
-- **autonomous** — agent decides everything, documents hesitations
-- **autopilot** — autonomous + loops on Stop hook through a TODO list until `banyan_report_done`
+- **live** — conversational, no ceremony. The agent is banyan-aware (knows the MCP tools) but you drive. Can edit the main branch directly. Default when no prompt.
+- **delegated** — pipeline-gated: **Setup → Plan → human review → Execute → Report → Merge**. Loops via a Stop hook until `banyan_report_done` is called. Default when `-p` is given.
 
-`--review-plan` gates execution: the agent builds a TODO list and waits for `bn approve <feature>` before any work starts.
+Legacy mode names (`interactive`, `assisted`, `autonomous`, `autopilot`) are still accepted and normalized to the closest equivalent.
 
-LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter or `claude --print`. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
+LLM-driven naming: `-p "<prompt>"` infers the slug via OpenRouter. Skip the prompt and you get a draft worktree where the agent finalizes the name from your first message.
 
 </details>
 
@@ -218,33 +235,17 @@ On merge/rebase conflict, banyan launches a headless Claude with `--add-dir` on 
 </details>
 
 <details>
-<summary><b>Task inbox</b> &nbsp;·&nbsp; pull from ClickUp (Linear/Jira adapters ~100 LOC each), spawn from the dashboard</summary>
+<summary><b>Project memory</b> &nbsp;·&nbsp; the orchestrator queries reports + commits + transcripts via MCP</summary>
 
-```yaml
-# ~/.config/banyan/integrations.yaml
-sources:
-  - type: clickup
-    name: my-clickup
-    pollIntervalMin: 5
-    options:
-      apiToken: pk_xxx
-      listId: "901234"
+Open the orchestrator pane (`bn <p> start` or the dashboard's "Open in terminal") and ask it directly:
+
+```
+why did we switch from JWT to OAuth?
+what's still pending across features?
+what was the hesitation on the cart refactor?
 ```
 
-Matching tasks land in the dashboard's Inbox tab. Click → spawn a feature with the task description as the first prompt to the agent.
-
-</details>
-
-<details>
-<summary><b>Project memory</b> &nbsp;·&nbsp; <code>bn ask</code> answers from reports + commits + agent transcripts</summary>
-
-```bash
-bn myproject ask "what changed on auth this month?"
-bn myproject ask "where did we land on the search bug?" -f search-fix
-bn myproject ask "what's still pending?" --days 7
-```
-
-End-of-task reports (`banyan_report_done`) and per-feature TODO lists feed `bn ask` too. The dashboard's History tab shows the timeline with watch/notify.
+It calls `banyan_list_reports`, `banyan_search_transcripts`, reads commits, and answers conversationally. Multi-turn: you can refine, drill in, and have it act on the findings (spawn a fix, merge a feature) in the same conversation.
 
 </details>
 
@@ -255,14 +256,19 @@ End-of-task reports (`banyan_report_done`) and per-feature TODO lists feed `bn a
 { "mcpServers": { "banyan": { "command": "banyan", "args": ["mcp-serve"] } } }
 ```
 
-Tools cover the full lifecycle: `banyan_create_feature`, `banyan_merge_feature`, `banyan_list_features`, `banyan_get_stack_ports`, todos, reports, and dispatch to per-feature agents. The orchestrator gets these wired in automatically. `bn mcp-log -f` tails every tool call with the equivalent CLI command.
+Tools cover the full lifecycle: `banyan_create_feature`, `banyan_merge_feature`, `banyan_list_features`, `banyan_get_stack_ports`, todos, reports, and dispatch to per-feature agents. The orchestrator gets these wired in automatically.
 
 </details>
 
 <details>
-<summary><b>Discord Rich Presence</b> &nbsp;·&nbsp; current project + active features + mode in your status</summary>
+<summary><b>Discord Rich Presence</b> &nbsp;·&nbsp; current project + active features in your Discord profile</summary>
 
-When the dashboard is running, your Discord status reflects what you're working on: project name, list of active feature names (with `+N more` overflow), and overall mode (autonomous/supervised). Toggle each field in config.
+Optional, off by default. When enabled (`~/.config/banyan/discord-rpc.yaml` → `enabled: true`), banyan publishes a Rich Presence card while the dashboard is running:
+
+- **Single project** — feature names on the top line, project name + count on the second.
+- **Multiple projects** — project names with feature counts on top, totals below.
+
+Uses Banyan's official Discord application — no setup needed beyond flipping the flag. See [`src/integrations/discord-rpc/README.md`](src/integrations/discord-rpc/README.md) for asset details.
 
 </details>
 
@@ -293,7 +299,6 @@ Walks every active worktree on disk, recreates the tmux panes, restarts run proc
 version: 1
 projects:
   - name: myproject
-    deployCommand: bash ~/Dev/myproject/deploy.sh
     repos:
       - name: front
         path: ~/Dev/myproject/front
@@ -331,7 +336,7 @@ projects:
         composeFile: docker-compose.dev.yml
 ```
 
-Stored at `~/.config/banyan/config.yaml`. Edit directly, via the dashboard's Config tab, or with `bn <project> add-repo / set-run / set-base`.
+Stored at `~/.config/banyan/config.yaml`. Edit directly or via the dashboard's Config tab.
 
 </details>
 
@@ -341,39 +346,26 @@ Stored at `~/.config/banyan/config.yaml`. Edit directly, via the dashboard's Con
 ```
 bn ls                                    list projects
 bn init <project>                        create a project
-bn ask "<question>"                      answer from project memory
-bn serve [--remote]                      web dashboard
-bn install-tmux [-f]                     render tmux config
-bn mcp-serve                             MCP server over stdio
-bn mcp-log [-f] [-n N]                   tail recent MCP tool calls
+bn doctor                                check the environment is ready
+bn serve [--remote] [--tunnel <p>]       web dashboard (--remote = HTTPS tunnel + QR + token auth)
+  --port <n> · --no-open · --rotate-token
 
 bn <project> start [feature] [repos...]  workspace (no feature) or run processes (with)
 bn <project> stop <feature>              stop run processes
-bn <project> kill                        full session teardown
-bn <project> attach / detach / status / resume / ls-features / ports
-bn <project> deploy [repo] [args...]
+bn <project> close                       close the tmux session (worktrees on disk kept)
+bn <project> status / resume / ports
+bn <project> restart-orchestrator        relaunch the orchestrator pane
 
 bn <project> wt [feature] [repos...]     create worktree(s) + agent pane
-  -p "<prompt>"   LLM-named slug from prompt
-  -m <mode>       interactive | assisted | autonomous | autopilot
-  --review-plan   require approval before work starts
+  -p "<prompt>"   first message to the agent + LLM-named slug from prompt; implies -m delegated
+  -m <mode>       live | delegated   (legacy names normalized)
   --prefix <p>    branch prefix (default 'feature')
-bn <project> task <feature> <prompt>     paste into the feature's agent pane
 bn <project> wt-rm <feature> [repo]
-bn <project> wt-ls
 bn <project> rebase <feature> [repo]
 bn <project> merge <feature> [repo]
 bn <project> cleanup <feature> [repo]    stop + remove + delete + close + drop
-bn <project> sync
-bn <project> pulse [--watch <s>]
-
-bn <project> todo <feature>
-bn <project> reports [feature]
-bn <project> approve <feature>           approve a pending plan or report
 
 bn <project> env up|down|recreate|logs|exec <feature> [service ...]
-
-bn <project> add-repo / remove-repo / remove / set-base / set-run / infer-run / config
 ```
 
 If you're inside a configured repo (or its worktree), drop the project name — banyan infers it from cwd. Or symlink `banyan` to your project name to skip the project arg entirely.
@@ -389,7 +381,7 @@ npm test         # node --test on dist/test
 npm run clean
 ```
 
-231 tests, CI runs on Ubuntu + macOS × Node 20 + 22.
+300 tests, CI runs on Ubuntu + macOS × Node 20 + 22.
 
 </details>
 

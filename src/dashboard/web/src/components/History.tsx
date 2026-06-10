@@ -14,7 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Clock } from "lucide-react";
 import { ExternalLink, GitMerge, RotateCcw, Trash2, FileText, History as HistoryIcon } from "lucide-react";
+import { apiFetch } from "@/lib/auth";
 
 interface HistoryEvent {
   ts: string;
@@ -56,8 +59,8 @@ export function History({ projectName }: HistoryProps): React.JSX.Element {
     if (!projectName) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/history/${encodeURIComponent(projectName)}?limit=200`).then((r) => r.json()).catch(() => ({ events: [] })),
-      fetch(`/api/reports/${encodeURIComponent(projectName)}`).then((r) => r.json()).catch(() => ({ reports: [] })),
+  apiFetch(`/api/history/${encodeURIComponent(projectName)}?limit=200`).then((r) => r.json()).catch(() => ({ events: [] })),
+  apiFetch(`/api/reports/${encodeURIComponent(projectName)}`).then((r) => r.json()).catch(() => ({ reports: [] })),
     ])
       .then(([h, r]) => {
         setEvents(h.events ?? []);
@@ -267,12 +270,20 @@ function HistorySkeleton(): React.JSX.Element {
 
 function EmptyPanel(): React.JSX.Element {
   return (
-    <Card className="border-dashed">
-      <CardContent className="py-10 text-center space-y-2">
-        <h3 className="text-base font-medium">No history yet</h3>
-        <p className="text-sm text-muted-foreground">Events appear after the first merge, rebase, cleanup, or report.</p>
-      </CardContent>
-    </Card>
+    <EmptyState
+      icon={Clock}
+      title="No history yet"
+      description="The timeline shows every merge, rebase, cleanup, and end-of-task report. Run a feature through `bn merge` or `bn cleanup` to see entries appear here."
+      hint={
+        <>
+          Reports come from agents calling{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+            banyan_report_done
+          </code>
+          .
+        </>
+      }
+    />
   );
 }
 

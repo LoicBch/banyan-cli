@@ -29,7 +29,6 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: "cleanup",      defaultChord: "M-c", label: "Cleanup",       description: "cleanup the worktree of the current pane (or prompt)" },
   { id: "rebase",       defaultChord: "M-r", label: "Rebase",        description: "rebase the worktree on its base branch" },
   { id: "test",         defaultChord: "M-t", label: "Test",          description: "test the current feature across its repos" },
-  { id: "deploy",       defaultChord: "M-d", label: "Deploy",        description: "deploy the current project / repo" },
   { id: "new-worktree", defaultChord: "M-w", label: "New worktree",  description: "create a new worktree (asks for feature name)" },
   { id: "list",         defaultChord: "M-l", label: "List worktrees", description: "popup: list all worktrees" },
   { id: "status",       defaultChord: "M-s", label: "Status",        description: "popup: project status" },

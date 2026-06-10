@@ -9,7 +9,7 @@ import { packageVersion } from "./version.js";
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
 import { serve } from "./commands/serve.js";
-import { installTmux } from "./commands/installTmux.js";
+import { doctor } from "./commands/doctor.js";
 import { autopilotTick } from "./autopilot.js";
 
 import { registerProjectCommands } from "./cli/project.js";
@@ -26,8 +26,10 @@ export async function run(argv: string[]): Promise<number> {
     config = await loadConfig();
   } catch (err) {
     if (err instanceof BanyanError) {
-      // allow `init` and `ls` even if config doesn't exist yet (ls just shows empty)
-      if (argv[0] === "init" || argv[0] === "ls") {
+      // allow `init`, `ls`, and `doctor` even if config doesn't exist yet
+      // (doctor in particular needs to run before any config exists, that's
+      // its whole point).
+      if (argv[0] === "init" || argv[0] === "ls" || argv[0] === "doctor") {
         config = { version: 1, projects: [] };
       } else {
         logger.error(err.message);
@@ -47,7 +49,7 @@ export async function run(argv: string[]): Promise<number> {
     "ls",
     "init",
     "serve",
-    "install-tmux",
+    "doctor",
     "_autopilot-tick",
     "mcp-serve",
     "help",
@@ -112,6 +114,17 @@ export async function run(argv: string[]): Promise<number> {
     });
 
   program
+    .command("doctor")
+    .description(
+      "check that the environment is ready for banyan: tmux, git, claude CLI, optional gh/glab, and your banyan config. " +
+        "exits 0 if everything required is present (warnings are non-blocking), 1 if anything is missing.",
+    )
+    .action(async () => {
+      const code = await doctor(config);
+      process.exit(code);
+    });
+
+  program
     .command("init <project>")
     .description(
       "register a new project in the banyan config (cwd as the first repo by default). " +
@@ -130,20 +143,12 @@ export async function run(argv: string[]): Promise<number> {
       },
     );
 
-  program
-    .command("install-tmux")
-    .description("render the banyan tmux config to ~/.config/banyan/banyan.tmux.conf")
-    .option("-f, --force", "overwrite an existing rendered config")
-    .action(async (opts: { force?: boolean }) => {
-      await installTmux({ force: opts.force });
-    });
-
   // Hidden internal command — invoked by claude as a Stop hook for features
   // launched in autopilot mode. Reads stdin (claude hook payload), checks
   // TODO + reports state, and either exits 0 (allow stop) or emits a block
   // directive to keep the agent looping.
   program
-    .command("_autopilot-tick <project> <feature>")
+    .command("_autopilot-tick <project> <feature>", { hidden: true })
     .description("[internal] Stop hook for autopilot mode")
     .action(async (proj: string, feat: string) => {
       const code = await autopilotTick(proj, feat);
@@ -151,8 +156,8 @@ export async function run(argv: string[]): Promise<number> {
     });
 
   program
-    .command("mcp-serve")
-    .description("run the banyan MCP server over stdio (used by claude --mcp-config)")
+    .command("mcp-serve", { hidden: true })
+    .description("[internal] MCP server over stdio (invoked by claude via --mcp-config; never run by hand)")
     .action(async () => {
       const { runMcpServer } = await import("./mcp/server.js");
       await runMcpServer();

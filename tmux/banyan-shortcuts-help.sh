@@ -13,7 +13,6 @@ cat <<'EOF'
    Alt + C       cleanup current worktree
    Alt + R       rebase current worktree on base
    Alt + T       test current feature (all repos)
-   Alt + D       deploy current repo / project
 
   WITH INPUT
 

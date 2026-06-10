@@ -4,36 +4,100 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] — first public release
+
+The v1 cut sharpens banyan from "every plumbing tool you might want" down
+to the workflow that actually pays off — multi-repo worktrees, two
+agent modes (instead of four), and a dashboard you can drive from your
+phone.
 
 ### Added
-- **Native workspace** — `bn <project> start` now spawns the orchestrator + terminal panes directly in TS, no per-project bash script required. Existing `layoutScript` configs still work as legacy fallback.
-- **Orchestrator agent** — project-wide Claude session with `--add-dir` on every repo's parent dir, banyan MCP wired in, and `--continue` across restarts. Spawned automatically by `start`, optionally in a dedicated window via `bn <project> orchestrator`.
-- **MCP server** — `bn mcp-serve` exposes 16 banyan operations as MCP tools (list/create/merge features, stack ops, etc.). Translated to equivalent CLI commands in `bn mcp-log`.
-- **Web dashboard** — `bn serve` opens a browser dashboard with a real-time pulse view: feature complexity, file × feature overlap matrix, suggested merge order. Auto-refresh every 2s.
-- **Pulse command** — `bn <project> pulse [--watch <s>]` text-mode equivalent of the dashboard pulse.
-- **Sync command** — `bn <project> sync [--push]` rebases every active feature on its base branch in one shot. Uses the cross-feature-aware headless resolver on conflicts.
-- **Resume command** — `bn <project> resume` restores everything after a reboot: workspace, agent panes (each Claude `--continue`), run processes, compose stacks.
-- **Ports command** — `bn <project> ports [feature]` shows allocated run ports + live compose ports.
-- **Hooks** — lifecycle scripts looked up at `<repo>/.banyan-hooks/`, `<repo>/.banyan/hooks/`, or `~/.banyan/hooks/`. Supports `worktree_created`, `before/after_worktree_remove`, `pre/post_merge`, `pre/post_test`, `stack_up/down`.
-- **Auto adb reverse** — when a repo's run command invokes `adb`, banyan auto-prepends `adb reverse tcp:<canonical> tcp:<allocated>` for sibling repos. App code points at `localhost:<canonical>`, banyan handles the dynamic-port tunneling.
-- **CWD inference** — `bn wt menu-clean` (no project) infers the project from the current directory if it's inside a configured repo, a worktree, or the unique parent dir.
-- **Cross-feature conflict resolver** — `bn merge` and `bn sync` spawn a headless Claude resolver with `--add-dir` on every parent dir + banyan MCP, so it can read sibling features' worktrees when resolving.
-- **State persistence** — port allocations saved to `~/.config/banyan/state/<project>.<feature>.json` so `bn ports` works across shells.
-- **Idempotent test runner** — `bn start <feature>` (formerly `test`) creates the test window if absent, restarts existing panes if running, adds new ones for new repos.
-- **Polymorphic stop** — `bn <project> stop` kills the session; `bn <project> stop <feature>` only stops the feature's run processes.
+
+- **`bn doctor`** — environment check. Walks Node / tmux / git / Claude
+  CLI / gh / glab / OpenRouter key / banyan config and prints the
+  exact command to fix each missing piece. Runs without a config so a
+  fresh install can `bn doctor` first.
+- **Two agent modes** — `live` (default, conversational, no ceremony,
+  can edit main directly) and `delegated` (pipeline-gated:
+  Setup → Plan → human review → Execute → Report → Merge, looped via
+  a Stop hook). Replaces the previous 4-mode model; legacy names
+  (`interactive` / `assisted` / `autonomous` / `autopilot`) still
+  accepted and normalized.
+- **Pipeline-first dashboard** — every feature shows its lifecycle
+  stage on a 5-step indicator. Plan-review and report-review dialogs
+  appear when delegated agents pause. Per-feature actions: open in
+  terminal, restart, cleanup.
+- **Live conversation viewer** — opens any feature's claude transcript
+  in a modal, streamed line-by-line via SSE, with a reply box that
+  paste-and-submits into the tmux pane. Works the same locally and
+  over `--remote`.
+- **Remote dashboard** (`bn serve --remote`) — exposes the dashboard
+  via a Cloudflare or ngrok tunnel with 32-hex Bearer token auth,
+  prints a QR code in the terminal. The QR encodes the token as a URL
+  hash fragment; the SPA bootstraps auth from it on first load,
+  persists in localStorage, and strips the secret from the URL bar.
+  SSE accepts the token via `?token=` since EventSource can't set
+  headers. `--rotate-token` regenerates and invalidates old QRs.
+- **MCP `banyan_search_transcripts`** — full-text search across
+  per-feature claude transcripts. Replaces the old `bn ask` command;
+  available to the orchestrator and to any external MCP client.
+- **Project + repo wizard** — new "+ project" dialog in the dashboard
+  walks naming, repo selection, and tech detection. Per-repo run
+  command + named presets with `activePreset` switching.
+- **`bn <project> restart-orchestrator`** — relaunch the orchestrator
+  pane without touching feature panes.
+- **Cleanup tears down compose stacks** — `bn cleanup` now stops the
+  compose stack, drops volumes, and clears state in one command.
+- **Discord Rich Presence** — optional integration, off by default.
+  Card layout adapts to single-project (features on top, project +
+  count below) vs multi-project (project names + per-project feature
+  counts) mode. Official Banyan Discord application id baked in — no
+  per-user setup needed beyond `enabled: true`.
+- **`llm.openrouterApiKey`** config field — OpenRouter key now lives
+  in the banyan config (with `OPENROUTER_API_KEY` env override). Set
+  via the dashboard Config tab or by editing YAML.
 
 ### Changed
-- **Worktree layout v2** — new worktrees go to `<parent>/worktree-<repo>/<feature>/` instead of `<repo>-<feature>` siblings. Legacy layout still detected for backward compat (in `naming.parseWorktreePath`, `existingWorktreePath`).
-- **CLI restructure** — `cli.ts` 569 → 156 lines; per-project commands extracted into `src/cli/{lifecycle,worktree,configMutate,orchestrator,env}.ts`.
-- **Merge restructure** — `merge.ts` 445 → 88 lines; logic split into `src/commands/merge/{local,preflight,pr,types}.ts`.
-- **MCP server restructure** — `mcp/server.ts` 491 → 100 lines; tool registry extracted to `mcp/tools.ts`, audit log to `mcp/log.ts`.
-- **Stricter TypeScript** — `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch` on top of `strict`.
-- **Fewer commands, sharper semantics** — `test` is now an alias of `start <feature>`; `test-restart` removed (just re-run `start <feature> <repo>`); `test-ls` renamed `ls-features`; `test-stop` is the same as `stop <feature>`.
+
+- **OpenRouter required for prompt-based slug naming** — `bn wt -p
+  "<prompt>"` without `OPENROUTER_API_KEY` (env or config) now exits
+  with a clear `OpenRouterKeyMissingError` pointing at the fix. The
+  previous `claude --print` fallback was removed: too slow on first
+  use and obscured failures.
+- **CLI surface shrunk** to what's actually useful: top-level is
+  `ls / init / doctor / serve`; per-project lifecycle stays
+  (`start / stop / close / status / resume / ports / restart-orchestrator`);
+  worktree ops stay (`wt / wt-rm / rebase / merge / cleanup`);
+  env subcommands stay (`up / down / recreate / logs / exec / ls`).
+- **Dashboard tabs** consolidated to four: Pipeline (default), Config,
+  Shortcuts, History.
+- **Stricter TypeScript** maintained: `noUnusedLocals`,
+  `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`.
 
 ### Removed
-- Per-project bash workspace scripts (e.g. `myproject-workspace.sh`) are no longer required. Native TS layout takes over by default.
-- The `goal` per-feature concept (briefly added then withdrawn — pull-on-demand via MCP turned out cleaner).
+
+- **`bn ask`** — replaced by the orchestrator pane + the
+  `banyan_search_transcripts` MCP tool. Ask the orchestrator directly.
+- **`bn task` and `bn deploy`** — `task` was redundant with
+  `bn wt -p`; `deploy` was speculative tooling that never paid off.
+  `deployCommand` config field also dropped.
+- **`bn approve`** and `--review-plan` flag on `wt` — plan review is
+  now an in-dashboard interaction in delegated mode.
+- **`bn todo`** — TODO state stays on disk per feature; surfaced in
+  the dashboard pipeline view, not via CLI.
+- **`bn pulse` and `bn sync`** — file × feature pulse moved into the
+  dashboard view; multi-feature rebase rolled into `bn rebase`.
+- **`bn ls-features`, `bn wt-ls`, `bn reports`** — feature listing
+  lives in the dashboard now; reports are read in the History tab.
+- **`bn attach`** — folded into `bn start` (which already re-attached
+  if a session existed).
+- **`bn sidebar`** — text-mode tree view replaced by the dashboard.
+- **ClickUp / Jira integration and the dashboard Inbox tab** —
+  task-ingestion turned out to be the wrong abstraction; the agent
+  reads from your real-world tools by being asked.
+- **Six config-mutation CLI commands** (`add-repo`, `set-base`,
+  `set-run`, `set-layout`, etc.) — config edits go through the
+  dashboard Config tab or direct YAML editing.
 
 ## [0.1.0] - initial
 

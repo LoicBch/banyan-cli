@@ -1,7 +1,17 @@
 /**
  * Build Discord Rich Presence activity from Banyan state.
+ *
+ * Discord's card is constrained: 2 lines of text (details / state) at ~128
+ * chars each, a large image, a small badge, and up to 2 buttons. We pack the
+ * most useful signal in:
+ *
+ *   single-project mode  →  details = feature list, state = project name
+ *   aggregate mode       →  details = project list with counts, state = totals
+ *
+ * Feature/project names are joined with " · " (middot) instead of commas —
+ * lighter visually and matches the dashboard's typography.
  */
-import type { BanyanActivity, DiscordRpcConfig } from "./config.js";
+import type { BanyanActivity, DiscordRpcConfig, ProjectActivity } from "./config.js";
 
 export interface DiscordActivity {
   details?: string;
@@ -14,105 +24,97 @@ export interface DiscordActivity {
   buttons?: Array<{ label: string; url: string }>;
 }
 
-/**
- * Build a Discord activity object from Banyan state.
- */
+const SEPARATOR = " · ";
+const DETAILS_MAX = 120;
+
 export function buildActivity(
   activity: BanyanActivity,
   config: DiscordRpcConfig,
 ): DiscordActivity | null {
-  if (!activity.features.length && !activity.project) {
-    // No active work
-    return null;
-  }
-
-  const details: string[] = [];
-  const state: string[] = [];
-
-  // Project name
-  if (config.showProject && activity.project) {
-    details.push(`Project: ${activity.project}`);
-  }
-
-  // Feature count + names. Discord's `state` field caps at ~128 chars, so
-  // we fit as many names as we can and surface the overflow as "+N more".
-  if (config.showFeatureCount && activity.features.length > 0) {
-    state.push(formatFeatureList(activity.features));
-  }
-
-  // Mode info (show most common mode if multiple features)
-  if (config.showMode && activity.features.length > 0) {
-    const modes = Object.values(activity.modes);
-    const modeCount = modes.reduce((acc, mode) => {
-      acc[mode] = (acc[mode] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    const mostCommonMode = Object.entries(modeCount).sort(([, a], [, b]) => b - a)[0]?.[0];
-    if (mostCommonMode) {
-      state.push(`• ${mostCommonMode} mode`);
-    }
-  }
+  if (activity.projects.length === 0) return null;
 
   const result: DiscordActivity = {
     largeImageKey: config.largeImageKey,
     largeImageText: config.largeImageText,
+    smallImageKey: config.smallImageKey,
+    smallImageText: config.smallImageText,
   };
 
-  if (details.length > 0) {
-    result.details = details.join(" • ");
+  if (activity.projects.length === 1) {
+    const p = activity.projects[0]!;
+    result.details = formatFeatureLine(p.features);
+    result.state = formatSingleProjectState(p);
+  } else {
+    result.details = formatProjectLine(activity.projects);
+    result.state = formatAggregateState(activity.projects);
   }
 
-  if (state.length > 0) {
-    result.state = state.join(" ");
-  }
-
-  // Start timestamp (if available)
   if (activity.startTime) {
-    try {
-      result.startTimestamp = Math.floor(new Date(activity.startTime).getTime() / 1000);
-    } catch {
-      // Invalid timestamp, ignore
-    }
+    const ts = new Date(activity.startTime).getTime();
+    if (!Number.isNaN(ts)) result.startTimestamp = Math.floor(ts / 1000);
   }
 
-  // Dashboard button — Discord only accepts https:// URLs (no localhost),
-  // so we only emit a button in remote/tunneled mode.
   if (activity.dashboardUrl && /^https:\/\//.test(activity.dashboardUrl)) {
-    result.buttons = [
-      {
-        label: "View Dashboard",
-        url: activity.dashboardUrl,
-      },
-    ];
+    result.buttons = [{ label: "Open Dashboard", url: activity.dashboardUrl }];
   }
 
   return result;
 }
 
-const STATE_MAX = 110; // leave headroom for the appended mode suffix
+/** "feat-a · feat-b · feat-c · +2" — first line, single-project mode. */
+function formatFeatureLine(features: string[]): string {
+  if (features.length === 0) return "Idle";
+  return joinWithOverflow(features);
+}
 
-function formatFeatureList(features: string[]): string {
-  const count = features.length;
-  const plural = count > 1 ? "features" : "feature";
-  const prefix = `${count} ${plural}: `;
+/** "🌿 my-project · 3 of 5 features" — second line, single-project mode. */
+function formatSingleProjectState(p: ProjectActivity): string {
+  const head = `🌿 ${p.name}`;
+  if (p.features.length === 0) return head;
+  const count =
+    p.totalWorktrees > p.features.length
+      ? `${p.features.length} of ${p.totalWorktrees} features`
+      : `${p.features.length} ${p.features.length === 1 ? "feature" : "features"}`;
+  return `${head}${SEPARATOR}${count}`;
+}
 
-  let included = 0;
+/** "proj-a (3) · proj-b (1) · +2" — first line, aggregate mode. */
+function formatProjectLine(projects: ProjectActivity[]): string {
+  const labels = projects.map((p) => `${p.name} (${p.features.length})`);
+  return joinWithOverflow(labels);
+}
+
+/** "🌐 3 projects · 8 features" — second line, aggregate mode. */
+function formatAggregateState(projects: ProjectActivity[]): string {
+  const totalFeatures = projects.reduce((sum, p) => sum + p.features.length, 0);
+  const projWord = projects.length === 1 ? "project" : "projects";
+  const featWord = totalFeatures === 1 ? "feature" : "features";
+  return `🌐 ${projects.length} ${projWord}${SEPARATOR}${totalFeatures} ${featWord}`;
+}
+
+/**
+ * Join with " · " and surface the overflow as "· +N". Always keeps at least
+ * one name visible — if the first one already exceeds the budget we hard-
+ * truncate with an ellipsis so the line still says something.
+ */
+function joinWithOverflow(items: string[]): string {
   let acc = "";
-  for (const name of features) {
-    const sep = included === 0 ? "" : ", ";
-    const tentative = acc + sep + name;
-    const remaining = count - included - 1;
-    const suffix = remaining > 0 ? ` +${remaining} more` : "";
-    if ((prefix + tentative + suffix).length > STATE_MAX) break;
+  let kept = 0;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    const sep = kept === 0 ? "" : SEPARATOR;
+    const tentative = acc + sep + item;
+    const remaining = items.length - i - 1;
+    const suffix = remaining > 0 ? `${SEPARATOR}+${remaining}` : "";
+    if ((tentative + suffix).length > DETAILS_MAX) break;
     acc = tentative;
-    included += 1;
+    kept = i + 1;
   }
 
-  if (included === 0) {
-    // Single name too long even on its own — fall back to plain count.
-    return `${count} ${plural}`;
+  if (kept === 0) {
+    return items[0]!.slice(0, DETAILS_MAX - 1) + "…";
   }
 
-  const omitted = count - included;
-  return omitted > 0 ? `${prefix}${acc} +${omitted} more` : `${prefix}${acc}`;
+  const omitted = items.length - kept;
+  return omitted > 0 ? `${acc}${SEPARATOR}+${omitted}` : acc;
 }

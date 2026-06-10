@@ -12,11 +12,12 @@
  *   Esc             close
  */
 import * as React from "react";
-import { Search, ArrowRight, Sun, Moon, Plus, FolderTree, LayoutDashboard, Inbox, History, MessageSquare, Settings, Keyboard } from "lucide-react";
+import { Search, ArrowRight, Sun, Moon, Plus, FolderTree, LayoutDashboard, History, Settings, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { openProjectWizard } from "@/components/ProjectWizard";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
+import { useDialogMark } from "@/lib/imperative-dialog";
 import type { SectionId } from "@/components/Sidebar";
 
 interface CommandPaletteProps {
@@ -41,6 +42,10 @@ export function CommandPalette({ section: _section, onSection, projects, onProje
   const [selected, setSelected] = React.useState(0);
   const { theme, toggle } = useTheme();
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Mark this as an open dialog so the global keyboard hook stays quiet
+  // while the palette is on-screen.
+  useDialogMark(open);
 
   // Global hotkey: ⌘K / Ctrl+K toggles.
   React.useEffect(() => {
@@ -68,9 +73,7 @@ export function CommandPalette({ section: _section, onSection, projects, onProje
   const commands: Cmd[] = React.useMemo(() => {
     const navTargets: Array<{ id: SectionId; label: string; icon: React.ReactNode }> = [
       { id: "pipeline", label: "Go to Pipeline", icon: <LayoutDashboard className="size-4" /> },
-      { id: "inbox", label: "Go to Inbox", icon: <Inbox className="size-4" /> },
       { id: "history", label: "Go to History", icon: <History className="size-4" /> },
-      { id: "ask", label: "Go to Ask", icon: <MessageSquare className="size-4" /> },
       { id: "config", label: "Go to Config", icon: <Settings className="size-4" /> },
       { id: "shortcuts", label: "Go to Shortcuts", icon: <Keyboard className="size-4" /> },
     ];

@@ -67,6 +67,26 @@ describe("validateConfig", () => {
     assert.throws(() => validateConfig({ version: 1 }, source), ConfigError);
   });
 
+  it("accepts an optional llm.openrouterApiKey", () => {
+    const cfg = validateConfig(
+      { ...minimal, llm: { openrouterApiKey: "or-test-123" } },
+      source,
+    );
+    assert.equal(cfg.llm?.openrouterApiKey, "or-test-123");
+  });
+
+  it("drops an empty llm.openrouterApiKey instead of failing", () => {
+    const cfg = validateConfig({ ...minimal, llm: { openrouterApiKey: "" } }, source);
+    assert.equal(cfg.llm, undefined);
+  });
+
+  it("rejects a non-string llm.openrouterApiKey", () => {
+    assert.throws(
+      () => validateConfig({ ...minimal, llm: { openrouterApiKey: 42 } }, source),
+      /openrouterApiKey must be a string/,
+    );
+  });
+
   it("rejects duplicate project names", () => {
     const dup = {
       version: 1,

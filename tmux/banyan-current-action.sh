@@ -3,7 +3,7 @@
 # context (project/feature) when possible, fall back to a tmux prompt.
 #
 # Usage: banyan-current-action.sh <action>
-#   action = merge | cleanup | rebase | test | deploy
+#   action = merge | cleanup | rebase | test
 #
 # Context detection (no CLI roundtrip):
 #   - feature: the `@banyan-pane` user option set on the current pane by
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-ACTION="${1:?action required (merge|cleanup|rebase|test|deploy)}"
+ACTION="${1:?action required (merge|cleanup|rebase|test)}"
 
 FEATURE="$(tmux display-message -p -F '#{@banyan-pane}' 2>/dev/null || true)"
 PROJECT="$(tmux display-message -p -F '#{session_name}' 2>/dev/null || true)"
@@ -51,14 +51,6 @@ case "$ACTION" in
         else
             prompt_for_feature
         fi
-        ;;
-    deploy)
-        # deploy is project-scoped (no feature). Just run it for the current
-        # project, or let bn resolve if no project context.
-        local_cmd="bn deploy"
-        [[ -n "$PROJECT" ]] && local_cmd="bn ${PROJECT} deploy"
-        tmux new-window -n "deploy-${PROJECT:-default}" \
-            "${local_cmd}; echo; read -n1 -p 'press any key to close'"
         ;;
     *)
         echo "unknown action: $ACTION" >&2

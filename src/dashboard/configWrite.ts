@@ -133,5 +133,96 @@ export async function readConfigForDashboard(configPath?: string) {
   return validateConfig(parsed, resolved);
 }
 
+/** Meta fields editable from the Config tab beyond the `run` block. */
+export interface RepoMetaUpdate {
+  /** Tech profile id (`node` / `spring-boot` / `android` / `django` / `custom`).
+   *  Empty string or undefined removes the field. */
+  tech?: string;
+  /** Default base branch. Empty string or undefined removes the field. */
+  baseBranch?: string;
+}
+
+/**
+ * Update one repo's meta fields (tech, baseBranch). Same comment-preserving
+ * approach as `updateRepoRun`. Only fields present in `update` are touched.
+ */
+export async function updateRepoMeta(
+  projectName: string,
+  repoName: string,
+  update: RepoMetaUpdate,
+  configPath?: string,
+): Promise<void> {
+  const { raw, path: resolved } = await readConfigRaw(configPath);
+  const doc = YAML.parseDocument(raw);
+  const projects = doc.get("projects") as YAML.YAMLSeq | undefined;
+  if (!projects || !YAML.isSeq(projects)) {
+    throw new ConfigError(`${resolved}: "projects" must be a sequence`);
+  }
+
+  let projectIdx = -1;
+  let repoIdx = -1;
+  for (let i = 0; i < projects.items.length; i++) {
+    const p = projects.items[i] as YAML.YAMLMap | undefined;
+    if (!p || !YAML.isMap(p)) continue;
+    if (p.get("name") !== projectName) continue;
+    projectIdx = i;
+    const repos = p.get("repos") as YAML.YAMLSeq | undefined;
+    if (!repos || !YAML.isSeq(repos)) {
+      throw new ConfigError(`${resolved}: projects[${i}].repos must be a sequence`);
+    }
+    for (let j = 0; j < repos.items.length; j++) {
+      const r = repos.items[j] as YAML.YAMLMap | undefined;
+      if (!r || !YAML.isMap(r)) continue;
+      if (r.get("name") === repoName) {
+        repoIdx = j;
+        break;
+      }
+    }
+    break;
+  }
+  if (projectIdx < 0) throw new ConfigError(`unknown project '${projectName}'`);
+  if (repoIdx < 0) throw new ConfigError(`unknown repo '${repoName}' in project '${projectName}'`);
+
+  const repoPath = ["projects", projectIdx, "repos", repoIdx] as const;
+
+  if (update.tech !== undefined) {
+    setOrRemove(doc, [...repoPath, "tech"], update.tech);
+  }
+  if (update.baseBranch !== undefined) {
+    setOrRemove(doc, [...repoPath, "baseBranch"], update.baseBranch);
+  }
+
+  validateConfig(doc.toJS(), resolved);
+  await writeFile(resolved, doc.toString(), "utf8");
+}
+
+/**
+ * Update the global `llm.openrouterApiKey` field. Pass an empty string
+ * to delete it. Preserves comments + project-level YAML untouched.
+ */
+export async function updateLlmConfig(
+  patch: { openrouterApiKey?: string },
+  configPath?: string,
+): Promise<void> {
+  const { raw, path: resolved } = await readConfigRaw(configPath);
+  const doc = YAML.parseDocument(raw);
+
+  if (patch.openrouterApiKey !== undefined) {
+    if (patch.openrouterApiKey === "") {
+      doc.deleteIn(["llm", "openrouterApiKey"]);
+      // If `llm` is now empty, drop the empty map.
+      const llmNode = doc.get("llm");
+      if (llmNode && YAML.isMap(llmNode) && llmNode.items.length === 0) {
+        doc.delete("llm");
+      }
+    } else {
+      doc.setIn(["llm", "openrouterApiKey"], patch.openrouterApiKey);
+    }
+  }
+
+  validateConfig(doc.toJS(), resolved);
+  await writeFile(resolved, doc.toString(), "utf8");
+}
+
 /** Type-safe re-export to keep the API surface tight. */
 export type { RunConfig };

@@ -8,6 +8,7 @@ import {
   listFsEntries,
   probePath,
   createProject,
+  addRepoToProject,
   listTechProfiles,
 } from "../src/dashboard/wizard.js";
 import { ConfigError } from "../src/errors.js";
@@ -157,7 +158,7 @@ describe("createProject", () => {
       {
         name: "demo",
         repos: [
-          { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev", port: 3000, portEnv: "PORT" } },
+          { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev", port: 3000, portEnv: "PORT" } },
         ],
       },
       configPath,
@@ -187,7 +188,7 @@ describe("createProject", () => {
     await createProject(
       {
         name: "demo",
-        repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }],
+        repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }],
       },
       configPath,
     );
@@ -201,12 +202,12 @@ describe("createProject", () => {
 
   it("rejects a duplicate project name", async () => {
     await createProject(
-      { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+      { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
       configPath,
     );
     await assert.rejects(
       () => createProject(
-        { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+        { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
         configPath,
       ),
       /already exists/,
@@ -216,7 +217,7 @@ describe("createProject", () => {
   it("rejects an invalid project name", async () => {
     await assert.rejects(
       () => createProject(
-        { name: "bad name with spaces", repos: [{ name: "f", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+        { name: "bad name with spaces", repos: [{ name: "f", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
         configPath,
       ),
       /must match/,
@@ -236,8 +237,8 @@ describe("createProject", () => {
         {
           name: "demo",
           repos: [
-            { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } },
-            { name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } },
+            { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
+            { name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
           ],
         },
         configPath,
@@ -262,20 +263,166 @@ describe("createProject", () => {
   it("rejects an unknown tech id", async () => {
     await assert.rejects(
       () => createProject(
-        { name: "demo", repos: [{ name: "f", path: repoPath, tech: "rust", run: { command: "cargo run" } }] },
+        { name: "demo", repos: [{ name: "f", path: repoPath, baseBranch: "main", tech: "rust", run: { command: "cargo run" } }] },
         configPath,
       ),
       /unknown tech/,
     );
   });
 
+  it("rejects a missing baseBranch", async () => {
+    await assert.rejects(
+      () => createProject(
+        { name: "demo", repos: [{ name: "f", path: repoPath, tech: "node", run: { command: "x" } }] },
+        configPath,
+      ),
+      /missing a baseBranch/,
+    );
+  });
+
   it("contracts the repo path with ~ on write", async () => {
     await createProject(
-      { name: "demo", repos: [{ name: "front", path: repoPath, tech: "node", run: { command: "npm run dev" } }] },
+      { name: "demo", repos: [{ name: "front", path: repoPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } }] },
       configPath,
     );
     const written = readFileSync(configPath, "utf8");
     assert.match(written, /path: ~\/\.banyan-test-wizard\/front/);
+  });
+});
+
+describe("addRepoToProject", () => {
+  let tmpDir: string;
+  let configPath: string;
+  let frontPath: string;
+  let backPath: string;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "banyan-addrepo-"));
+    configPath = path.join(tmpDir, "config.yaml");
+    frontPath = path.join(homedir(), ".banyan-test-wizard", "front");
+    backPath = path.join(homedir(), ".banyan-test-wizard", "back");
+    mkdirSync(frontPath, { recursive: true });
+    mkdirSync(backPath, { recursive: true });
+    // Seed: one project with one repo.
+    await createProject(
+      {
+        name: "demo",
+        repos: [
+          { name: "front", path: frontPath, baseBranch: "main", tech: "node", run: { command: "npm run dev" } },
+        ],
+      },
+      configPath,
+    );
+  });
+
+  after(() => {
+    rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+  });
+
+  it("appends a repo to an existing project", async () => {
+    await addRepoToProject(
+      "demo",
+      { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "node server.js", port: 8080 } },
+      configPath,
+    );
+    const written = readFileSync(configPath, "utf8");
+    assert.match(written, /name: front/);
+    assert.match(written, /name: back/);
+    assert.match(written, /port: 8080/);
+  });
+
+  it("preserves existing comments and project order", async () => {
+    // Inject comments by overwriting the seed with annotated YAML.
+    const annotated = [
+      "# Top-of-file note.",
+      "version: 1",
+      "projects:",
+      "  - name: demo",
+      "    repos:",
+      "      # the frontend repo",
+      "      - name: front",
+      "        path: ~/.banyan-test-wizard/front",
+      "        tech: node",
+      "        run:",
+      "          command: npm run dev",
+      "",
+    ].join("\n");
+    writeFileSync(configPath, annotated, "utf8");
+
+    await addRepoToProject(
+      "demo",
+      { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "node server.js" } },
+      configPath,
+    );
+
+    const written = readFileSync(configPath, "utf8");
+    assert.match(written, /# Top-of-file note\./, "top comment preserved");
+    assert.match(written, /# the frontend repo/, "inner comment preserved");
+    // Front comes before back (appended at end).
+    const frontIdx = written.indexOf("name: front");
+    const backIdx = written.indexOf("name: back");
+    assert.ok(frontIdx > 0 && backIdx > frontIdx, "back appended after front");
+  });
+
+  it("rejects when the project does not exist", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "missing-project",
+        { name: "back", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /not found/,
+    );
+  });
+
+  it("rejects a duplicate repo name within the project", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "front", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /already exists/,
+    );
+  });
+
+  it("rejects an invalid repo name", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "bad name", path: backPath, baseBranch: "main", tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /must match/,
+    );
+  });
+
+  it("rejects a missing baseBranch", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        { name: "back", path: backPath, tech: "node", run: { command: "x" } },
+        configPath,
+      ),
+      /missing a baseBranch/,
+    );
+  });
+
+  it("rejects a non-existent path", async () => {
+    await assert.rejects(
+      () => addRepoToProject(
+        "demo",
+        {
+          name: "back",
+          path: path.join(homedir(), ".banyan-test-wizard", "missing"),
+          baseBranch: "main",
+          tech: "node",
+          run: { command: "x" },
+        },
+        configPath,
+      ),
+      /does not exist/,
+    );
   });
 });
 

@@ -383,7 +383,7 @@ export async function test(
       }
     }
   }
-  logger.info(`attach with: bn ${projectName} attach`);
+  logger.info(`attach with: bn ${projectName} start`);
 }
 
 /**

@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
+
+# Discord RPC asset exports (PNG is generated from SVG masters via rsvg-convert)
+assets/discord/*.png

@@ -11,6 +11,7 @@ import {
   envUp,
   envDown,
 } from "../commands/env.js";
+import { resolveFeatureFromCwd } from "../location.js";
 
 export function register(
   projectCmd: Command,
@@ -29,10 +30,11 @@ export function register(
     });
 
   envCmd
-    .command("logs <branch> [service]")
-    .description("tail logs of a compose stack (optionally filtered to a single service)")
-    .action(async (feature: string, service: string | undefined) => {
-      await envLogs(config, project.name, feature, service);
+    .command("logs [branch] [service]")
+    .description("tail logs of a compose stack (optionally filtered to a single service). branch is inferred from cwd when omitted in a worktree.")
+    .action(async (feature: string | undefined, service: string | undefined) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "env logs");
+      await envLogs(config, project.name, feat, service);
     });
 
   envCmd
@@ -43,23 +45,26 @@ export function register(
     });
 
   envCmd
-    .command("recreate <branch>")
-    .description("down -v + up (reset volumes for a fresh DB)")
-    .action(async (feature: string) => {
-      await envRecreate(config, project.name, feature);
+    .command("recreate [branch]")
+    .description("down -v + up (reset volumes for a fresh DB). branch is inferred from cwd when omitted in a worktree.")
+    .action(async (feature: string | undefined) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "env recreate");
+      await envRecreate(config, project.name, feat);
     });
 
   envCmd
-    .command("up <branch>")
-    .description("start compose stacks for a feature without touching git worktrees")
-    .action(async (feature: string) => {
-      await envUp(config, project.name, feature);
+    .command("up [branch]")
+    .description("start compose stacks for a feature without touching git worktrees. branch is inferred from cwd when omitted in a worktree.")
+    .action(async (feature: string | undefined) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "env up");
+      await envUp(config, project.name, feat);
     });
 
   envCmd
-    .command("down <branch>")
-    .description("stop compose stacks for a feature (volumes kept)")
-    .action(async (feature: string) => {
-      await envDown(config, project.name, feature);
+    .command("down [branch]")
+    .description("stop compose stacks for a feature (volumes kept). branch is inferred from cwd when omitted in a worktree.")
+    .action(async (feature: string | undefined) => {
+      const feat = resolveFeatureFromCwd(config, project.name, feature, "env down");
+      await envDown(config, project.name, feat);
     });
 }
