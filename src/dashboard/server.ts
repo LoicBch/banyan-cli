@@ -1,15 +1,13 @@
 /**
  * Dashboard HTTP server — bootstrap, lifecycle, route mounting.
  *
- * This file used to hold every endpoint inline (~930 LOC). After the
- * Phase 2 refactor it just wires the long-lived pieces together:
+ * Wires together:
  *   1. Express app + JSON middleware + optional auth gate
- *   2. Integrations scheduler (poll loop for ClickUp / Linear / Jira)
- *   3. Discord RPC service (optional, falls back to null on init error)
- *   4. Route registration — each `routes/*.ts` module mounts its own
+ *   2. Discord RPC service (optional, falls back to null on init error)
+ *   3. Route registration — each `routes/*.ts` module mounts its own
  *      endpoints, receiving exactly the deps it needs
- *   5. Static SPA mounts (legacy vanilla under /legacy, React build at /)
- *   6. Listen on first-free port (default 4242), wire close() teardown
+ *   4. Static SPA mounts (legacy vanilla under /legacy, React build at /)
+ *   5. Listen on first-free port (default 4242), wire close() teardown
  *
  * Adding a new endpoint = pick the right `routes/<category>.ts` file
  * (or create a new one + a `register()` call here). Never add an
@@ -21,10 +19,6 @@ import { fileURLToPath } from "node:url";
 import net from "node:net";
 import type { Config } from "../config.js";
 import { authMiddleware, type AuthConfig } from "./auth.js";
-import {
-  loadIntegrationsConfig,
-} from "../integrations/config.js";
-import { IntegrationsScheduler } from "../integrations/scheduler.js";
 
 import * as stateRoutes from "./routes/state.js";
 import * as actionsRoutes from "./routes/actions.js";
@@ -62,19 +56,6 @@ export async function startServer(
   }
 
   // ── Long-lived services ──────────────────────────────────────────────
-
-  // Integrations scheduler — null-safe: an integrations.yaml error logs to
-  // stderr and leaves the scheduler running with zero sources rather than
-  // crashing the dashboard.
-  const integrationsCfg = (() => {
-    try { return loadIntegrationsConfig(); }
-    catch (err) {
-      console.error("[integrations] config error:", (err as Error).message);
-      return { sources: [], rules: [] };
-    }
-  })();
-  const scheduler = new IntegrationsScheduler(integrationsCfg);
-  scheduler.start();
 
   // Discord RPC — optional. We hoist `buildDiscordActivity` here (not inside
   // the route module) because the boot-time `start()` call and the toggle
@@ -119,8 +100,6 @@ export async function startServer(
   mrRoutes.register(app, { config });
   worktreeRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
   integrationsRoutes.register(app, {
-    config,
-    scheduler,
     discordRpc,
     buildDiscordActivity,
   });
@@ -152,7 +131,6 @@ export async function startServer(
     url,
     close: () =>
       new Promise<void>(async (resolve) => {
-        scheduler.stop();
         if (discordRpc) {
           await discordRpc.stop();
         }
