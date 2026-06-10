@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Outer ring for separation against the large image -->
+  <circle cx="256" cy="256" r="240" fill="#0f172a"/>
+  <!-- Green dot -->
+  <circle cx="256" cy="256" r="176" fill="#10b981"/>
+  <!-- Inner pulse highlight -->
+  <circle cx="256" cy="256" r="72" fill="#ffffff" fill-opacity="0.35"/>
+</svg>

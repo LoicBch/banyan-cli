@@ -1,13 +1,29 @@
 # Discord Rich Presence for Banyan
 
-Display your Banyan activity in your Discord profile! This optional integration shows what you're working on, including:
+Display your Banyan activity in your Discord profile. The card is fixed by
+design — Banyan picks the most useful packing of the limited Discord
+surface based on whether you're working on one project or several.
 
-- Current project name
-- Number of active features
-- Agent mode (autonomous, assisted, etc.)
-- Link to your Banyan dashboard
+**Single project** — features take the top line:
 
-![Discord Rich Presence Example](https://via.placeholder.com/400x100?text=Discord+Presence+Example)
+```
+┌──────────────┐  login · profile · settings · +2
+│ [banyan-logo]│  🌿 my-project · 5 of 8 features
+│  ⏺ working   │  elapsed 12:34
+└──────────────┘  [ Open Dashboard ]
+```
+
+**Multiple projects** — projects with their active-feature count:
+
+```
+┌──────────────┐  proj-a (3) · proj-b (1) · proj-c (4)
+│ [banyan-logo]│  🌐 3 projects · 8 features
+│  ⏺ working   │  elapsed 12:34
+└──────────────┘  [ Open Dashboard ]
+```
+
+The `Open Dashboard` button only appears when Banyan is running with
+`bn serve --remote` (Discord refuses `http://` and `localhost` URLs).
 
 ## Features
 
@@ -51,29 +67,37 @@ enabled: true
 # Update interval in seconds (default: 15)
 updateIntervalSec: 15
 
-# Display options
-showProject: true       # Show project name
-showFeatureCount: true  # Show number of active features
-showMode: true          # Show agent mode (autonomous, assisted, etc.)
-
-# Advanced options (usually don't need to change)
-# applicationId: "1234567890123456789"  # Custom Discord Application ID
-# largeImageKey: "banyan"
-# largeImageText: "Banyan"
+# Advanced — assets must be uploaded to the Discord Developer Portal under
+# this application id. Defaults reference Banyan's official assets.
+# largeImageKey: "banyan-logo"
+# largeImageText: "Banyan — multi-agent worktree orchestrator"
+# smallImageKey: "status-working"
+# smallImageText: "Working"
+# applicationId: "1508879085680595004"
 ```
 
-## What's Displayed
+The layout itself is no longer configurable — Banyan picks the shape based
+on how many projects are running (see header).
 
-### When you have active features:
+## Discord Portal Assets
 
-**Details:** `Project: my-project`
-**State:** `3 features • autonomous mode`
-**Elapsed:** Time since dashboard started
-**Button:** "View Dashboard" → Opens your local dashboard
+The SVG masters for the four images uploaded to the Discord Developer
+Portal live in [`assets/discord/`](../../../assets/discord/). See the
+README there for the conversion command (`rsvg-convert`).
 
-### When idle:
+| Key                | Used for                         | Master |
+|--------------------|----------------------------------|--------|
+| `banyan-logo`      | Large square logo (1024×1024)    | `assets/discord/banyan-logo.svg` |
+| `status-working`   | Small badge when sessions live   | `assets/discord/status-working.svg` |
+| `status-idle`      | (future) small badge when paused | `assets/discord/status-idle.svg` |
+| `status-blocked`   | (future) small badge on failure  | `assets/discord/status-blocked.svg` |
 
-Nothing is displayed - your Discord status remains unchanged.
+The default `applicationId` (`1508879085680595004`) points at Banyan's
+official Discord application — no setup needed, just flip `enabled: true`.
+Override only if you fork and want to host your own.
+
+When idle (no live agent panes) the card is cleared — your Discord status
+returns to whatever it was before.
 
 ## Privacy
 

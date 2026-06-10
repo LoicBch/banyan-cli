@@ -1,8 +1,12 @@
 /**
  * Read Banyan state and convert it to Discord activity.
+ *
+ * In follow mode we restrict to the pinned project (or fall back to all
+ * projects with running sessions). In aggregate mode we include every
+ * project that has at least one live agent pane.
  */
 import type { Config } from "../../config.js";
-import type { BanyanActivity } from "./config.js";
+import type { BanyanActivity, ProjectActivity } from "./config.js";
 import { buildState } from "../../dashboard/state.js";
 import * as tmux from "../../tmux.js";
 import { getDiscordFocus } from "./focus.js";
@@ -15,30 +19,21 @@ const RESERVED_TAGS = new Set(["orchestrator", "terminal", "ops"]);
  */
 const SERVICE_START = new Date().toISOString();
 
-const AGGREGATE_LABEL = "All projects";
-
 export async function readBanyanActivity(
   config: Config,
   dashboardUrl?: string,
 ): Promise<BanyanActivity> {
-  const features = new Set<string>();
-  const modes: Record<string, string> = {};
-  let activeProject: string | undefined;
+  const projects: ProjectActivity[] = [];
 
   try {
     const state = await buildState(config);
     const focus = getDiscordFocus();
 
-    // In aggregate mode we sum every running project. In follow mode we
-    // restrict to the pinned project (if any) and fall back to "first
-    // project with active features" otherwise.
     const candidates = focus.mode === "aggregate"
       ? state.projects
       : focus.project
         ? state.projects.filter((p) => p.name === focus.project)
         : state.projects;
-
-    const projectsWithLive: string[] = [];
 
     for (const project of candidates) {
       if (!project.sessionRunning) continue;
@@ -54,46 +49,30 @@ export async function readBanyanActivity(
         }
       }
 
-      let projectHasFeature = false;
+      const features: string[] = [];
+      const seen = new Set<string>();
       for (const tag of liveTags) {
         if (RESERVED_TAGS.has(tag)) continue;
         if (!knownFeatures.has(tag)) continue;
-        // Prefix with project name in aggregate mode so identical feature
-        // names across projects don't collide in the Set.
-        const key = focus.mode === "aggregate" ? `${project.name}/${tag}` : tag;
-        features.add(key);
-        projectHasFeature = true;
+        if (seen.has(tag)) continue;
+        seen.add(tag);
+        features.push(tag);
       }
 
-      if (projectHasFeature) projectsWithLive.push(project.name);
-    }
+      if (features.length === 0) continue;
 
-    if (focus.mode === "aggregate") {
-      // Label depends on how many projects are actually contributing.
-      if (projectsWithLive.length === 0) {
-        activeProject = undefined;
-      } else if (projectsWithLive.length === 1) {
-        activeProject = projectsWithLive[0];
-      } else {
-        activeProject = `${AGGREGATE_LABEL} (${projectsWithLive.length})`;
-      }
-    } else {
-      activeProject = projectsWithLive[0];
-      // If a project is pinned but currently idle, still show its name —
-      // beats falling back to a random project the user isn't looking at.
-      if (!activeProject && focus.project) {
-        const pinned = state.projects.find((p) => p.name === focus.project);
-        if (pinned?.sessionRunning) activeProject = pinned.name;
-      }
+      projects.push({
+        name: project.name,
+        features,
+        totalWorktrees: knownFeatures.size,
+      });
     }
   } catch (err) {
     console.error("[discord-rpc] Failed to read Banyan state:", (err as Error).message);
   }
 
   return {
-    project: activeProject,
-    features: Array.from(features),
-    modes,
+    projects,
     startTime: SERVICE_START,
     dashboardUrl,
   };

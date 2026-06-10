@@ -12,38 +12,43 @@ export interface DiscordRpcConfig {
   applicationId?: string;
   /** Update interval in seconds (default: 15). */
   updateIntervalSec?: number;
-  /** Show project name in activity (default: true). */
-  showProject?: boolean;
-  /** Show feature count (default: true). */
-  showFeatureCount?: boolean;
-  /** Show active mode (default: true). */
-  showMode?: boolean;
-  /** Large image key (default: "banyan"). */
+  /** Large image key — must match an asset uploaded to the Discord
+   *  Developer Portal for this application. (default: "banyan-logo"). */
   largeImageKey?: string;
-  /** Large image text (default: "Banyan"). */
+  /** Tooltip shown when hovering the large image. */
   largeImageText?: string;
+  /** Small image badge overlaid on the large image. Used as an
+   *  at-a-glance activity indicator (default: "status-working"). */
+  smallImageKey?: string;
+  /** Tooltip for the small badge. */
+  smallImageText?: string;
+}
+
+/** One active project's snapshot for the Discord card. */
+export interface ProjectActivity {
+  /** Project name as configured in banyan. */
+  name: string;
+  /** Feature names that have a live agent pane right now. */
+  features: string[];
+  /** Total worktrees that exist for the project (active or not). */
+  totalWorktrees: number;
 }
 
 export interface BanyanActivity {
-  /** Current project name. */
-  project?: string;
-  /** Active features. */
-  features: string[];
-  /** Agent modes per feature. */
-  modes: Record<string, string>;
-  /** Session start time (ISO timestamp). */
+  /** All projects with at least one running session. Empty = idle. */
+  projects: ProjectActivity[];
+  /** Service start time (used for the elapsed timer). */
   startTime?: string;
-  /** Dashboard URL. */
+  /** Public dashboard URL (https only — Discord refuses http/localhost). */
   dashboardUrl?: string;
 }
 
 export const DEFAULT_CONFIG: Required<DiscordRpcConfig> = {
   enabled: false,
-  applicationId: "1234567890123456789", // Will be replaced with actual Banyan Discord App ID
+  applicationId: "1508879085680595004", // Banyan's official Discord application
   updateIntervalSec: 15,
-  showProject: true,
-  showFeatureCount: true,
-  showMode: true,
-  largeImageKey: "banyan",
-  largeImageText: "Banyan",
+  largeImageKey: "banyan-logo",
+  largeImageText: "Banyan — multi-agent worktree orchestrator",
+  smallImageKey: "status-working",
+  smallImageText: "Working",
 };
