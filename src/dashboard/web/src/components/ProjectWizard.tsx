@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog-shell";
 import { cn } from "@/lib/utils";
 import { TechIcon } from "@/components/TechIcon";
+import { apiFetch } from "@/lib/auth";
 
 export interface TechProfile {
   id: string;
@@ -117,7 +118,7 @@ function WizardBody({ close }: { close: () => void }): React.JSX.Element {
 
   // Tech profiles fetched once per wizard open — small, doesn't change.
   React.useEffect(() => {
-    fetch("/api/tech-profiles")
+  apiFetch("/api/tech-profiles")
       .then((r) => r.json())
       .then((d) => setProfiles(d.profiles ?? []))
       .catch(() => toast.error("Could not load tech profiles"));
@@ -185,7 +186,7 @@ function WizardBody({ close }: { close: () => void }): React.JSX.Element {
       })),
     };
     try {
-      const r = await fetch("/api/projects", {
+      const r = await apiFetch("/api/projects", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -387,7 +388,7 @@ export function RepoEditor({
     if (!p) return;
     setProbing(true);
     try {
-      const r = await fetch("/api/fs/probe", {
+      const r = await apiFetch("/api/fs/probe", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ path: p }),
@@ -728,7 +729,7 @@ function FsBrowserBody({
     try {
       const url =
         "/api/fs/list" + (target ? "?path=" + encodeURIComponent(target) : "");
-      const r = await fetch(url);
+      const r = await apiFetch(url);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `${r.status}`);
       setPath(data.path);

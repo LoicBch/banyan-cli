@@ -29,6 +29,7 @@ import * as historyRoutes from "./routes/history.js";
 import * as mrRoutes from "./routes/mr.js";
 import * as integrationsRoutes from "./routes/integrations.js";
 import * as worktreeRoutes from "./routes/worktree.js";
+import * as conversationRoutes from "./routes/conversation.js";
 
 export interface ServerOptions {
   port?: number;         // default: first free port starting from 4242
@@ -97,6 +98,7 @@ export async function startServer(
   historyRoutes.register(app, { config });
   mrRoutes.register(app, { config });
   worktreeRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
+  conversationRoutes.register(app, { config });
   integrationsRoutes.register(app, {
     discordRpc,
     buildDiscordActivity,

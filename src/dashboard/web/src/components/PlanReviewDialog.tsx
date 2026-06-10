@@ -25,6 +25,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog-shell";
 import * as actions from "@/lib/actions";
+import { apiFetch } from "@/lib/auth";
 
 interface TodoItem {
   id: string;
@@ -63,7 +64,7 @@ function PlanReviewBody({
   const [note, setNote] = React.useState("");
 
   React.useEffect(() => {
-    fetch(`/api/todos/${encodeURIComponent(project)}/${encodeURIComponent(feature)}`)
+  apiFetch(`/api/todos/${encodeURIComponent(project)}/${encodeURIComponent(feature)}`)
       .then((r) => r.json())
       .then((d) => setTodo(d.todo ?? null))
       .catch(() => setTodo(null))

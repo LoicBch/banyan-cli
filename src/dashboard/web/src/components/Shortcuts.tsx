@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiFetch } from "@/lib/auth";
 
 interface Action {
   id: string;
@@ -38,7 +39,7 @@ export function Shortcuts(): React.JSX.Element {
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
-    fetch("/api/shortcuts")
+  apiFetch("/api/shortcuts")
       .then((r) => r.json())
       .then((d: ShortcutsState) => {
         setState(d);
@@ -72,7 +73,7 @@ export function Shortcuts(): React.JSX.Element {
 
   async function save() {
     setBusy(true);
-    const r = await fetch("/api/shortcuts", {
+    const r = await apiFetch("/api/shortcuts", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ bindings }),

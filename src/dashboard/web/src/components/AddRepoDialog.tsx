@@ -30,6 +30,7 @@ import {
   type RepoData,
   type TechProfile,
 } from "./ProjectWizard";
+import { apiFetch } from "@/lib/auth";
 
 export function openAddRepoDialog(projectName: string, onAdded?: () => void): void {
   openDialog((close) => (
@@ -57,12 +58,12 @@ function AddRepoBody({
 
   // Tech profiles + existing repo names — fetched in parallel on open.
   React.useEffect(() => {
-    fetch("/api/tech-profiles")
+  apiFetch("/api/tech-profiles")
       .then((r) => r.json())
       .then((d) => setProfiles(d.profiles ?? []))
       .catch(() => toast.error("Could not load tech profiles"));
 
-    fetch("/api/config/repos")
+  apiFetch("/api/config/repos")
       .then((r) => r.json())
       .then((d) => {
         const proj = (d.projects ?? []).find(
@@ -96,7 +97,7 @@ function AddRepoBody({
     };
 
     try {
-      const r = await fetch(
+      const r = await apiFetch(
         `/api/projects/${encodeURIComponent(projectName)}/repos`,
         {
           method: "POST",

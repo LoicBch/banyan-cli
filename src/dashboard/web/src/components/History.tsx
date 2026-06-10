@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Clock } from "lucide-react";
 import { ExternalLink, GitMerge, RotateCcw, Trash2, FileText, History as HistoryIcon } from "lucide-react";
+import { apiFetch } from "@/lib/auth";
 
 interface HistoryEvent {
   ts: string;
@@ -58,8 +59,8 @@ export function History({ projectName }: HistoryProps): React.JSX.Element {
     if (!projectName) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/history/${encodeURIComponent(projectName)}?limit=200`).then((r) => r.json()).catch(() => ({ events: [] })),
-      fetch(`/api/reports/${encodeURIComponent(projectName)}`).then((r) => r.json()).catch(() => ({ reports: [] })),
+  apiFetch(`/api/history/${encodeURIComponent(projectName)}?limit=200`).then((r) => r.json()).catch(() => ({ events: [] })),
+  apiFetch(`/api/reports/${encodeURIComponent(projectName)}`).then((r) => r.json()).catch(() => ({ reports: [] })),
     ])
       .then(([h, r]) => {
         setEvents(h.events ?? []);

@@ -95,14 +95,16 @@ export interface DashboardState {
   error?: string;
 }
 
+import { apiFetch } from "./auth";
+
 export async function fetchState(): Promise<DashboardState> {
-  const r = await fetch("/api/state");
+  const r = await apiFetch("/api/state");
   if (!r.ok) throw new Error(`/api/state ${r.status}`);
   return (await r.json()) as DashboardState;
 }
 
 export async function fetchPipeline(project: string): Promise<{ features: FeatureState[] }> {
-  const r = await fetch(`/api/pipeline/${encodeURIComponent(project)}`);
+  const r = await apiFetch(`/api/pipeline/${encodeURIComponent(project)}`);
   if (!r.ok) throw new Error(`/api/pipeline ${r.status}`);
   return (await r.json()) as { features: FeatureState[] };
 }
