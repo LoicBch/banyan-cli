@@ -26,7 +26,7 @@ import {
 import { fetchState, fetchPipeline, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
 import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
 import { openReportReviewDialog } from "@/components/ReportReviewDialog";
-import { openSendMessageDialog } from "@/components/SendMessageDialog";
+import { openConversationDialog } from "@/components/ConversationDialog";
 import { StageIndicator } from "@/components/StageIndicator";
 import { OrchestratorChat } from "@/components/OrchestratorChat";
 import { usePolling } from "@/lib/usePolling";
@@ -407,9 +407,7 @@ function FeatureList({
           onMerge={() => dispatchMerge(f)}
           onCleanup={() => dispatchCleanup(f)}
           onOpenInTerminal={() => dispatchOpenInTerminal()}
-          onSendMessage={() =>
-            openSendMessageDialog(project.name, f.feature, { localMode })
-          }
+          onSendMessage={() => openConversationDialog(project.name, f.feature)}
         />
       ))}
     </div>

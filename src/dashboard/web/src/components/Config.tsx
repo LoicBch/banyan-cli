@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { StackPicker, type TechProfile } from "@/components/ProjectWizard";
+import { apiFetch } from "@/lib/auth";
 
 interface RepoConfig {
   name: string;
@@ -92,7 +93,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
 
   const load = React.useCallback(async () => {
     try {
-      const r = await fetch("/api/config/repos");
+      const r = await apiFetch("/api/config/repos");
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `${r.status}`);
       setData(d);
@@ -107,7 +108,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
   // Tech profiles for the per-card StackPicker. Fetched once; the list
   // doesn't change at runtime.
   React.useEffect(() => {
-    fetch("/api/tech-profiles")
+  apiFetch("/api/tech-profiles")
       .then((r) => r.json())
       .then((d) => setProfiles(d.profiles ?? []))
       .catch(() => { /* non-fatal — picker just renders empty */ });
@@ -171,7 +172,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
     // Only post when the draft actually differs from disk.
     const techChanged = (draft.tech || "") !== (repo.tech || "");
     if (techChanged) {
-      const metaRes = await fetch("/api/config/repos/meta", {
+      const metaRes = await apiFetch("/api/config/repos/meta", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ project, repo: repo.name, tech: draft.tech || "" }),
@@ -194,7 +195,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
         ...(draft.activePreset ? { activePreset: draft.activePreset } : {}),
       },
     };
-    const r = await fetch("/api/config/repos/run", {
+    const r = await apiFetch("/api/config/repos/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -211,7 +212,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
 
   async function openConfigFile() {
     try {
-      const r = await fetch("/api/config/open", { method: "POST" });
+      const r = await apiFetch("/api/config/open", { method: "POST" });
       const json = await r.json().catch(() => ({}));
       if (!r.ok || !json.ok) {
         toast.error("Could not open config", { description: json.error ?? `${r.status}` });
@@ -516,7 +517,7 @@ function LlmConfigSection(): React.JSX.Element {
 
   const load = React.useCallback(async () => {
     try {
-      const r = await fetch("/api/config/llm");
+      const r = await apiFetch("/api/config/llm");
       const d = await r.json();
       setConfigured(!!d.openrouterApiKeyConfigured);
       setMasked(d.openrouterApiKey ?? "");
@@ -531,7 +532,7 @@ function LlmConfigSection(): React.JSX.Element {
   async function saveKey() {
     setSaving(true);
     try {
-      const r = await fetch("/api/config/llm", {
+      const r = await apiFetch("/api/config/llm", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ openrouterApiKey: newKey.trim() }),

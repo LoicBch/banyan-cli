@@ -4,6 +4,7 @@
  * Each action returns the server's JSON envelope as-is. UI components call
  * these from button click handlers, then surface success/failure via toast.
  */
+import { apiFetch } from "./auth";
 
 export interface ActionResult {
   ok: boolean;
@@ -13,7 +14,7 @@ export interface ActionResult {
 
 async function post(path: string, body: unknown): Promise<ActionResult> {
   try {
-    const r = await fetch(path, {
+    const r = await apiFetch(path, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
