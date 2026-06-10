@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1]
+
+### Added
+- **Discord Rich Presence toggle in the dashboard Config tab.** The backend `/api/discord/enabled` GET + POST endpoints were already wired; this adds the UI side: a switch + connection-status badge, persisted to `~/.config/banyan/discord-rpc.yaml` via the same comment-preserving writer.
+
+### Fixed
+- **`bn add-repo` references removed from CLI help/error text.** `bn init`'s commander description and the `bn <project> start` error on empty projects no longer point users at a command that doesn't exist; both now point at the dashboard Config tab or direct YAML editing.
+
+### Changed
+- **Sidebar brand row** trimmed: dropped the always-pulsing "live" dot that conveyed no real status.
+
 ## [1.0.0] — first public release
 
 The v1 cut sharpens banyan from "every plumbing tool you might want" down

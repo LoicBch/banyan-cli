@@ -84,10 +84,6 @@ export function Sidebar({ section, onSection, projects, activeProject, onProject
           ◐
         </div>
         <span className="text-sm font-semibold tracking-tight">banyan</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          live
-        </span>
       </div>
 
       {/* Sections */}

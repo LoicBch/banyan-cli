@@ -263,6 +263,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
        *  cluttering the repo-focused view). Lives at the top of the global
        *  Config view, before the per-project sections. */}
       {!scoped ? <LlmConfigSection /> : null}
+      {!scoped ? <DiscordIntegrationSection /> : null}
 
       {visibleProjects.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -643,6 +644,124 @@ function LlmConfigSection(): React.JSX.Element {
             </p>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Discord Rich Presence toggle.
+ *
+ *   GET  /api/discord/enabled  → { enabled, connected }
+ *   POST /api/discord/enabled  body { enabled: boolean } → starts/stops
+ *                              the rpc client and persists the flag in
+ *                              ~/.config/banyan/discord-rpc.yaml.
+ *
+ * Shown on the unscoped Config view alongside the LLM section. Off by
+ * default — no setup needed beyond flipping the switch (the official
+ * Banyan Discord application id ships baked in).
+ */
+function DiscordIntegrationSection(): React.JSX.Element {
+  const [enabled, setEnabled] = React.useState<boolean | null>(null);
+  const [connected, setConnected] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await apiFetch("/api/discord/enabled");
+      const d = await r.json();
+      setEnabled(!!d.enabled);
+      setConnected(!!d.connected);
+    } catch {
+      setEnabled(false);
+    }
+  }, []);
+
+  React.useEffect(() => { void load(); }, [load]);
+
+  async function toggle() {
+    if (enabled === null || saving) return;
+    const next = !enabled;
+    setSaving(true);
+    // Optimistic — the request takes a moment to start/stop the client.
+    setEnabled(next);
+    try {
+      const r = await apiFetch("/api/discord/enabled", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) {
+        toast.error("Discord toggle failed", { description: data.error ?? `${r.status}` });
+        setEnabled(!next); // revert
+        return;
+      }
+      setConnected(!!data.connected);
+      toast.success(next ? "Discord Rich Presence enabled" : "Discord Rich Presence disabled");
+    } catch (err) {
+      toast.error("Discord toggle failed", { description: String(err) });
+      setEnabled(!next);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isOn = enabled === true;
+  const isLoading = enabled === null;
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-medium">Discord Rich Presence</h2>
+              {isOn ? (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-mono uppercase tracking-wider",
+                    connected
+                      ? "border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
+                      : "border-amber-500/40 text-amber-500 bg-amber-500/10",
+                  )}
+                >
+                  {connected ? "connected" : "not connected"}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Show your active banyan project + feature count in your Discord profile. Requires Discord desktop running. Off by default.
+            </p>
+          </div>
+
+          {/* Custom inline toggle — no shadcn Switch in this project. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isOn}
+            disabled={isLoading || saving}
+            onClick={toggle}
+            className={cn(
+              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+              isOn ? "bg-emerald-500" : "bg-input",
+              (isLoading || saving) && "opacity-50 cursor-wait",
+            )}
+          >
+            <span
+              className={cn(
+                "pointer-events-none inline-block size-5 rounded-full bg-background shadow-lg ring-0 transition-transform",
+                isOn ? "translate-x-5" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+
+        {isOn && !connected ? (
+          <p className="text-[11px] text-amber-500/90">
+            Couldn't connect to Discord. Make sure the Discord desktop app is running, then toggle this off and on again.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
