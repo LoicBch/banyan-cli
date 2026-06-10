@@ -30,6 +30,7 @@ export {
 
 export {
   loadConfig,
+  loadConfigSync,
   saveConfig,
 } from "./config/loader.js";
 

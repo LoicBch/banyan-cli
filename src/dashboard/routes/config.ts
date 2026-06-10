@@ -16,6 +16,7 @@ import { defaultConfigPath, loadConfig, type Config } from "../../config.js";
 import {
   updateRepoRun,
   updateRepoMeta,
+  updateLlmConfig,
   readConfigForDashboard,
 } from "../configWrite.js";
 import { requireFields } from "./shared.js";
@@ -29,6 +30,13 @@ interface ConfigDeps {
    *  beyond config-file mutation (specifically: opening the YAML in
    *  their editor). */
   filesystemRoutesEnabled: boolean;
+}
+
+/** Mask all but the last 4 chars of an API key for the UI. */
+function maskKey(key: string): string {
+  if (!key) return "";
+  if (key.length <= 8) return "•".repeat(key.length);
+  return "•".repeat(key.length - 4) + key.slice(-4);
 }
 
 export function register(app: Express, deps: ConfigDeps): void {
@@ -104,6 +112,43 @@ export function register(app: Express, deps: ConfigDeps): void {
     };
     try {
       await updateRepoMeta(project, repo, { tech, baseBranch });
+      await reloadInMemoryConfig();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
+  });
+
+  // Global LLM config — currently just the OpenRouter API key used by
+  // slug.ts. GET returns the current key (masked) and a flag for whether
+  // any source is configured; POST writes a new value (or clears it with
+  // an empty string).
+  app.get("/api/config/llm", async (_req, res) => {
+    try {
+      const fresh = await readConfigForDashboard();
+      const key = fresh.llm?.openrouterApiKey ?? "";
+      // Read also the env var so the UI can show "set via env" if the
+      // user has the key in their shell rc rather than the YAML.
+      const envKey = process.env.OPENROUTER_API_KEY ?? "";
+      res.json({
+        openrouterApiKey: maskKey(key),
+        openrouterApiKeyConfigured: !!key,
+        openrouterApiKeyFromEnv: !!envKey,
+      });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/config/llm", async (req, res) => {
+    if (!requireFields(req, res, ["openrouterApiKey"])) return;
+    const { openrouterApiKey } = req.body as { openrouterApiKey: string };
+    if (typeof openrouterApiKey !== "string") {
+      res.status(400).json({ ok: false, error: "openrouterApiKey must be a string (empty string to clear)" });
+      return;
+    }
+    try {
+      await updateLlmConfig({ openrouterApiKey });
       await reloadInMemoryConfig();
       res.json({ ok: true });
     } catch (err) {

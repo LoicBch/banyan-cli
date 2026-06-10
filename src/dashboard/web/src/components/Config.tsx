@@ -258,6 +258,11 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
         </p>
       </header>
 
+      {/* Global LLM config — show only when no project is scoped (avoids
+       *  cluttering the repo-focused view). Lives at the top of the global
+       *  Config view, before the per-project sections. */}
+      {!scoped ? <LlmConfigSection /> : null}
+
       {visibleProjects.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No project named <code className="text-foreground">{projectName}</code> in the config.
@@ -495,6 +500,150 @@ function ConfigSkeleton(): React.JSX.Element {
         </section>
       ))}
     </div>
+  );
+}
+
+/** Global LLM config — currently just the OpenRouter API key used by
+ *  banyan's slug generator (`bn wt -p "..."`, dashboard spawn without a
+ *  feature name). Shown on the unscoped Config view. */
+function LlmConfigSection(): React.JSX.Element {
+  const [configured, setConfigured] = React.useState<boolean | null>(null);
+  const [masked, setMasked] = React.useState("");
+  const [fromEnv, setFromEnv] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [newKey, setNewKey] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await fetch("/api/config/llm");
+      const d = await r.json();
+      setConfigured(!!d.openrouterApiKeyConfigured);
+      setMasked(d.openrouterApiKey ?? "");
+      setFromEnv(!!d.openrouterApiKeyFromEnv);
+    } catch {
+      setConfigured(false);
+    }
+  }, []);
+
+  React.useEffect(() => { void load(); }, [load]);
+
+  async function saveKey() {
+    setSaving(true);
+    try {
+      const r = await fetch("/api/config/llm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ openrouterApiKey: newKey.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.ok) {
+        toast.success(newKey.trim() ? "OpenRouter API key saved" : "OpenRouter API key cleared");
+        setNewKey("");
+        setEditing(false);
+        await load();
+      } else {
+        toast.error("Save failed", { description: data.error ?? `${r.status}` });
+      }
+    } catch (err) {
+      toast.error("Save failed", { description: String(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium">LLM (slug naming)</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Used to infer feature names from prompts (e.g. "fix login bug" → <code>login-fix</code>).
+              Get a key at{" "}
+              <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                openrouter.ai
+              </a>
+              {" "}— free models work (e.g. <code>x-ai/grok-4-fast:free</code>).
+            </p>
+          </div>
+          {!editing ? (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1.5">
+              {configured ? "Replace" : "Add key"}
+            </Button>
+          ) : null}
+        </div>
+
+        {!editing ? (
+          <div className="text-xs">
+            <Label className="text-muted-foreground">OpenRouter API key</Label>
+            {configured ? (
+              <p className="font-mono mt-1 text-foreground/80">
+                {masked}
+                {fromEnv ? (
+                  <span className="ml-2 text-muted-foreground/60 font-sans">
+                    (also set via OPENROUTER_API_KEY env)
+                  </span>
+                ) : null}
+              </p>
+            ) : fromEnv ? (
+              <p className="mt-1 text-muted-foreground">
+                Set via <code className="text-foreground">OPENROUTER_API_KEY</code> environment variable.
+              </p>
+            ) : (
+              <p className="mt-1 text-amber-500/80">
+                Not configured — feature naming from a prompt won't work until you add a key.
+                Workaround: pass the name explicitly (<code>bn wt my-feature -p "..."</code>).
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label>OpenRouter API key</Label>
+            <Input
+              type="password"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder="sk-or-v1-..."
+              className="font-mono text-xs"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setEditing(false); setNewKey(""); }}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              {configured ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setNewKey(""); void saveKey(); }}
+                  disabled={saving}
+                  className="text-destructive hover:text-destructive"
+                >
+                  Clear key
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                onClick={saveKey}
+                disabled={saving || !newKey.trim()}
+                className="gap-1.5"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground/70">
+              The key is stored as plain text in <code>~/.config/banyan/config.yaml</code> — comments preserved.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

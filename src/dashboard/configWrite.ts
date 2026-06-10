@@ -196,5 +196,33 @@ export async function updateRepoMeta(
   await writeFile(resolved, doc.toString(), "utf8");
 }
 
+/**
+ * Update the global `llm.openrouterApiKey` field. Pass an empty string
+ * to delete it. Preserves comments + project-level YAML untouched.
+ */
+export async function updateLlmConfig(
+  patch: { openrouterApiKey?: string },
+  configPath?: string,
+): Promise<void> {
+  const { raw, path: resolved } = await readConfigRaw(configPath);
+  const doc = YAML.parseDocument(raw);
+
+  if (patch.openrouterApiKey !== undefined) {
+    if (patch.openrouterApiKey === "") {
+      doc.deleteIn(["llm", "openrouterApiKey"]);
+      // If `llm` is now empty, drop the empty map.
+      const llmNode = doc.get("llm");
+      if (llmNode && YAML.isMap(llmNode) && llmNode.items.length === 0) {
+        doc.delete("llm");
+      }
+    } else {
+      doc.setIn(["llm", "openrouterApiKey"], patch.openrouterApiKey);
+    }
+  }
+
+  validateConfig(doc.toJS(), resolved);
+  await writeFile(resolved, doc.toString(), "utf8");
+}
+
 /** Type-safe re-export to keep the API surface tight. */
 export type { RunConfig };

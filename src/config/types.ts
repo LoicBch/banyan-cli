@@ -121,7 +121,18 @@ export interface ProjectConfig {
   repos: RepoConfig[];
 }
 
+/** Global LLM-provider settings. Currently just an OpenRouter key,
+ *  used by slug.ts to generate feature names from prompts. */
+export interface LlmConfig {
+  /** OpenRouter API key — required to use the prompt-to-slug feature
+   *  naming (`bn wt -p "..."` without an explicit name, dashboard
+   *  spawn without a feature name). User-facing setup: dashboard Config
+   *  tab → LLM section, or edit ~/.config/banyan/config.yaml directly. */
+  openrouterApiKey?: string;
+}
+
 export interface Config {
   version: 1;
+  llm?: LlmConfig;
   projects: ProjectConfig[];
 }

@@ -9,13 +9,29 @@
  * loader is for full-file reads and bootstrap writes.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { ConfigError } from "../errors.js";
 import { contractHome, defaultConfigPath } from "./paths.js";
 import { validateConfig } from "./validation.js";
 import type { Config } from "./types.js";
+
+/** Synchronous read used by code paths that can't await (e.g.
+ *  `slug.ts` reading the OpenRouter key from config when CLI options
+ *  can't be threaded down). Returns undefined when the file is missing
+ *  or invalid — caller decides what to do. */
+export function loadConfigSync(configPath?: string): Config | undefined {
+  const resolved = configPath ?? defaultConfigPath();
+  if (!existsSync(resolved)) return undefined;
+  try {
+    const raw = readFileSync(resolved, "utf8");
+    const parsed = YAML.parse(raw);
+    return validateConfig(parsed, resolved);
+  } catch {
+    return undefined;
+  }
+}
 
 export async function loadConfig(configPath?: string): Promise<Config> {
   const resolved = configPath ?? defaultConfigPath();
@@ -47,6 +63,9 @@ export async function saveConfig(cfg: Config, configPath?: string): Promise<void
   await mkdir(path.dirname(resolved), { recursive: true });
   const serializable = {
     version: cfg.version,
+    ...(cfg.llm?.openrouterApiKey
+      ? { llm: { openrouterApiKey: cfg.llm.openrouterApiKey } }
+      : {}),
     projects: cfg.projects.map((p) => ({
       name: p.name,
       repos: p.repos.map((r) => ({
