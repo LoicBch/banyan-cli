@@ -57,6 +57,17 @@ export const approve = (project: string, feature: string, scope: "plan" | "repor
 export const sendTask = (project: string, feature: string, prompt: string, opts: { force?: boolean } = {}) =>
   post("/api/actions/task", { project, feature, prompt, ...opts });
 
+/** Send a follow-up prompt to the project's orchestrator pane. With
+ *  `delegate=true`, the prompt is wrapped with a directive that forces
+ *  the orchestrator into strict coordinator mode (decompose into
+ *  sub-features, no inline code work this turn). Used by the dashboard's
+ *  "Talk to orchestrator" chat box at the top of the Pipeline view. */
+export const sendOrchestratorTask = (
+  project: string,
+  prompt: string,
+  opts: { delegate?: boolean; force?: boolean } = {},
+) => post("/api/actions/orchestrator-task", { project, prompt, ...opts });
+
 export const createWorktree = (body: {
   project: string;
   feature?: string;

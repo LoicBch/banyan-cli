@@ -21,6 +21,7 @@ import {
 import { approvalStatus, approvePlan, rejectPlan } from "../../approval.js";
 import { approveReport, rejectReport, reportApprovalStatus } from "../../reportApproval.js";
 import { assignTask } from "../../commands/assignTask.js";
+import { assignOrchestratorTask } from "../../commands/assignOrchestratorTask.js";
 import { requireFields, type RouteDeps } from "./shared.js";
 
 export function register(app: Express, deps: RouteDeps): void {
@@ -146,6 +147,34 @@ export function register(app: Express, deps: RouteDeps): void {
     };
     const r = await actionEnvRecreate(config, { project, feature, repo });
     res.status(r.ok ? 200 : 400).json(r);
+  });
+
+  // Send a follow-up prompt to the project's ORCHESTRATOR pane. With
+  // `delegate=true`, the prompt is wrapped with a directive that forces
+  // strict-coordinator behaviour (decompose + spawn sub-features, no
+  // inline code work). Used by the dashboard's "Talk to orchestrator"
+  // chat box.
+  app.post("/api/actions/orchestrator-task", async (req, res) => {
+    if (!requireFields(req, res, ["project", "prompt"])) return;
+    const { project, prompt, delegate, force } = req.body as {
+      project: string;
+      prompt: string;
+      delegate?: boolean;
+      force?: boolean;
+    };
+    if (typeof prompt !== "string" || prompt.trim().length === 0) {
+      res.status(400).json({ ok: false, error: "prompt cannot be empty" });
+      return;
+    }
+    try {
+      const { paneId } = await assignOrchestratorTask(config, project, prompt, {
+        ...(delegate ? { delegate: true } : {}),
+        ...(force ? { force: true } : {}),
+      });
+      res.json({ ok: true, paneId });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: (err as Error).message });
+    }
   });
 
   // Send a follow-up prompt to an already-running feature agent. The

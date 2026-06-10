@@ -28,6 +28,7 @@ import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
 import { openReportReviewDialog } from "@/components/ReportReviewDialog";
 import { openSendMessageDialog } from "@/components/SendMessageDialog";
 import { StageIndicator } from "@/components/StageIndicator";
+import { OrchestratorChat } from "@/components/OrchestratorChat";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
@@ -108,6 +109,8 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
           </Button>
         </div>
       </header>
+
+      <OrchestratorChat project={project.name} />
 
       <FeatureList
         project={project}
