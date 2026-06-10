@@ -9,14 +9,10 @@
  * 2. The service will auto-connect when the dashboard starts
  * 3. Activity updates every 15 seconds (configurable)
  *
- * Configuration in ~/.config/banyan/config.yaml:
+ * Configuration in ~/.config/banyan/discord-rpc.yaml:
  * ```yaml
- * discordRpc:
- *   enabled: true
- *   updateIntervalSec: 15
- *   showProject: true
- *   showFeatureCount: true
- *   showMode: true
+ * enabled: true
+ * updateIntervalSec: 15
  * ```
  */
 
@@ -25,7 +21,7 @@ import { DiscordRpcClient } from "./client.js";
 import type { DiscordRpcConfig, BanyanActivity } from "./config.js";
 import { DEFAULT_CONFIG } from "./config.js";
 
-export type { DiscordRpcConfig, BanyanActivity } from "./config.js";
+export type { DiscordRpcConfig, BanyanActivity, ProjectActivity } from "./config.js";
 
 /**
  * Discord RPC service singleton.
@@ -103,25 +99,16 @@ export class DiscordRpcService {
 }
 
 /**
- * Build a BanyanActivity from Banyan config and dashboard state.
- * This is a helper for the dashboard to easily build activity.
+ * Stub helper kept for compatibility with older imports. Real activity
+ * data comes from `stateReader.readBanyanActivity()` — this just returns
+ * an idle snapshot so callers that haven't migrated yet still type-check.
  */
 export async function buildBanyanActivity(
-  config: Config,
+  _config: Config,
   dashboardUrl?: string,
 ): Promise<BanyanActivity> {
-  // This will be populated by reading the actual state
-  // For now, we'll create a simple implementation
-  const features: string[] = [];
-  const modes: Record<string, string> = {};
-
-  // Note: The dashboard will need to provide the actual state
-  // This is just a placeholder structure
-
   return {
-    project: config.projects[0]?.name,
-    features,
-    modes,
+    projects: [],
     startTime: new Date().toISOString(),
     dashboardUrl,
   };

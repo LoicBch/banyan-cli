@@ -17,7 +17,7 @@ export class DiscordRpcClient {
   constructor(config: DiscordRpcConfig) {
     this.config = config;
     this.client = new DiscordRPC({
-      clientId: config.applicationId || "1234567890123456789",
+      clientId: config.applicationId || "1508879085680595004",
     });
 
     this.client.on("ready", () => {

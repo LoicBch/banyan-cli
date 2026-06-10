@@ -15,6 +15,8 @@ const CONFIG_PATH = path.join(CONFIG_DIR, "discord-rpc.yaml");
 
 /**
  * Load Discord RPC config. Returns default (disabled) if file doesn't exist.
+ * Legacy display toggles (showProject / showFeatureCount / showMode) are
+ * silently ignored — the layout is now fixed by design.
  */
 export function loadDiscordRpcConfig(): DiscordRpcConfig {
   if (!existsSync(CONFIG_PATH)) {
@@ -32,11 +34,10 @@ export function loadDiscordRpcConfig(): DiscordRpcConfig {
       ...(typeof raw.enabled === "boolean" ? { enabled: raw.enabled } : {}),
       ...(typeof raw.applicationId === "string" ? { applicationId: raw.applicationId } : {}),
       ...(typeof raw.updateIntervalSec === "number" ? { updateIntervalSec: raw.updateIntervalSec } : {}),
-      ...(typeof raw.showProject === "boolean" ? { showProject: raw.showProject } : {}),
-      ...(typeof raw.showFeatureCount === "boolean" ? { showFeatureCount: raw.showFeatureCount } : {}),
-      ...(typeof raw.showMode === "boolean" ? { showMode: raw.showMode } : {}),
       ...(typeof raw.largeImageKey === "string" ? { largeImageKey: raw.largeImageKey } : {}),
       ...(typeof raw.largeImageText === "string" ? { largeImageText: raw.largeImageText } : {}),
+      ...(typeof raw.smallImageKey === "string" ? { smallImageKey: raw.smallImageKey } : {}),
+      ...(typeof raw.smallImageText === "string" ? { smallImageText: raw.smallImageText } : {}),
     };
   } catch (err) {
     console.error(`[discord-rpc] Failed to load config: ${(err as Error).message}`);
@@ -54,11 +55,10 @@ export function saveDiscordRpcConfig(config: DiscordRpcConfig): void {
     enabled: config.enabled,
     ...(config.applicationId !== DEFAULT_CONFIG.applicationId ? { applicationId: config.applicationId } : {}),
     ...(config.updateIntervalSec !== DEFAULT_CONFIG.updateIntervalSec ? { updateIntervalSec: config.updateIntervalSec } : {}),
-    ...(config.showProject !== DEFAULT_CONFIG.showProject ? { showProject: config.showProject } : {}),
-    ...(config.showFeatureCount !== DEFAULT_CONFIG.showFeatureCount ? { showFeatureCount: config.showFeatureCount } : {}),
-    ...(config.showMode !== DEFAULT_CONFIG.showMode ? { showMode: config.showMode } : {}),
     ...(config.largeImageKey !== DEFAULT_CONFIG.largeImageKey ? { largeImageKey: config.largeImageKey } : {}),
     ...(config.largeImageText !== DEFAULT_CONFIG.largeImageText ? { largeImageText: config.largeImageText } : {}),
+    ...(config.smallImageKey !== DEFAULT_CONFIG.smallImageKey ? { smallImageKey: config.smallImageKey } : {}),
+    ...(config.smallImageText !== DEFAULT_CONFIG.smallImageText ? { smallImageText: config.smallImageText } : {}),
   };
 
   const header = `# Banyan Discord Rich Presence Configuration
@@ -70,11 +70,9 @@ export function saveDiscordRpcConfig(config: DiscordRpcConfig): void {
 # 2. Restart the dashboard (bn serve)
 # 3. Make sure Discord desktop is running
 #
-# Your Discord profile will show:
-# - Current project name
-# - Number of active features
-# - Agent mode (autonomous, assisted, etc.)
-# - Link to your Banyan dashboard
+# Layout (fixed by design):
+#   single project   →  features on top line, project name below
+#   multiple projects →  projects with feature counts on top line, totals below
 
 `;
 
@@ -97,15 +95,13 @@ enabled: false
 # Update interval in seconds (default: 15)
 updateIntervalSec: 15
 
-# Display options
-showProject: true       # Show project name
-showFeatureCount: true  # Show number of active features
-showMode: true          # Show agent mode (autonomous, assisted, etc.)
-
-# Advanced options (usually don't need to change these)
-# applicationId: "1234567890123456789"  # Custom Discord Application ID
-# largeImageKey: "banyan"
-# largeImageText: "Banyan"
+# Advanced — assets must be uploaded on the Discord Developer Portal under
+# this application id. Defaults reference Banyan's official assets.
+# largeImageKey: "banyan-logo"
+# largeImageText: "Banyan — multi-agent worktree orchestrator"
+# smallImageKey: "status-working"
+# smallImageText: "Working"
+# applicationId: "1508879085680595004"
 `;
 
   if (!existsSync(CONFIG_PATH)) {
