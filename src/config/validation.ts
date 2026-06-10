@@ -33,6 +33,21 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
     throw new ConfigError(`${sourcePath}: "projects" must be a list`);
   }
 
+  // Optional top-level `llm:` section. Currently only an OpenRouter key.
+  let llm: import("./types.js").LlmConfig | undefined;
+  if (raw.llm !== undefined && raw.llm !== null) {
+    if (!isObject(raw.llm)) {
+      throw new ConfigError(`${sourcePath}: "llm" must be a mapping`);
+    }
+    const key = raw.llm.openrouterApiKey;
+    if (key !== undefined && key !== null && key !== "") {
+      if (typeof key !== "string") {
+        throw new ConfigError(`${sourcePath}: llm.openrouterApiKey must be a string`);
+      }
+      llm = { openrouterApiKey: key };
+    }
+  }
+
   const projects: ProjectConfig[] = [];
   const seenProjects = new Set<string>();
 
@@ -323,7 +338,7 @@ export function validateConfig(raw: unknown, sourcePath: string): Config {
     });
   }
 
-  return { version: 1, projects };
+  return { version: 1, ...(llm ? { llm } : {}), projects };
 }
 
 /** Find which project owns the given cwd, by matching against repo paths
