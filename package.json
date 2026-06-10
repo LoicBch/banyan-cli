@@ -1,15 +1,18 @@
 {
-  "name": "banyan",
+  "name": "banyan-cli",
   "version": "1.0.0",
-  "description": "Workspace manager: tmux + git worktrees + Claude Code, multi-repo per project",
+  "description": "tmux + git worktrees + Claude Code. Run N AI agents in parallel across N repos with isolated worktrees, dev ports, and docker stacks per feature.",
   "type": "module",
   "bin": {
     "banyan": "dist/src/bin/banyan.js",
     "bn": "dist/src/bin/banyan.js"
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist/src",
+    "dist/tmux",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
@@ -18,7 +21,7 @@
   "bugs": {
     "url": "https://github.com/LoicBch/banyan-cli/issues"
   },
-  "homepage": "https://github.com/LoicBch/banyan-cli#readme",
+  "homepage": "https://banyan.sh",
   "license": "MIT",
   "author": "Loïc Bouchisse",
   "keywords": [
