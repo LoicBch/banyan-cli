@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare,
+  Play, GitMerge, Trash2, Terminal, Plus, FolderPlus, Square, MoreHorizontal, TerminalSquare, MessageSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -23,7 +23,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fetchState, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
+import { fetchState, fetchPipeline, type DashboardState, type FeatureState, type ProjectState } from "@/lib/api";
+import { openPlanReviewDialog } from "@/components/PlanReviewDialog";
+import { openReportReviewDialog } from "@/components/ReportReviewDialog";
+import { openSendMessageDialog } from "@/components/SendMessageDialog";
+import { StageIndicator } from "@/components/StageIndicator";
+import { OrchestratorChat } from "@/components/OrchestratorChat";
 import { usePolling } from "@/lib/usePolling";
 import { cn } from "@/lib/utils";
 import * as actions from "@/lib/actions";
@@ -47,12 +52,23 @@ interface PipelineProps {
 export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX.Element {
   const { data, error, loading } = usePolling<DashboardState>(fetchState, 2000);
 
+  // Pipeline data (approval state, latest report, …) is served by a
+  // separate endpoint so it's not bundled into every /api/state response.
+  // Joined here on the active project — keeps the feature cards rich.
+  const activeName = projectName ?? data?.projects[0]?.name ?? null;
+  const fetchPipelineForActive = React.useCallback(() => {
+    if (!activeName) return Promise.resolve({ features: [] });
+    return fetchPipeline(activeName);
+  }, [activeName]);
+  const { data: pipelineData } = usePolling(fetchPipelineForActive, 2000);
+
   if (loading && !data) return <PipelineSkeleton />;
   if (error && !data) return <ErrorState message={error} />;
   if (!data || data.projects.length === 0) return <NoProjectsState />;
 
   const project =
     data.projects.find((p) => p.name === projectName) ?? data.projects[0]!;
+  const pipelineFeatures = pipelineData?.features ?? [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-6 animate-fade-in">
@@ -94,7 +110,13 @@ export function Pipeline({ projectName, onRepoClick }: PipelineProps): React.JSX
         </div>
       </header>
 
-      <FeatureList project={project} />
+      <OrchestratorChat project={project.name} />
+
+      <FeatureList
+        project={project}
+        pipelineFeatures={pipelineFeatures}
+        localMode={data.localMode === true}
+      />
 
       <RepoChipRow project={project} onRepoClick={onRepoClick} />
     </div>
@@ -143,9 +165,32 @@ function RepoChipRow({
   );
 }
 
-function FeatureList({ project }: { project: ProjectState }): React.JSX.Element {
-  // Derive features from worktrees if /api/pipeline isn't surfaced in state.
-  const features = deriveFeatures(project);
+function FeatureList({
+  project,
+  pipelineFeatures,
+  localMode,
+}: {
+  project: ProjectState;
+  pipelineFeatures: FeatureState[];
+  localMode: boolean;
+}): React.JSX.Element {
+  // Merge the basic feature list (from /api/state worktrees) with the
+  // richer pipeline view (/api/pipeline). Pipeline rows win when they
+  // exist — they carry approval / latestReport / reportApproval that
+  // the state endpoint doesn't surface.
+  const baseFeatures = deriveFeatures(project);
+  const pipelineByName = new Map(pipelineFeatures.map((f) => [f.feature, f]));
+  const features = baseFeatures.map((bf) => {
+    const pf = pipelineByName.get(bf.feature);
+    return pf ? { ...bf, ...pf } : bf;
+  });
+  // Also surface pipeline features that aren't in the basic list (e.g.
+  // merged/cleaned-up but still in approval history) — usually empty.
+  for (const pf of pipelineFeatures) {
+    if (!features.find((f) => f.feature === pf.feature)) {
+      features.push(pf);
+    }
+  }
 
   // List nav: which card is "selected" (visible keyboard cursor).
   // Reset selection when the feature set changes (a feature gets removed by
@@ -196,6 +241,21 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
     await runFeatureAction(f.feature, "Start", () =>
       actions.testStart(project.name, f.feature),
     );
+  }
+  // Project-level terminal launch — surfaces a single iTerm/Warp/…
+  // window attached to the session. If a client is already attached we
+  // just bring the existing window to front (no second window).
+  async function dispatchOpenInTerminal(): Promise<void> {
+    const r = await actions.openTerminal(project.name);
+    if (r.ok) {
+      toast.success(
+        r.attachedToExisting
+          ? "Switch to your terminal — session already attached"
+          : `Terminal opened${r.terminal ? ` (${r.terminal})` : ""}`,
+      );
+    } else {
+      toast.error("Couldn't open terminal", { description: r.error });
+    }
   }
   async function dispatchStop(f: FeatureState): Promise<void> {
     await runFeatureAction(f.feature, "Stop", () =>
@@ -280,7 +340,7 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
     a: () => {
       const f = selectedFeature();
       if (!f) return;
-      onAttach(project.name);
+      void dispatchOpenInTerminal();
     },
   });
 
@@ -340,12 +400,16 @@ function FeatureList({ project }: { project: ProjectState }): React.JSX.Element 
           selected={i === selectedIdx}
           busy={!!busyByFeature[f.feature]}
           isRunning={isFeatureRunning(f)}
+          localMode={localMode}
           onSelect={() => setSelectedIdx(i)}
           onStart={() => dispatchStart(f)}
           onStop={() => dispatchStop(f)}
           onMerge={() => dispatchMerge(f)}
           onCleanup={() => dispatchCleanup(f)}
-          onAttach={() => onAttach(project.name)}
+          onOpenInTerminal={() => dispatchOpenInTerminal()}
+          onSendMessage={() =>
+            openSendMessageDialog(project.name, f.feature, { localMode })
+          }
         />
       ))}
     </div>
@@ -358,12 +422,15 @@ interface FeatureCardProps {
   selected: boolean;
   busy: boolean;
   isRunning: boolean;
+  /** True in local mode — gates the "Open in terminal" menu item. */
+  localMode: boolean;
   onSelect: () => void;
   onStart: () => void;
   onStop: () => void;
   onMerge: () => void;
   onCleanup: () => void;
-  onAttach: () => void;
+  onOpenInTerminal: () => void;
+  onSendMessage: () => void;
 }
 
 function FeatureCard({
@@ -372,18 +439,32 @@ function FeatureCard({
   selected,
   busy,
   isRunning,
+  localMode,
   onSelect,
   onStart,
   onStop,
   onMerge,
   onCleanup,
-  onAttach,
+  onOpenInTerminal,
+  onSendMessage,
 }: FeatureCardProps): React.JSX.Element {
   const ports = feature.ports ?? collectPortsFromRepos(project, feature.feature);
   const reposTouched = feature.reposActive ?? reposWithWorktree(project, feature.feature);
-  const todosPct = feature.todos && feature.todos.total > 0
-    ? Math.round((feature.todos.done / feature.todos.total) * 100)
+  // Pipeline data may surface todo under `todo` (new) OR `todos` (legacy).
+  // Normalize to a shared shape so the progress bar code below stays simple.
+  const todo = feature.todo ?? (feature.todos
+    ? { total: feature.todos.total, done: feature.todos.done }
+    : undefined);
+  const todosPct = todo && todo.total > 0
+    ? Math.round((todo.done / todo.total) * 100)
     : null;
+
+  // Delegated-pipeline gates pending action.
+  const planPending = feature.approval?.status === "pending";
+  const reportPending =
+    !!feature.latestReport &&
+    feature.latestReport.status === "done" &&
+    feature.reportApproval?.status === "pending";
 
   return (
     <Card
@@ -427,7 +508,7 @@ function FeatureCard({
               )}
             </div>
 
-            {todosPct !== null && feature.todos ? (
+            {todosPct !== null && todo ? (
               <div className="flex items-center gap-2 text-xs">
                 <div className="h-1 w-32 rounded-full bg-muted overflow-hidden">
                   <div
@@ -439,8 +520,42 @@ function FeatureCard({
                   />
                 </div>
                 <span className="text-muted-foreground">
-                  {feature.todos.done}/{feature.todos.total} todos
+                  {todo.done}/{todo.total} todos
                 </span>
+              </div>
+            ) : null}
+
+            <StageIndicator feature={feature} />
+
+            {/* Delegated-pipeline gate buttons — surface visibly when the
+             *  user needs to act. Emerald = "your move", same vocabulary as
+             *  the sidebar "+ NEW" and the "+ Add repo" pill. */}
+            {planPending || reportPending ? (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {planPending ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPlanReviewDialog(project.name, feature.feature);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/70 hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Review plan
+                  </button>
+                ) : null}
+                {reportPending && feature.latestReport ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openReportReviewDialog(project.name, feature.feature, feature.latestReport!);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-500 hover:border-emerald-500/70 hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Review report
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -472,6 +587,20 @@ function FeatureCard({
                 Start
               </Button>
             )}
+            {/* Live-intervention shortcut. Always available on a feature —
+                lets the user jump out of the gated pipeline at any stage to
+                talk to the agent directly without leaving the dashboard. */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9"
+              onClick={onSendMessage}
+              disabled={busy}
+              aria-label="Send message to agent"
+              title="Send a follow-up prompt to the agent"
+            >
+              <MessageSquare className="size-4" />
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -485,11 +614,15 @@ function FeatureCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={onAttach}>
-                  <Terminal className="size-4" />
-                  <span>Copy attach command</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {localMode ? (
+                  <>
+                    <DropdownMenuItem onSelect={onOpenInTerminal}>
+                      <TerminalSquare className="size-4" />
+                      <span>Open in terminal</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem onSelect={onMerge}>
                   <GitMerge className="size-4" />
                   <span>Merge feature…</span>
@@ -505,25 +638,6 @@ function FeatureCard({
       </CardContent>
     </Card>
   );
-}
-
-// ── Action helpers ─────────────────────────────────────────────────────────
-
-/** Copy the tmux attach command for the project to the clipboard. The
- *  dashboard can't itself attach the user to tmux — they're in a browser —
- *  so we give them the one-shot they need to paste in their terminal. */
-function onAttach(projectName: string): void {
-  const cmd = `bn ${projectName} attach`;
-  navigator.clipboard
-    .writeText(cmd)
-    .then(() => {
-      toast.success("Copied attach command", { description: cmd });
-    })
-    .catch(() => {
-      // Fallback for browsers without clipboard API access (rare in 2026):
-      // surface the command in the toast so the user can copy it manually.
-      toast.info("Run this in your terminal", { description: cmd });
-    });
 }
 
 // ── Consequence builders for confirm dialogs ──────────────────────────────

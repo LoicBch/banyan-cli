@@ -35,11 +35,11 @@ describe("agentState", () => {
     writeAgentState({
       project: "demo",
       feature: "login",
-      mode: "autonomous",
+      mode: "delegated",
     });
     const got = readAgentState("demo", "login");
     assert.ok(got);
-    assert.equal(got!.mode, "autonomous");
+    assert.equal(got!.mode, "delegated");
     assert.equal(got!.requireApproval, undefined);
     assert.match(got!.createdAt, /^\d{4}-/);
   });
@@ -48,11 +48,11 @@ describe("agentState", () => {
     writeAgentState({
       project: "demo",
       feature: "f",
-      mode: "autopilot",
+      mode: "delegated",
       requireApproval: true,
     });
     const got = readAgentState("demo", "f");
-    assert.equal(got!.mode, "autopilot");
+    assert.equal(got!.mode, "delegated");
     assert.equal(got!.requireApproval, true);
   });
 
@@ -61,16 +61,16 @@ describe("agentState", () => {
   });
 
   it("preserves createdAt across updates", async () => {
-    const first = writeAgentState({ project: "p", feature: "f", mode: "interactive" });
+    const first = writeAgentState({ project: "p", feature: "f", mode: "live" });
     await new Promise((r) => setTimeout(r, 5));
-    const second = writeAgentState({ project: "p", feature: "f", mode: "autopilot" });
+    const second = writeAgentState({ project: "p", feature: "f", mode: "delegated" });
     assert.equal(second.createdAt, first.createdAt);
     assert.notEqual(second.updatedAt, first.updatedAt);
-    assert.equal(second.mode, "autopilot");
+    assert.equal(second.mode, "delegated");
   });
 
   it("delete removes the file", () => {
-    writeAgentState({ project: "p", feature: "f", mode: "autonomous" });
+    writeAgentState({ project: "p", feature: "f", mode: "delegated" });
     assert.ok(readAgentState("p", "f"));
     deleteAgentState("p", "f");
     assert.equal(readAgentState("p", "f"), undefined);
@@ -81,9 +81,9 @@ describe("agentState", () => {
   });
 
   it("scopes per (project, feature)", () => {
-    writeAgentState({ project: "alpha", feature: "x", mode: "autonomous" });
-    writeAgentState({ project: "beta", feature: "x", mode: "autopilot" });
-    assert.equal(readAgentState("alpha", "x")!.mode, "autonomous");
-    assert.equal(readAgentState("beta", "x")!.mode, "autopilot");
+    writeAgentState({ project: "alpha", feature: "x", mode: "delegated" });
+    writeAgentState({ project: "beta", feature: "x", mode: "live" });
+    assert.equal(readAgentState("alpha", "x")!.mode, "delegated");
+    assert.equal(readAgentState("beta", "x")!.mode, "live");
   });
 });

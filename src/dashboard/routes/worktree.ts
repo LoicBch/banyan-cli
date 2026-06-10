@@ -40,7 +40,9 @@ export function register(app: Express, deps: WtRouteDeps): void {
       feature?: string;
       repos?: string[];
       initialPrompt?: string;
-      mode?: "interactive" | "assisted" | "autonomous" | "autopilot";
+      /** Accepts `live` / `delegated`, or any legacy 4-mode value —
+       *  normalized at the agentPrompt boundary. */
+      mode?: string;
       prefix?: string;
       requireApproval?: boolean;
       openTerminal?: boolean;
@@ -62,11 +64,13 @@ export function register(app: Express, deps: WtRouteDeps): void {
           featureName = generateDraftFeature();
         }
       }
+      const { normalizeMode } = await import("../../agentPrompt.js");
+      const normalizedMode = normalizeMode(body.mode);
       await wtAll(config, body.project, featureName, {
         ...(body.repos && body.repos.length > 0 ? { only: body.repos } : {}),
         ...(body.initialPrompt ? { initialPrompt: body.initialPrompt } : {}),
         ...(body.prefix !== undefined ? { prefix: body.prefix } : {}),
-        ...(body.mode ? { mode: body.mode } : {}),
+        ...(normalizedMode ? { mode: normalizedMode } : {}),
         ...(body.requireApproval ? { requireApproval: true } : {}),
       });
 

@@ -31,18 +31,52 @@ export interface RepoState {
   stacks: Stack[];
 }
 
+/** Mirrors src/dashboard/pipeline.ts:PipelineEntry. The full lifecycle
+ *  snapshot of a feature, with the data needed to render gate buttons
+ *  and stage indicators. */
 export interface FeatureState {
   /** Feature short name (e.g. "profile-page") */
   feature: string;
-  /** Stage in the pipeline lifecycle */
-  stage?: "draft" | "in-progress" | "review" | "merged" | string;
-  /** Agent autonomy mode if known */
-  mode?: "interactive" | "assisted" | "autonomous" | "autopilot" | string;
+  /** Repos this feature has a worktree in. Empty when cleaned up. */
+  repos?: string[];
+  /** Pipeline lifecycle stage: created → planning → approval → working → reported → merged */
+  stage?: "created" | "planning" | "approval" | "working" | "reported" | "merged" | string;
+  /** 0..5 for progress fill. */
+  stageIndex?: number;
+  /** Off-pipeline attention flag (orthogonal to stage). */
+  flag?: "rejected" | "blocked" | "needs_review";
+  /** Agent autonomy mode if known. Accepts new (live/delegated) and legacy
+   *  4-mode names (normalized server-side). */
+  mode?: string;
   reposActive?: string[];
   panesCount?: number;
   ports?: Array<{ repo: string; port: number }>;
+  todo?: { total: number; done: number; updatedAt: string };
+  /** Legacy alias kept for backward compat with older state shape. */
   todos?: { done: number; total: number };
-  latestReport?: { ts: number; approved?: boolean };
+  approval?: {
+    status: "none" | "pending" | "approved" | "rejected";
+    planSubmittedAt: string | null;
+    approvedAt: string | null;
+    rejectionNote: string | null;
+  };
+  latestReport?: {
+    feature: string;
+    ts: string;
+    status: "done" | "blocked" | "needs_review" | string;
+    summary?: string;
+    testInstructions?: string;
+    hesitations?: string[];
+    openQuestions?: string[];
+    risks?: string[];
+    filesChanged?: string[];
+    commits?: Array<{ sha: string; message: string }>;
+    approved?: boolean;
+  };
+  reportApproval?: {
+    status: "none" | "pending" | "approved" | "rejected" | string;
+    rejectionNote: string | null;
+  };
 }
 
 export interface ProjectState {

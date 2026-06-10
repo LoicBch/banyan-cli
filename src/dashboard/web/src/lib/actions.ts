@@ -50,6 +50,24 @@ export const envDown = (project: string, feature: string, repo?: string) =>
 export const approve = (project: string, feature: string, scope: "plan" | "report", opts: { reject?: boolean; note?: string } = {}) =>
   post("/api/actions/approve", { project, feature, scope, ...opts });
 
+/** Send a follow-up prompt to a feature's running agent — paste-and-submits
+ *  the text into its tmux pane via `assignTask`. The agent receives it as a
+ *  new turn and reacts (continues work, asks clarifying question, etc.).
+ *  Used by the "Send message" feature-card button. */
+export const sendTask = (project: string, feature: string, prompt: string, opts: { force?: boolean } = {}) =>
+  post("/api/actions/task", { project, feature, prompt, ...opts });
+
+/** Send a follow-up prompt to the project's orchestrator pane. With
+ *  `delegate=true`, the prompt is wrapped with a directive that forces
+ *  the orchestrator into strict coordinator mode (decompose into
+ *  sub-features, no inline code work this turn). Used by the dashboard's
+ *  "Talk to orchestrator" chat box at the top of the Pipeline view. */
+export const sendOrchestratorTask = (
+  project: string,
+  prompt: string,
+  opts: { delegate?: boolean; force?: boolean } = {},
+) => post("/api/actions/orchestrator-task", { project, prompt, ...opts });
+
 export const createWorktree = (body: {
   project: string;
   feature?: string;

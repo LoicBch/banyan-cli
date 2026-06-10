@@ -11,7 +11,7 @@ import { readdirSync, existsSync as fsExists } from "node:fs";
 import { homedir } from "node:os";
 import { buildState } from "../state.js";
 import { readReports } from "../../reports.js";
-import { listTodoFeatures } from "../../todo.js";
+import { listTodoFeatures, getTodo } from "../../todo.js";
 import { buildPipeline } from "../pipeline.js";
 import { approvalStatus, getApproval } from "../../approval.js";
 import type { AuthConfig } from "../auth.js";
@@ -143,6 +143,21 @@ export function register(app: Express, deps: StateDeps): void {
       if (rejectUnknownProject(config, projectName, res)) return;
       try {
         res.json({ todos: listTodoFeatures(projectName) });
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
+
+  // Single feature's TODO — used by the plan review dialog.
+  app.get(
+    "/api/todos/:project/:feature",
+    (req: Request<{ project: string; feature: string }>, res: Response) => {
+      const { project, feature } = req.params;
+      if (rejectUnknownProject(config, project, res)) return;
+      try {
+        const todo = getTodo(project, feature);
+        res.json({ todo: todo ?? null });
       } catch (err) {
         res.status(500).json({ error: (err as Error).message });
       }
