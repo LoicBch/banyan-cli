@@ -14,7 +14,6 @@ import { Pipeline } from "@/components/Pipeline";
 import { Shortcuts } from "@/components/Shortcuts";
 import { History } from "@/components/History";
 import { Config } from "@/components/Config";
-import { Ask } from "@/components/Ask";
 import { CommandPalette } from "@/components/CommandPalette";
 import { openKeyboardCheatsheet } from "@/components/KeyboardCheatsheet";
 import { openWorktreeDialog } from "@/components/WorktreeDialog";
@@ -133,7 +132,6 @@ function Shell(): React.JSX.Element {
             onFocusConsumed={() => setFocusRepo(null)}
           />
         ) : null}
-        {section === "ask" ? <Ask projectName={activeProject} /> : null}
       </main>
       <CommandPalette
         section={section}
@@ -146,5 +144,5 @@ function Shell(): React.JSX.Element {
 }
 
 function isSection(s: string): s is SectionId {
-  return ["pipeline", "history", "ask", "config", "shortcuts"].includes(s);
+  return ["pipeline", "history", "config", "shortcuts"].includes(s);
 }

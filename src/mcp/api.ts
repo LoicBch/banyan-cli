@@ -64,3 +64,5 @@ export {
   rejectFeatureReport,
   getFeatureReportApproval,
 } from "./api/report.js";
+
+export { searchTranscripts } from "./api/search.js";

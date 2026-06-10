@@ -25,7 +25,6 @@ import * as actionsRoutes from "./routes/actions.js";
 import * as shortcutsRoutes from "./routes/shortcuts.js";
 import * as configRoutes from "./routes/config.js";
 import * as wizardRoutes from "./routes/wizard.js";
-import * as askRoutes from "./routes/ask.js";
 import * as historyRoutes from "./routes/history.js";
 import * as mrRoutes from "./routes/mr.js";
 import * as integrationsRoutes from "./routes/integrations.js";
@@ -95,7 +94,6 @@ export async function startServer(
     config,
     filesystemRoutesEnabled: !opts.auth?.enabled,
   });
-  askRoutes.register(app, { config });
   historyRoutes.register(app, { config });
   mrRoutes.register(app, { config });
   worktreeRoutes.register(app, { config, filesystemRoutesEnabled: !opts.auth?.enabled });
