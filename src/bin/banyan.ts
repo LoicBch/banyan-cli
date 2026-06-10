@@ -10,6 +10,7 @@ const TOPLEVEL_CMDS = new Set([
   "ls",
   "init",
   "serve",
+  "doctor",
   "_autopilot-tick",
   "help",
   "-h",

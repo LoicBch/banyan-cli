@@ -9,6 +9,7 @@ import { packageVersion } from "./version.js";
 import { list } from "./commands/list.js";
 import { init } from "./commands/init.js";
 import { serve } from "./commands/serve.js";
+import { doctor } from "./commands/doctor.js";
 import { autopilotTick } from "./autopilot.js";
 
 import { registerProjectCommands } from "./cli/project.js";
@@ -25,8 +26,10 @@ export async function run(argv: string[]): Promise<number> {
     config = await loadConfig();
   } catch (err) {
     if (err instanceof BanyanError) {
-      // allow `init` and `ls` even if config doesn't exist yet (ls just shows empty)
-      if (argv[0] === "init" || argv[0] === "ls") {
+      // allow `init`, `ls`, and `doctor` even if config doesn't exist yet
+      // (doctor in particular needs to run before any config exists, that's
+      // its whole point).
+      if (argv[0] === "init" || argv[0] === "ls" || argv[0] === "doctor") {
         config = { version: 1, projects: [] };
       } else {
         logger.error(err.message);
@@ -46,6 +49,7 @@ export async function run(argv: string[]): Promise<number> {
     "ls",
     "init",
     "serve",
+    "doctor",
     "_autopilot-tick",
     "mcp-serve",
     "help",
@@ -107,6 +111,17 @@ export async function run(argv: string[]): Promise<number> {
         ...(tunnel ? { tunnel } : {}),
         ...(opts.rotateToken ? { rotateToken: true } : {}),
       });
+    });
+
+  program
+    .command("doctor")
+    .description(
+      "check that the environment is ready for banyan: tmux, git, claude CLI, optional gh/glab, and your banyan config. " +
+        "exits 0 if everything required is present (warnings are non-blocking), 1 if anything is missing.",
+    )
+    .action(async () => {
+      const code = await doctor(config);
+      process.exit(code);
     });
 
   program
