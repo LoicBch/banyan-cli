@@ -562,18 +562,11 @@ function LlmConfigSection(): React.JSX.Element {
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-medium">LLM (slug naming)</h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Used to infer feature names from prompts (e.g. "fix login bug" → <code>login-fix</code>).
-              Get a key at{" "}
-              <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                openrouter.ai
-              </a>
-              {" "}— free models work (e.g. <code>x-ai/grok-4-fast:free</code>).
-            </p>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">
+            OpenRouter key{" "}
+            <span className="text-muted-foreground font-normal">· for slug naming</span>
+          </h2>
           {!editing ? (
             <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1.5">
               {configured ? "Replace" : "Add key"}
@@ -583,9 +576,8 @@ function LlmConfigSection(): React.JSX.Element {
 
         {!editing ? (
           <div className="text-xs">
-            <Label className="text-muted-foreground">OpenRouter API key</Label>
             {configured ? (
-              <p className="font-mono mt-1 text-foreground/80">
+              <p className="font-mono text-foreground/80">
                 {masked}
                 {fromEnv ? (
                   <span className="ml-2 text-muted-foreground/60 font-sans">
@@ -594,14 +586,11 @@ function LlmConfigSection(): React.JSX.Element {
                 ) : null}
               </p>
             ) : fromEnv ? (
-              <p className="mt-1 text-muted-foreground">
-                Set via <code className="text-foreground">OPENROUTER_API_KEY</code> environment variable.
+              <p className="text-muted-foreground">
+                Set via <code className="text-foreground">OPENROUTER_API_KEY</code>.
               </p>
             ) : (
-              <p className="mt-1 text-amber-500/80">
-                Not configured — feature naming from a prompt won't work until you add a key.
-                Workaround: pass the name explicitly (<code>bn wt my-feature -p "..."</code>).
-              </p>
+              <p className="text-muted-foreground">Not configured.</p>
             )}
           </div>
         ) : (
