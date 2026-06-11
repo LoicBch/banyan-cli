@@ -33,21 +33,26 @@ export function buildActivity(
 ): DiscordActivity | null {
   if (activity.projects.length === 0) return null;
 
-  const result: DiscordActivity = {
-    largeImageKey: config.largeImageKey,
-    largeImageText: config.largeImageText,
-    smallImageKey: config.smallImageKey,
-    smallImageText: config.smallImageText,
-  };
-
-  if (activity.projects.length === 1) {
-    const p = activity.projects[0]!;
-    result.details = formatFeatureLine(p.features);
-    result.state = formatSingleProjectState(p);
-  } else {
-    result.details = formatProjectLine(activity.projects);
-    result.state = formatAggregateState(activity.projects);
+  // Build the image fields defensively: Discord silently rejects the
+  // *entire* activity update when an imageKey references a non-existent
+  // asset (e.g. `banyan-logo` when only `banyan` has been uploaded on
+  // the application portal). Only emit a key when it's non-empty.
+  const result: DiscordActivity = {};
+  if (config.largeImageKey && config.largeImageKey.length > 0) {
+    result.largeImageKey = config.largeImageKey;
+    if (config.largeImageText) result.largeImageText = config.largeImageText;
   }
+  if (config.smallImageKey && config.smallImageKey.length > 0) {
+    result.smallImageKey = config.smallImageKey;
+    if (config.smallImageText) result.smallImageText = config.smallImageText;
+  }
+
+  // Always lead with the global counts (features · projects) — it's the
+  // glanceable "how busy" signal. The state line carries the project
+  // names so a curious viewer can see what's running.
+  result.details = formatTotals(activity.projects);
+  const stateLine = formatProjectList(activity.projects);
+  if (stateLine.length > 0) result.state = stateLine;
 
   if (activity.startTime) {
     const ts = new Date(activity.startTime).getTime();
@@ -61,35 +66,20 @@ export function buildActivity(
   return result;
 }
 
-/** "feat-a · feat-b · feat-c · +2" — first line, single-project mode. */
-function formatFeatureLine(features: string[]): string {
-  if (features.length === 0) return "Idle";
-  return joinWithOverflow(features);
-}
-
-/** "🌿 my-project · 3 of 5 features" — second line, single-project mode. */
-function formatSingleProjectState(p: ProjectActivity): string {
-  const head = `🌿 ${p.name}`;
-  if (p.features.length === 0) return head;
-  const count =
-    p.totalWorktrees > p.features.length
-      ? `${p.features.length} of ${p.totalWorktrees} features`
-      : `${p.features.length} ${p.features.length === 1 ? "feature" : "features"}`;
-  return `${head}${SEPARATOR}${count}`;
-}
-
-/** "proj-a (3) · proj-b (1) · +2" — first line, aggregate mode. */
-function formatProjectLine(projects: ProjectActivity[]): string {
-  const labels = projects.map((p) => `${p.name} (${p.features.length})`);
-  return joinWithOverflow(labels);
-}
-
-/** "🌐 3 projects · 8 features" — second line, aggregate mode. */
-function formatAggregateState(projects: ProjectActivity[]): string {
+/** "5 features · 3 projects" — globally aggregated totals, always the
+ *  prominent first line. Pluralizes correctly for 1. */
+function formatTotals(projects: ProjectActivity[]): string {
   const totalFeatures = projects.reduce((sum, p) => sum + p.features.length, 0);
   const projWord = projects.length === 1 ? "project" : "projects";
   const featWord = totalFeatures === 1 ? "feature" : "features";
-  return `🌐 ${projects.length} ${projWord}${SEPARATOR}${totalFeatures} ${featWord}`;
+  return `${totalFeatures} ${featWord}${SEPARATOR}${projects.length} ${projWord}`;
+}
+
+/** "proj-a · proj-b · proj-c · +N" — list of active project names on
+ *  the state line. Truncates with an overflow marker. */
+function formatProjectList(projects: ProjectActivity[]): string {
+  const names = projects.map((p) => p.name);
+  return joinWithOverflow(names);
 }
 
 /**
