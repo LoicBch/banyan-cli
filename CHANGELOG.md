@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4]
+
+### Added
+- **Remote access surface in the dashboard's Workspace settings.** When you start with `bn serve --remote`, the Config tab now shows a card with the tunnel URL + a scannable QR code (SVG, served from `/api/remote/qr.svg`) so you don't have to keep the terminal QR open. When `--remote` isn't on, the card surfaces the exact command needed to enable it. Dynamic start/stop from the dashboard itself is still a future improvement.
+
+### Changed
+- **serve.ts now pre-allocates the listening port** so the tunnel and the http server agree on the same number even when 4242 is busy. Previously the tunnel could end up pointing at a different port than the server bound to.
+
 ## [1.0.3]
 
 ### Changed

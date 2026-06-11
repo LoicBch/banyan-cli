@@ -2,8 +2,9 @@ import type { Config } from "../config.js";
 import { logger } from "../logger.js";
 import { startServer } from "../dashboard/server.js";
 import { ensureToken } from "../dashboard/auth.js";
-import { startTunnel, type TunnelProvider } from "../dashboard/tunnel.js";
+import { startTunnel, type TunnelHandle, type TunnelProvider } from "../dashboard/tunnel.js";
 import { printDashboardQR } from "../dashboard/qr.js";
+import { findFreePort } from "../util/port.js";
 
 export interface ServeOpts {
   port?: number;
@@ -23,12 +24,32 @@ export async function serve(config: Config, opts: ServeOpts = {}): Promise<void>
     ? { enabled: true, token }
     : undefined;
 
-  const { url: localUrl, port } = await startServer(config, {
-    port: opts.port,
+  // Pre-allocate the listening port so the tunnel and the http server agree
+  // on the same number. Otherwise startTunnel would point at 4242 while
+  // startServer might fall back to 4243 if 4242 is busy.
+  const port = opts.port ?? (await findFreePort(4242));
+
+  // Remote mode: tunnel must be up *before* we expose the URL+token through
+  // the dashboard's /api/remote/* routes. We start the tunnel first, then
+  // pass its handle into the server's options.
+  let handle: TunnelHandle | undefined;
+  if (remote) {
+    logger.info(`starting tunnel…`);
+    try {
+      handle = await startTunnel(port, opts.tunnel);
+    } catch (err) {
+      logger.error(`tunnel failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+
+  const { url: localUrl } = await startServer(config, {
+    port,
     // When going remote, never auto-open (the user is going to scan a QR, not
     // alt-tab to a browser).
     open: remote ? false : (opts.open ?? true),
     ...(auth ? { auth } : {}),
+    ...(handle ? { remote: { url: handle.url, token } } : {}),
   });
 
   if (!remote) {
@@ -41,21 +62,12 @@ export async function serve(config: Config, opts: ServeOpts = {}): Promise<void>
     return;
   }
 
-  // Remote mode: start tunnel, print QR, wait.
-  logger.info(`starting tunnel…`);
-  let handle;
-  try {
-    handle = await startTunnel(port, opts.tunnel);
-  } catch (err) {
-    logger.error(`tunnel failed: ${(err as Error).message}`);
-    process.exit(1);
-  }
-  logger.ok(`tunnel up via ${handle.provider}: ${handle.url}`);
+  logger.ok(`tunnel up via ${handle!.provider}: ${handle!.url}`);
   logger.warn(
     `dashboard is reachable on the public internet. only the token holder can drive banyan.`,
   );
   logger.info(``);
-  printDashboardQR(handle.url, token);
+  printDashboardQR(handle!.url, token);
   logger.info(`token (also at ~/.config/banyan/state/dashboard.token):`);
   logger.info(`  ${token}`);
   logger.info(``);

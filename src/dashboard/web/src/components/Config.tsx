@@ -368,6 +368,7 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
         </div>
         <LlmConfigSection />
         <DiscordIntegrationSection />
+        <RemoteAccessSection />
       </section>
     </div>
   );
@@ -756,6 +757,88 @@ function DiscordIntegrationSection(): React.JSX.Element {
             Couldn't connect to Discord. Make sure the Discord desktop app is running, then toggle this off and on again.
           </p>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Remote access surface — exposes the tunnel URL + auth token (as a QR)
+ *  when `bn serve --remote` was used. When not in remote mode, shows a
+ *  short explainer + the command needed to enable it. The actual tunnel
+ *  start/stop lifecycle still lives in serve.ts; this is read-only. */
+function RemoteAccessSection(): React.JSX.Element {
+  const [info, setInfo] = React.useState<{
+    enabled: boolean;
+    url?: string;
+    scanUrl?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const r = await apiFetch("/api/remote/info");
+        const d = await r.json();
+        setInfo({ enabled: !!d.enabled, url: d.url, scanUrl: d.scanUrl });
+      } catch {
+        setInfo({ enabled: false });
+      }
+    })();
+  }, []);
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">
+            Remote access{" "}
+            <span className="text-muted-foreground font-normal">· QR for your phone</span>
+          </h2>
+          {info?.enabled ? (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono uppercase tracking-wider border-emerald-500/40 text-emerald-500 bg-emerald-500/10"
+            >
+              live
+            </Badge>
+          ) : null}
+        </div>
+
+        {info === null ? (
+          <Skeleton className="h-24 w-full" />
+        ) : info.enabled && info.url && info.scanUrl ? (
+          <div className="flex items-start gap-4">
+            {/* SVG served directly by the server — no client-side QR lib needed.
+                The image carries no sensitive content by itself; the token only
+                matters when actually scanned + opened by a browser. */}
+            <img
+              src="/api/remote/qr.svg"
+              alt="QR code to open the dashboard from your phone"
+              className="size-32 shrink-0 rounded-md bg-card border border-border"
+            />
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Scan from your phone to open the dashboard, already authenticated. The token is embedded as a URL hash — it never leaves the browser.
+              </p>
+              <div className="rounded-md border border-border bg-background/60 px-2.5 py-1.5">
+                <code className="font-mono text-[11px] text-foreground break-all">
+                  {info.url}
+                </code>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Remote access is off. Restart with{" "}
+              <code className="font-mono text-foreground">bn serve --remote</code>{" "}
+              to open a public HTTPS tunnel (Cloudflare or ngrok), gate it
+              with token auth, and surface a QR code right here.
+            </p>
+            <div className="rounded-md border border-border bg-background/60 px-2.5 py-1.5">
+              <code className="font-mono text-[11px] text-foreground">bn serve --remote</code>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
