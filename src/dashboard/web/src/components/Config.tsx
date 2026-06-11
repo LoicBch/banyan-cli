@@ -259,12 +259,6 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
         </p>
       </header>
 
-      {/* Global LLM config — show only when no project is scoped (avoids
-       *  cluttering the repo-focused view). Lives at the top of the global
-       *  Config view, before the per-project sections. */}
-      {!scoped ? <LlmConfigSection /> : null}
-      {!scoped ? <DiscordIntegrationSection /> : null}
-
       {visibleProjects.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No project named <code className="text-foreground">{projectName}</code> in the config.
@@ -364,6 +358,17 @@ export function Config({ projectName, focusRepo, onFocusConsumed }: ConfigProps 
           })}
         </section>
       ))}
+
+      {/* Workspace-level settings — always visible regardless of which
+          project is currently active. These apply across every project. */}
+      <section className="space-y-3 pt-4 border-t border-border/60">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">Workspace settings</h2>
+          <span className="text-xs text-muted-foreground">applies to every project</span>
+        </div>
+        <LlmConfigSection />
+        <DiscordIntegrationSection />
+      </section>
     </div>
   );
 }

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2]
+
+### Fixed
+- **Workspace settings (OpenRouter key, Discord toggle) were unreachable from the dashboard.** They were rendered only when no project was scoped, but `activeProject` falls back to the first project on load, so the unscoped view was never reached through normal navigation. Workspace settings now live in a dedicated section at the bottom of every Config view, with a `applies to every project` hint to clarify they cross project boundaries.
+
 ## [1.0.1]
 
 ### Added
