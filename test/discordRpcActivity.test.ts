@@ -13,68 +13,82 @@ function single(features: string[], totalWorktrees = features.length): BanyanAct
   };
 }
 
-describe("discord-rpc activity — single project", () => {
+describe("discord-rpc activity — null + totals", () => {
   it("returns null when no projects active", () => {
     const result = buildActivity({ projects: [], startTime: START }, DEFAULT_CONFIG);
     assert.equal(result, null);
   });
 
-  it("puts features on details line with middot separator", () => {
-    const result = buildActivity(single(["login", "profile", "settings"]), DEFAULT_CONFIG);
-    assert.equal(result?.details, "login · profile · settings");
+  it("details = totals (features · projects) for a single project", () => {
+    const result = buildActivity(single(["login", "profile"]), DEFAULT_CONFIG);
+    assert.equal(result?.details, "2 features · 1 project");
   });
 
-  it("shows project name with leaf emoji and count on state", () => {
-    const result = buildActivity(single(["login", "profile"], 2), DEFAULT_CONFIG);
-    assert.equal(result?.state, "🌿 my-project · 2 features");
+  it("singular pluralization for 1 feature / 1 project", () => {
+    const result = buildActivity(single(["login"]), DEFAULT_CONFIG);
+    assert.equal(result?.details, "1 feature · 1 project");
   });
 
-  it("differentiates active vs total worktrees", () => {
-    const result = buildActivity(single(["login"], 5), DEFAULT_CONFIG);
-    assert.equal(result?.state, "🌿 my-project · 1 of 5 features");
-  });
-
-  it("singular vs plural", () => {
-    assert.equal(
-      buildActivity(single(["login"], 1), DEFAULT_CONFIG)?.state,
-      "🌿 my-project · 1 feature",
-    );
-  });
-
-  it("truncates feature list with +N overflow", () => {
-    const many = Array.from({ length: 30 }, (_, i) => `feature-with-a-fairly-long-name-${i}`);
-    const result = buildActivity(single(many, 30), DEFAULT_CONFIG);
-    // The details line must contain at least one feature and an overflow marker.
-    assert.match(result!.details!, /\+\d+$/);
-    assert.ok(result!.details!.length <= 128);
+  it("details = totals (features · projects) when aggregated", () => {
+    const aggregate: BanyanActivity = {
+      projects: [
+        { name: "proj-a", features: ["x", "y", "z"], totalWorktrees: 3 },
+        { name: "proj-b", features: ["m"], totalWorktrees: 2 },
+      ],
+      startTime: START,
+    };
+    const result = buildActivity(aggregate, DEFAULT_CONFIG);
+    assert.equal(result?.details, "4 features · 2 projects");
   });
 });
 
-describe("discord-rpc activity — aggregate", () => {
-  const aggregate: BanyanActivity = {
-    projects: [
-      { name: "proj-a", features: ["x", "y", "z"], totalWorktrees: 3 },
-      { name: "proj-b", features: ["m"], totalWorktrees: 2 },
-    ],
-    startTime: START,
-  };
-
-  it("shows project names with feature counts on details line", () => {
-    const result = buildActivity(aggregate, DEFAULT_CONFIG);
-    assert.equal(result?.details, "proj-a (3) · proj-b (1)");
+describe("discord-rpc activity — state line (project names)", () => {
+  it("lists the single active project on the state line", () => {
+    const result = buildActivity(single(["login"]), DEFAULT_CONFIG);
+    assert.equal(result?.state, "my-project");
   });
 
-  it("totals projects and features on state line", () => {
-    const result = buildActivity(aggregate, DEFAULT_CONFIG);
-    assert.equal(result?.state, "🌐 2 projects · 4 features");
+  it("joins multiple project names with middot", () => {
+    const result = buildActivity(
+      {
+        projects: [
+          { name: "proj-a", features: ["x"], totalWorktrees: 1 },
+          { name: "proj-b", features: ["y"], totalWorktrees: 1 },
+        ],
+        startTime: START,
+      },
+      DEFAULT_CONFIG,
+    );
+    assert.equal(result?.state, "proj-a · proj-b");
+  });
+
+  it("truncates a long project list with +N overflow", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      name: `project-with-a-fairly-long-name-${i}`,
+      features: ["x"],
+      totalWorktrees: 1,
+    }));
+    const result = buildActivity({ projects: many, startTime: START }, DEFAULT_CONFIG);
+    assert.match(result!.state!, /\+\d+$/);
+    assert.ok(result!.state!.length <= 128);
   });
 });
 
 describe("discord-rpc activity — images & buttons", () => {
-  it("always emits large + small image when active", () => {
+  it("emits large + small image when keys are set", () => {
     const result = buildActivity(single(["x"]), DEFAULT_CONFIG);
     assert.equal(result?.largeImageKey, "banyan-logo");
     assert.equal(result?.smallImageKey, "status-working");
+  });
+
+  it("skips image fields when their key is empty", () => {
+    const result = buildActivity(single(["x"]), {
+      ...DEFAULT_CONFIG,
+      largeImageKey: "",
+      smallImageKey: "",
+    });
+    assert.equal(result?.largeImageKey, undefined);
+    assert.equal(result?.smallImageKey, undefined);
   });
 
   it("emits Open Dashboard button only for https URLs", () => {

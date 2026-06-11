@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3]
+
+### Changed
+- **Discord Rich Presence card redesigned around global counts.** Was: feature names on the top line, project + per-project count on the second line, with leaf / globe emojis. Felt redundant when only one feature was active and the emojis were opaque. Now: details = `N features · M projects` (global totals, properly pluralized), state = comma-separated list of active project names. Same shape whether you have one feature or twenty.
+- **Drop the 🌿 / 🌐 emojis.** They were meant as banyan/globe indicators but read as noise.
+
+### Fixed
+- **Discord activity update silently failed when an image key was empty or referenced an unpublished asset.** buildActivity now only emits each image field when its key is a non-empty string, and only emits the companion text when the key is set. Avoids the whole-card-disappears-with-no-error trap.
+
+### UI
+- **OpenRouter key section in the Config tab** trimmed: one-line title, no marketing copy, no redundant sub-label. Matches the density of the Discord card next to it.
+
 ## [1.0.2]
 
 ### Fixed
