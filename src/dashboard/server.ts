@@ -30,6 +30,7 @@ import * as mrRoutes from "./routes/mr.js";
 import * as integrationsRoutes from "./routes/integrations.js";
 import * as worktreeRoutes from "./routes/worktree.js";
 import * as conversationRoutes from "./routes/conversation.js";
+import * as remoteRoutes from "./routes/remote.js";
 
 export interface ServerOptions {
   port?: number;         // default: first free port starting from 4242
@@ -37,6 +38,9 @@ export interface ServerOptions {
   /** When set, gates every API route with token auth. Required before binding
    *  the server to a public tunnel. */
   auth?: AuthConfig;
+  /** Remote access metadata — populated when serve.ts has started a tunnel
+   *  and wants the dashboard to surface the QR / URL via /api/remote/*. */
+  remote?: { url: string; token: string };
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -103,6 +107,7 @@ export async function startServer(
     discordRpc,
     buildDiscordActivity,
   });
+  remoteRoutes.register(app, { remote: opts.remote });
 
   // ── Static SPA ───────────────────────────────────────────────────────
   // New React build at the root, legacy vanilla-JS dashboard preserved at
