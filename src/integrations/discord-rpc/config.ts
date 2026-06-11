@@ -12,13 +12,14 @@ export interface DiscordRpcConfig {
   applicationId?: string;
   /** Update interval in seconds (default: 15). */
   updateIntervalSec?: number;
-  /** Large image key — must match an asset uploaded to the Discord
-   *  Developer Portal for this application. (default: "banyan-logo"). */
+  /** Large image asset key. Must match an asset uploaded to the Discord
+   *  Developer Portal for this application — Discord silently rejects
+   *  activities that reference unknown keys. */
   largeImageKey?: string;
   /** Tooltip shown when hovering the large image. */
   largeImageText?: string;
-  /** Small image badge overlaid on the large image. Used as an
-   *  at-a-glance activity indicator (default: "status-working"). */
+  /** Small image badge overlaid on the large image. Same caveat re:
+   *  unknown keys. */
   smallImageKey?: string;
   /** Tooltip for the small badge. */
   smallImageText?: string;
@@ -47,6 +48,8 @@ export const DEFAULT_CONFIG: Required<DiscordRpcConfig> = {
   enabled: false,
   applicationId: "1508879085680595004", // Banyan's official Discord application
   updateIntervalSec: 15,
+  // Asset keys must match PNGs uploaded to the Discord Developer Portal
+  // under the application id above. SVG masters live in assets/discord/.
   largeImageKey: "banyan-logo",
   largeImageText: "Banyan — multi-agent worktree orchestrator",
   smallImageKey: "status-working",

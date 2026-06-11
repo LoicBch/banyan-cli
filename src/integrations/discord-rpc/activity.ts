@@ -33,12 +33,19 @@ export function buildActivity(
 ): DiscordActivity | null {
   if (activity.projects.length === 0) return null;
 
-  const result: DiscordActivity = {
-    largeImageKey: config.largeImageKey,
-    largeImageText: config.largeImageText,
-    smallImageKey: config.smallImageKey,
-    smallImageText: config.smallImageText,
-  };
+  // Build the image fields defensively: Discord silently rejects the
+  // *entire* activity update when an imageKey references a non-existent
+  // asset (e.g. `banyan-logo` when only `banyan` has been uploaded on
+  // the application portal). Only emit a key when it's non-empty.
+  const result: DiscordActivity = {};
+  if (config.largeImageKey && config.largeImageKey.length > 0) {
+    result.largeImageKey = config.largeImageKey;
+    if (config.largeImageText) result.largeImageText = config.largeImageText;
+  }
+  if (config.smallImageKey && config.smallImageKey.length > 0) {
+    result.smallImageKey = config.smallImageKey;
+    if (config.smallImageText) result.smallImageText = config.smallImageText;
+  }
 
   if (activity.projects.length === 1) {
     const p = activity.projects[0]!;
