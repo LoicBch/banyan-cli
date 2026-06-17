@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5]
+
+### Fixed
+- **`bn <project> start` hijacked unrelated tmux sessions when the project name was a prefix of an existing session name.** tmux resolves session/window targets with prefix matching by default, so `tmux has-session -t p4n` returned true if a manually-created `p4n-dashboard` session was running — banyan then added its `workspace` window into that foreign session instead of creating its own. Every session / window / pane target in `src/tmux.ts` now goes through `=name` (exact-match prefix) helpers, removing the ambiguity.
+
 ## [1.0.4]
 
 ### Added

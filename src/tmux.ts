@@ -1,8 +1,19 @@
 import { run, runInherit, runOrThrow } from "./exec.js";
 import { TmuxError } from "./errors.js";
 
+/**
+ * tmux resolves session/window names with prefix matching by default —
+ * so `has-session -t p4n` happily matches a manually-created `p4n-dashboard`
+ * session, then every subsequent banyan command starts polluting it.
+ * Prefixing a target with `=` forces exact match (see tmux(1) "TARGETS").
+ * Every banyan caller goes through these helpers so no call site forgets.
+ */
+const sess = (name: string): string => `=${name}`;
+const win = (session: string, windowName: string): string => `=${session}:${windowName}`;
+const winIndex = (session: string, index: number): string => `=${session}:${index}`;
+
 export async function hasSession(name: string): Promise<boolean> {
-  const r = await run("tmux", ["has-session", "-t", name]);
+  const r = await run("tmux", ["has-session", "-t", sess(name)]);
   return r.code === 0;
 }
 
@@ -28,7 +39,7 @@ export async function newSession(
 }
 
 export async function killSession(name: string): Promise<void> {
-  const r = await run("tmux", ["kill-session", "-t", name]);
+  const r = await run("tmux", ["kill-session", "-t", sess(name)]);
   if (r.code !== 0 && !/can't find session/i.test(r.stderr)) {
     throw new TmuxError(`kill-session failed: ${r.stderr.trim()}`);
   }
@@ -40,9 +51,9 @@ export function isInsideTmux(): boolean {
 
 export async function attach(session: string): Promise<number> {
   if (isInsideTmux()) {
-    return runInherit("tmux", ["switch-client", "-t", session]);
+    return runInherit("tmux", ["switch-client", "-t", sess(session)]);
   }
-  return runInherit("tmux", ["attach-session", "-t", session]);
+  return runInherit("tmux", ["attach-session", "-t", sess(session)]);
 }
 
 export async function detachClients(session: string): Promise<void> {
@@ -60,7 +71,7 @@ export async function newWindow(
   const out = await runOrThrow("tmux", [
     "new-window",
     "-t",
-    session,
+    sess(session),
     "-n",
     windowName,
     "-c",
@@ -87,7 +98,7 @@ export async function newWindowBefore(
     "new-window",
     "-b",
     "-t",
-    `${session}:${beforeIndex}`,
+    winIndex(session, beforeIndex),
     "-n",
     windowName,
     "-c",
@@ -100,14 +111,14 @@ export async function newWindowBefore(
 }
 
 export async function killWindow(session: string, windowName: string): Promise<void> {
-  const r = await run("tmux", ["kill-window", "-t", `${session}:${windowName}`]);
+  const r = await run("tmux", ["kill-window", "-t", win(session, windowName)]);
   if (r.code !== 0 && !/can't find/i.test(r.stderr)) {
     // window didn't exist — fine
   }
 }
 
 export async function selectWindow(session: string, windowName: string): Promise<void> {
-  await run("tmux", ["select-window", "-t", `${session}:${windowName}`]);
+  await run("tmux", ["select-window", "-t", win(session, windowName)]);
 }
 
 export async function windowExists(session: string, windowName: string): Promise<boolean> {
@@ -131,7 +142,7 @@ export async function splitWindow(
   const args = [
     "split-window",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     "-c",
     cwd,
   ];
@@ -178,7 +189,7 @@ export async function applyLayout(
   const r = await run("tmux", [
     "select-layout",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     layout,
   ]);
   if (r.code !== 0 && !/no current window/i.test(r.stderr)) {
@@ -198,7 +209,7 @@ export async function enablePaneBorderLabels(
     "set-option",
     "-w",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     "pane-border-status",
     "top",
   ]);
@@ -206,7 +217,7 @@ export async function enablePaneBorderLabels(
     "set-option",
     "-w",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     "pane-border-format",
     " #{?@banyan-pane,#{@banyan-pane},#{pane_title}} ",
   ]);
@@ -220,7 +231,7 @@ export async function findPaneByTitle(
   const r = await run("tmux", [
     "list-panes",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     "-F",
     "#{pane_id}\t#{pane_title}",
   ]);
@@ -241,7 +252,7 @@ export async function findPaneByUserOption(
   const r = await run("tmux", [
     "list-panes",
     "-t",
-    `${session}:${windowName}`,
+    win(session, windowName),
     "-F",
     `#{pane_id}\t#{${key}}`,
   ]);
@@ -400,7 +411,7 @@ export async function listBanyanPaneTags(session: string): Promise<string[]> {
     "list-panes",
     "-s",
     "-t",
-    session,
+    sess(session),
     "-F",
     "#{@banyan-pane}",
   ]);
@@ -415,7 +426,7 @@ export async function listWindows(session: string): Promise<WindowInfo[]> {
   const r = await run("tmux", [
     "list-windows",
     "-t",
-    session,
+    sess(session),
     "-F",
     "#{window_name}\t#{window_active}",
   ]);
