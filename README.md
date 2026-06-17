@@ -213,6 +213,27 @@ repos:
 </details>
 
 <details>
+<summary><b>Working on existing branches</b> &nbsp;·&nbsp; <code>--prefix</code> + automatic fallback when the branch already exists</summary>
+
+By default `bn wt <name>` creates `feature/<name>`. To target a branch with a different convention, pass `--prefix`:
+
+| Existing branch | Command |
+|---|---|
+| `feature/login` | `bn wt login` |
+| `fix/crash-on-startup` | `bn wt crash-on-startup --prefix fix` |
+| `android/refactor/ui-setup` | `bn wt ui-setup --prefix android/refactor` |
+| `hotfix-truc` (no prefix) | `bn wt hotfix-truc --prefix ""` |
+
+When the computed branch already exists in the repo, banyan checks it out as-is in the new worktree instead of failing — so `bn wt ui-setup --prefix android/refactor` on a pushed branch just spawns a worktree on it, no new commit.
+
+Watch out for:
+- **"branch is already checked out elsewhere"** — git refuses two worktrees on the same branch. Switch the other off (`git switch main`) and retry.
+- **Stale pre-v1 worktrees** — banyan used `<repo>-<feature>/` sibling folders before v1; the current convention is `worktree-<repo>/<feature>/`. If you have a sibling-style worktree on the same branch, move it (`git worktree move`) or remove it (`git worktree remove --force`) before re-spawning.
+- **`bn cleanup` deletes the branch.** Use `bn wt-rm` if you only want to drop the worktree but keep the branch.
+
+</details>
+
+<details>
 <summary><b>Agent modes</b> &nbsp;·&nbsp; <code>live</code> (default) / <code>delegated</code> (pipeline-gated)</summary>
 
 ```bash
