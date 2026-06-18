@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8]
+
+### Added
+- **`bn <project> broadcast "<prompt>"` CLI command + `banyan_broadcast_task` MCP tool** — send the same prompt to every live feature agent in a project, in one call. Useful when 10+ features in parallel need to react to the same context (e.g. "check your TODOs", "scope was clarified", "pause and report"). Reserved panes (ops / orchestrator / terminal) are skipped automatically. Optional `--only <feat-a,feat-b>` and `--exclude <feat-c>` for fine targeting; `--force` to send even when claude isn't detected as running in a pane. Returns the list of features that received the prompt and those skipped with reason.
+
 ## [1.0.7]
 
 ### Changed

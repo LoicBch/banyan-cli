@@ -42,7 +42,7 @@ export {
   finalizeFeatureName,
 } from "./api/lifecycle.js";
 
-export { assignTask } from "./api/task.js";
+export { assignTask, broadcastTask } from "./api/task.js";
 
 export {
   setFeatureTodo,
