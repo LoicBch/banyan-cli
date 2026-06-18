@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9]
+
+### Fixed
+- **`bn broadcast` (and any other `--force`-less `pasteText` caller) reported "claude not running in pane" even when claude was actively running.** On macOS, tmux's `pane_current_command` only resolves the direct child of `pane_pid`; banyan's launch script chains `zsh → bash → claude` (the script doesn't `exec`), so tmux reported "bash" and `isClaudeRunning()` returned false. The check now walks the full descendant tree of `pane_pid` via a single `ps` snapshot, matching on `claude` in any comm. No more false skips during broadcast.
+
 ## [1.0.8]
 
 ### Added
