@@ -1,6 +1,6 @@
 {
   "name": "banyan-cli",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "tmux + git worktrees + Claude Code. Run N AI agents in parallel across N repos with isolated worktrees, dev ports, and docker stacks per feature.",
   "type": "module",
   "bin": {

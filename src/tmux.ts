@@ -197,6 +197,20 @@ export async function applyLayout(
   }
 }
 
+/** Pane count inside a window. Returns 0 if the window doesn't exist. */
+export async function paneCount(session: string, windowName: string): Promise<number> {
+  const r = await run("tmux", [
+    "display-message",
+    "-p",
+    "-t",
+    win(session, windowName),
+    "#{window_panes}",
+  ]);
+  if (r.code !== 0) return 0;
+  const n = parseInt(r.stdout.trim(), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * Enable pane border header for a window so each pane visibly shows its banyan tag
  * (or falls back to its pane_title).
