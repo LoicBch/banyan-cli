@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6]
+
+### Fixed
+- **Orchestrator (and per-feature) Claude agents lost access to every banyan MCP tool.** `ensureBanyanMcpConfig` wires the agent's `--mcp-config` to call `banyan mcp-serve --scope <scope>`, but the `mcp-serve` CLI command never declared `--scope` to commander, which rejected the invocation with `error: unknown option '--scope'` before the server could start. Every fresh agent therefore booted with zero banyan tools and had to fall back to bash/git when the user asked it to dispatch features. Added `--scope <scope>` to the CLI declaration so commander lets the flag through; the parser in `mcp/server.ts` already reads it from `process.argv`. Existing config files in `~/.config/banyan/*-mcp.json` keep working — no migration needed.
+
 ## [1.0.5]
 
 ### Fixed

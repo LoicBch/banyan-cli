@@ -158,6 +158,10 @@ export async function run(argv: string[]): Promise<number> {
   program
     .command("mcp-serve", { hidden: true })
     .description("[internal] MCP server over stdio (invoked by claude via --mcp-config; never run by hand)")
+    .option(
+      "--scope <scope>",
+      "filter exposed tools to a scope: orchestrator | feature | resolver. The flag is read directly from process.argv by mcp/server.ts; declared here only so commander doesn't reject the invocation",
+    )
     .action(async () => {
       const { runMcpServer } = await import("./mcp/server.js");
       await runMcpServer();
