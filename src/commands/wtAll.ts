@@ -268,9 +268,16 @@ export async function wtAll(
   }
 
   await tmux.enablePaneBorderLabels(session, agentsWin);
-  // Use main-horizontal so the ops pane stays small at the bottom while the
-  // claude pane(s) take the majority of the window.
-  await tmux.applyLayout(session, agentsWin, "main-horizontal");
+  // Layout choice:
+  //   1-3 panes   → main-horizontal — single ops + a couple claudes,
+  //                 the claudes deserve the height.
+  //   4+ panes    → tiled — past three panes main-horizontal squishes
+  //                 each claude into an unreadable vertical sliver;
+  //                 a grid gives every pane roughly equal area.
+  const TILED_THRESHOLD = 4;
+  const panes = await tmux.paneCount(session, agentsWin);
+  const layout = panes >= TILED_THRESHOLD ? "tiled" : "main-horizontal";
+  await tmux.applyLayout(session, agentsWin, layout);
   // delegated mode bakes in plan-review; live mode is opt-in via the
   // legacy explicit flag (rare — user is right there to drive).
   const requireApproval = mode === "delegated" || !!opts.requireApproval;

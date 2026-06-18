@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7]
+
+### Changed
+- **`agents-<project>` tmux window now switches to `tiled` layout once it has 4+ panes**, instead of always using `main-horizontal`. Past 3 claudes side-by-side, `main-horizontal` squished each pane into an unreadable ~140px vertical sliver; tiled distributes the panes in a grid (4×3 / 3×4 / etc.) so every claude gets ~25% of the area. Single feature workflows are unaffected — they still get `main-horizontal` with ops at the bottom.
+
 ## [1.0.6]
 
 ### Fixed
