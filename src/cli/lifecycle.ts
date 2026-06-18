@@ -15,6 +15,7 @@ import { testStop } from "../commands/testStop.js";
 import { ports as portsCmd } from "../commands/ports.js";
 import { resume as resumeCmd } from "../commands/resume.js";
 import { restartOrchestrator } from "../commands/restartOrchestrator.js";
+import { broadcast as broadcastCmd } from "../commands/broadcast.js";
 
 export function register(
   projectCmd: Command,
@@ -107,4 +108,40 @@ export function register(
     .action(async (feature: string | undefined) => {
       await portsCmd(config, project.name, feature);
     });
+
+  projectCmd
+    .command("broadcast <prompt>")
+    .description(
+      "send the same prompt to every live feature agent in the project, in one shot. " +
+        "skips reserved panes (ops / orchestrator / terminal) automatically. " +
+        "use `--only` to target specific features or `--exclude` to skip some.",
+    )
+    .option("--only <features>", "comma-separated list of feature tags to target")
+    .option("--exclude <features>", "comma-separated list of feature tags to skip")
+    .option(
+      "--force",
+      "send even to panes where claude isn't detected as running (default: those panes are skipped)",
+    )
+    .action(
+      async (
+        prompt: string,
+        opts: { only?: string; exclude?: string; force?: boolean },
+      ) => {
+        const parseList = (v: string | undefined): string[] =>
+          v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
+        const result = await broadcastCmd(config, project.name, prompt, {
+          only: parseList(opts.only),
+          exclude: parseList(opts.exclude),
+          force: opts.force,
+        });
+        if (result.sent.length === 0) {
+          logger.warn(`no panes received the broadcast`);
+        } else {
+          logger.ok(`broadcast sent to ${result.sent.length} feature${result.sent.length > 1 ? "s" : ""}: ${result.sent.join(", ")}`);
+        }
+        for (const s of result.skipped) {
+          logger.info(`  skipped ${s.feature}: ${s.reason}`);
+        }
+      },
+    );
 }

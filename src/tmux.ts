@@ -436,6 +436,31 @@ export async function listBanyanPaneTags(session: string): Promise<string[]> {
     .filter((l) => l.length > 0);
 }
 
+/**
+ * List every pane in a single window with its banyan tag (if any).
+ * Used by broadcast/dispatch when we need both the pane id (to send keys)
+ * AND the tag (to filter out reserved panes like `ops` / `orchestrator`).
+ */
+export async function listPanesWithTags(
+  session: string,
+  windowName: string,
+): Promise<Array<{ paneId: string; tag: string }>> {
+  const r = await run("tmux", [
+    "list-panes",
+    "-t",
+    win(session, windowName),
+    "-F",
+    "#{pane_id}\t#{@banyan-pane}",
+  ]);
+  if (r.code !== 0) return [];
+  const out: Array<{ paneId: string; tag: string }> = [];
+  for (const line of r.stdout.split("\n")) {
+    const [paneId, tag] = line.split("\t");
+    if (paneId) out.push({ paneId, tag: tag ?? "" });
+  }
+  return out;
+}
+
 export async function listWindows(session: string): Promise<WindowInfo[]> {
   const r = await run("tmux", [
     "list-windows",
