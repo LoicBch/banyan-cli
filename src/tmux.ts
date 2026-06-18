@@ -330,14 +330,69 @@ export async function paneCurrentCommand(paneId: string): Promise<string> {
   return r.stdout.trim();
 }
 
-/** Heuristic: is a Claude Code agent running in the pane (vs a bare shell)? */
+/** Heuristic: is a Claude Code agent running in the pane (vs a bare shell)?
+ *
+ * Implementation note: on macOS tmux's `pane_current_command` only resolves
+ * the *direct* child of `pane_pid`. When banyan launches claude via a bash
+ * launch-script (the script doesn't `exec` so bash stays in the chain),
+ * the tree looks like `zsh → bash → claude` and tmux reports "bash" even
+ * though claude is the active grandchild. We therefore walk the full
+ * descendant tree of `pane_pid` and treat the pane as "claude running" if
+ * any descendant has `claude` in its comm. */
 export async function isClaudeRunning(paneId: string): Promise<boolean> {
-  const cmd = await paneCurrentCommand(paneId);
-  // Claude Code's Node.js binary may show up as "node", "claude" (if linked),
-  // or the full path ending in one of these. Conservative: anything that is
-  // NOT a known shell counts as "not shell".
-  const SHELLS = new Set(["zsh", "bash", "sh", "fish", "dash", "tcsh", "ksh"]);
-  return !SHELLS.has(cmd.toLowerCase());
+  // Cheap fast path: if the direct foreground is already claude, done.
+  const cmd = (await paneCurrentCommand(paneId)).toLowerCase();
+  if (cmd.includes("claude")) return true;
+
+  // Otherwise walk descendants of pane_pid looking for claude.
+  const panePid = await getPanePid(paneId);
+  if (panePid <= 0) return false;
+  return hasDescendantNamed(panePid, "claude");
+}
+
+async function getPanePid(paneId: string): Promise<number> {
+  const r = await run("tmux", [
+    "display-message",
+    "-t",
+    paneId,
+    "-p",
+    "#{pane_pid}",
+  ]);
+  if (r.code !== 0) return 0;
+  const n = parseInt(r.stdout.trim(), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** BFS over the process tree starting at `root`. Uses a single `ps` snapshot
+ *  so the walk doesn't race against fork/exec. Returns true on first match. */
+async function hasDescendantNamed(root: number, needle: string): Promise<boolean> {
+  const r = await run("ps", ["-A", "-o", "pid=,ppid=,comm="]);
+  if (r.code !== 0) return false;
+  // Build pid → children map in one pass.
+  const children = new Map<number, Array<{ pid: number; comm: string }>>();
+  for (const line of r.stdout.split("\n")) {
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+    if (!m) continue;
+    const pid = parseInt(m[1]!, 10);
+    const ppid = parseInt(m[2]!, 10);
+    const comm = m[3]!.trim();
+    if (!children.has(ppid)) children.set(ppid, []);
+    children.get(ppid)!.push({ pid, comm });
+  }
+  const queue: number[] = [root];
+  const seen = new Set<number>();
+  const needleL = needle.toLowerCase();
+  while (queue.length > 0) {
+    const p = queue.shift()!;
+    if (seen.has(p)) continue;
+    seen.add(p);
+    const kids = children.get(p) ?? [];
+    for (const k of kids) {
+      if (k.comm.toLowerCase().includes(needleL)) return true;
+      queue.push(k.pid);
+    }
+  }
+  return false;
 }
 
 /**
