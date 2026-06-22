@@ -172,12 +172,17 @@ export function isAutopilotComplete(project: string, feature: string): {
 /** Run a single autopilot tick. Reads stdin (claude's hook input) for
  *  protocol compliance, then writes either:
  *   - nothing + exit 0  → claude stops normally
- *   - `{"decision": "block", "reason": "..."}` to stdout → claude resumes */
+ *   - `{"decision": "block", "reason": "..."}` to stdout → claude resumes
+ *
+ *  Honors `stop_hook_active` from the hook input: when claude has already
+ *  been blocked this turn (preventing an infinite loop), we MUST let it
+ *  stop, otherwise the harness overrides us after N consecutive blocks. */
 export async function autopilotTick(project: string, feature: string): Promise<number> {
-  // Drain stdin (we don't use it for now, but Stop hooks always receive a
-  // JSON payload from claude — leaving it unread can cause EPIPE on its
-  // side in some environments).
-  await drainStdin();
+  const input = await readStopHookInput();
+  if (input?.stop_hook_active === true) {
+    // Claude already looped once via our block — let it stop now.
+    return 0;
+  }
 
   const { complete, reason } = isAutopilotComplete(project, feature);
   if (complete) {
@@ -188,12 +193,27 @@ export async function autopilotTick(project: string, feature: string): Promise<n
   return 0;
 }
 
-function drainStdin(): Promise<void> {
+interface StopHookInput {
+  stop_hook_active?: boolean;
+  [key: string]: unknown;
+}
+
+function readStopHookInput(): Promise<StopHookInput | null> {
   return new Promise((resolve) => {
-    if (process.stdin.isTTY) return resolve();
+    if (process.stdin.isTTY) return resolve(null);
+    const chunks: Buffer[] = [];
     let timeout: NodeJS.Timeout;
-    const finish = () => { clearTimeout(timeout); resolve(); };
-    process.stdin.on("data", () => { /* discard */ });
+    const finish = () => {
+      clearTimeout(timeout);
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (!raw) return resolve(null);
+      try {
+        resolve(JSON.parse(raw) as StopHookInput);
+      } catch {
+        resolve(null);
+      }
+    };
+    process.stdin.on("data", (c) => chunks.push(c));
     process.stdin.on("end", finish);
     process.stdin.on("error", finish);
     // Safety: don't hang forever if no stdin ever arrives.
